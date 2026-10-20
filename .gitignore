@@ -157,6 +157,7 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
-
 # Custom
 *.code-workspace
+.idea/
+.DS_Store

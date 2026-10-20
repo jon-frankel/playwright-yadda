@@ -86,9 +86,13 @@ export class LibraryRegistryManager<K extends string = string> {
     scenarioAnnotations?: AnnotationRecord,
     overrideOptions?: ResolveLibrariesOptions<K>,
   ): StepLibrary[] {
+    const cleanOverrides = Object.fromEntries(
+      Object.entries(overrideOptions ?? {}).filter(([, val]) => val !== undefined),
+    ) as ResolveLibrariesOptions<K>;
+
     const mergedOptions: ResolveLibrariesOptions<K> = {
       ...this.options,
-      ...overrideOptions,
+      ...cleanOverrides,
     };
 
     const requestedNames = resolveLibraryNames(

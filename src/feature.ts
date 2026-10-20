@@ -11,6 +11,7 @@ import type {
   LibraryRegistry,
   ParsedFeature,
   ParsedScenario,
+  ResolveLibrariesOptions,
 } from "./types.js";
 
 /**
@@ -129,10 +130,11 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         const fixtures = { page, context, testInfo };
 
         // 1. Resolve step libraries dynamically for this specific scenario
-        const libraries = registry.resolve(feature.annotations, scenario.annotations, {
-          defaultLibraries,
-          inheritance: libraryInheritance,
-        });
+        const resolveOpts: ResolveLibrariesOptions<K> = {};
+        if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
+        if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
+
+        const libraries = registry.resolve(feature.annotations, scenario.annotations, resolveOpts);
 
         // 2. Build isolated Yadda runner instance
         const yadda = createScenarioYadda(libraries);

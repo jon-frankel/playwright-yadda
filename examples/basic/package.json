@@ -4,13 +4,17 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "playwright test",
     "start": "node src/index.ts"
   },
   "dependencies": {
-    "playwright-yadda": "0.0.4"
+    "@playwright/test": "^1.50.0",
+    "playwright-yadda": "0.0.8",
+    "yadda": "^3.2.0"
   },
   "devDependencies": {
     "@types/node": "^24.15.0",
+    "@types/yadda": "^2.0.6",
     "typescript": "7.0.2"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "playwright-yadda",
-  "version": "0.0.4",
+  "version": "0.0.8",
   "description": "Dynamic step library loading for Playwright and Yadda BDD",
   "license": "MIT",
   "files": [
@@ -59,7 +59,9 @@
   "dependencies": {},
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
+    "@playwright/test": ">=1.30.0",
     "@types/node": "^24.15.0",
+    "@types/yadda": "^2.0.6",
     "axios": "^1.13.5",
     "dotenv": "^18.0.8",
     "lefthook": "^2.2.2",
@@ -69,7 +71,20 @@
     "rolldown": "^1.2.14",
     "tsdown": "^0.23.1",
     "typescript": "7.0.2",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "yadda": ">=2.0.0 || >=3.0.0"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.30.0",
+    "yadda": ">=2.0.0 || >=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": false
+    },
+    "yadda": {
+      "optional": false
+    }
   },
   "engines": {
     "node": ">=22.0.0",

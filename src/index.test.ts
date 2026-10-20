@@ -1,23 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { createPlaywrightYadda, VERSION } from "./index.js";
+import {
+  createLibraryRegistry,
+  createScenarioYadda,
+  defineFeature,
+  defineFeatureSuite,
+  extractLibraryNames,
+  parseFeature,
+  resolveLibraries,
+  runStep,
+  UnknownLibraryError,
+  VERSION,
+} from "./index.js";
 
-describe("playwright-yadda", () => {
-  it("should have correct version defined", () => {
-    expect(VERSION).toBe("0.0.1");
-  });
-
-  it("should initialize default options", () => {
-    const instance = createPlaywrightYadda();
-    expect(instance.commonLibraryName).toBe("common");
-    expect(instance.defaultLibraries).toEqual(["common"]);
-  });
-
-  it("should accept custom options", () => {
-    const instance = createPlaywrightYadda({
-      commonLibraryName: "base",
-      defaultLibraries: ["base", "auth"],
-    });
-    expect(instance.commonLibraryName).toBe("base");
-    expect(instance.defaultLibraries).toEqual(["base", "auth"]);
+describe("playwright-yadda public exports", () => {
+  it("should export VERSION and core functions", () => {
+    expect(VERSION).toBe("0.0.4");
+    expect(typeof createLibraryRegistry).toBe("function");
+    expect(typeof resolveLibraries).toBe("function");
+    expect(typeof UnknownLibraryError).toBe("function");
+    expect(typeof createScenarioYadda).toBe("function");
+    expect(typeof runStep).toBe("function");
+    expect(typeof defineFeature).toBe("function");
+    expect(typeof defineFeatureSuite).toBe("function");
+    expect(typeof parseFeature).toBe("function");
+    expect(typeof extractLibraryNames).toBe("function");
   });
 });

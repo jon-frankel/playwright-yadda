@@ -69,6 +69,10 @@ web_modules/
 .env
 .env.*
 !.env.example
+!.env.default
+
+# Verdaccio local storage
+.verdaccio/storage
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -147,3 +151,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Custom
+*.code-workspace

@@ -1,0 +1,11 @@
+pre-commit:
+  parallel: true
+  commands:
+    oxfmt:
+      glob: "*.{js,jsx,ts,tsx,json,md,yml,yaml}"
+      run: pnpm oxfmt --write {staged_files} && git add {staged_files}
+    oxlint:
+      glob: "*.{js,jsx,ts,tsx}"
+      run: pnpm oxlint {staged_files}
+    typecheck:
+      run: pnpm typecheck

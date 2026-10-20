@@ -1,0 +1,34 @@
+<idea-plugin>
+  <id>io.github.jonfrankel.playwright-yadda</id>
+  <name>Playwright Yadda</name>
+  <vendor url="https://github.com/jon-frankel/playwright-yadda">Jonathan Frankel</vendor>
+
+  <description><![CDATA[
+    <p>IDE support for <a href="https://github.com/jon-frankel/playwright-yadda">playwright-yadda</a>,
+    which runs Gherkin features through Playwright with Yadda step libraries.</p>
+    <p>WebStorm's Cucumber.js support already navigates from a <code>.feature</code> step to its definition.
+    This plugin adds the other direction:</p>
+    <ul>
+      <li><b>Go to usages / Find Usages</b> on a step definition
+        (<code>steps.given("…", fn)</code>) lists the feature steps that run it.</li>
+    </ul>
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>JavaScript</depends>
+  <depends>gherkin</depends>
+  <depends>cucumber-javascript</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- Makes a step-definition call a declaration, so Cmd+B on it shows its usages. -->
+    <pom.declarationSearcher
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepPomDeclarationSearcher"/>
+    <!-- Finds the Gherkin steps that run a step definition. -->
+    <referencesSearch
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepReferencesSearch"/>
+    <findUsagesHandlerFactory
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaFindUsagesHandlerFactory"/>
+    <elementDescriptionProvider
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepDescriptionProvider"/>
+  </extensions>
+</idea-plugin>

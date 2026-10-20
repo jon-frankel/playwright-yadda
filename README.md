@@ -137,6 +137,14 @@ Discovers feature files and registers them with Playwright's `test` runner.
 
 ---
 
+## IDE Support
+
+### WebStorm and other JetBrains IDEs
+
+WebStorm's built-in Cucumber.js support already jumps from a step in a `.feature` file to its `.given()` / `.when()` / `.then()` definition. The companion plugin in [`ide/jetbrains`](ide/jetbrains) adds the way back: **Cmd+B or Find Usages on a step definition lists the feature steps that run it.** See its [README](ide/jetbrains/README.md) to build and install it.
+
+---
+
 ## License
 
 [MIT](LICENSE)

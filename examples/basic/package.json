@@ -4,14 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "node src/index.ts"
   },
   "dependencies": {
     "playwright-yadda": "0.0.4"
   },
   "devDependencies": {
     "@types/node": "^24.15.0",
-    "tsx": "^4.23.15",
     "typescript": "7.0.2"
   }
 }

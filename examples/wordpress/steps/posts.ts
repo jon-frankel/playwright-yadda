@@ -7,25 +7,15 @@ export const postSteps = createStepLibrary();
 postSteps.given(
   "the admin navigates to the posts list",
   async function (this: WordPressScenarioContext) {
-    const frame = this.wpFrame;
-    if (!frame || !this.scopeUrl) {
-      throw new Error("WordPress frame not initialized.");
-    }
-
-    await frame.goto(`${this.scopeUrl}/wp-admin/edit.php`);
-    await frame.waitForSelector(".wp-list-table", { timeout: 20000 });
+    await this.page.goto("/wp-admin/edit.php");
+    await this.page.waitForSelector(".wp-list-table", { timeout: 15000 });
   },
 );
 
 postSteps.when(
   /they update the first post title to "([^"]+)"/,
   async function (this: WordPressScenarioContext, newTitle: string) {
-    const frame = this.wpFrame;
-    if (!frame) {
-      throw new Error("WordPress frame not initialized.");
-    }
-
-    const postRow = frame.locator("tr#post-1, tr.type-post").first();
+    const postRow = this.page.locator("tr#post-1, tr.type-post").first();
     await postRow.hover();
 
     // Open Quick Edit
@@ -33,7 +23,7 @@ postSteps.when(
     await quickEditBtn.click();
 
     // Fill inline editor
-    const inlineEditor = frame.locator("tr.inline-editor");
+    const inlineEditor = this.page.locator("tr.inline-editor");
     await inlineEditor.waitFor({ state: "visible", timeout: 10000 });
     await inlineEditor.locator("input.ptitle").fill(newTitle);
 
@@ -48,12 +38,7 @@ postSteps.when(
 postSteps.then(
   /the posts list should display "([^"]+)"/,
   async function (this: WordPressScenarioContext, expectedTitle: string) {
-    const frame = this.wpFrame;
-    if (!frame) {
-      throw new Error("WordPress frame not initialized.");
-    }
-
-    const postRow = frame.locator("tr#post-1, tr.type-post").first();
+    const postRow = this.page.locator("tr#post-1, tr.type-post").first();
     const titleLocator = postRow.locator(".row-title");
     await expect(titleLocator).toHaveText(expectedTitle, { timeout: 10000 });
   },

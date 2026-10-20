@@ -1,18 +1,18 @@
-# WordPress in WASM Playwright + Yadda Example
+# Native WordPress in WebAssembly (WASM) Example
 
-This example demonstrates running and testing a **complete WordPress instance running client-side inside WebAssembly (WASM)** in the browser, automated using `playwright-yadda` with dynamic step library resolution.
+This example demonstrates running and testing a **complete WordPress instance running natively in WebAssembly (WASM)** via Node.js, automated using `playwright-yadda` with dynamic step library resolution.
 
 ## How it works
 
-1. **WordPress in Browser WASM**:
-   - Uses [WordPress Playground](https://playground.wordpress.net/), which compiles PHP 8.x and SQLite to WebAssembly running inside browser Service Workers.
-   - Embeds the Playground inside a standalone [`public/index.html`](./public/index.html) page.
-   - Runs **100% ephemerally** in browser memory — no MySQL, no Docker containers, no persistent data cleanup needed.
+1. **Native WordPress in WASM**:
+   - Uses the official `@wp-playground/cli` package to run WordPress (PHP 8.3 + SQLite compiled to WASM) directly inside Node.js.
+   - **No iframes**: WordPress is served natively on `http://127.0.0.1:3000`. Direct endpoints like `/wp-login.php` and `/wp-admin/` respond directly with WordPress HTML.
+   - **100% Ephemeral**: SQLite database and files live in memory/temp storage and disappear after testing.
 2. **Dynamic Step Libraries**:
-   - `wp-common`: Navigates to the local wrapper and attaches to the WordPress WASM execution frame.
-   - `wp-auth`: Navigates to `/wp-login.php`, fills credentials, submits, and verifies `#wpadminbar`.
-   - `wp-posts`: Navigates to `/wp-admin/edit.php`, edits the post title via Quick Edit, and asserts the updated post title.
-   - Feature files selectively declare `@Libraries=wp-common, wp-auth, wp-posts` so each scenario only pulls the relevant step definitions.
+   - `wp-common`: Ensures WordPress is reachable on `http://127.0.0.1:3000/`.
+   - `wp-auth`: Navigates directly to `/wp-login.php`, enters credentials (`admin` / `password`), and confirms `#wpadminbar`.
+   - `wp-posts`: Navigates to `/wp-admin/edit.php`, edits the post title via Quick Edit, and asserts the updated title.
+   - Scenario declares `@Libraries=wp-common, wp-auth, wp-posts`.
 
 ## Running Tests
 
@@ -26,9 +26,9 @@ pnpm install
 pnpm test
 ```
 
-To run the local static server interactively and open the browser:
+To start the native WordPress WASM server for interactive browser use:
 
 ```bash
 pnpm run serve
-# Visit http://127.0.0.1:3000 in your browser
+# Open http://127.0.0.1:3000/wp-login.php in your browser
 ```

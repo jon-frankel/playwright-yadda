@@ -9,3 +9,23 @@ pre-commit:
       run: pnpm oxlint {staged_files}
     typecheck:
       run: pnpm typecheck
+
+# Everything CI-worthy before code leaves the machine. Checks only: nothing here rewrites files.
+# Skip in an emergency with `git push --no-verify`.
+pre-push:
+  piped: true
+  commands:
+    1-format:
+      run: pnpm run format
+    2-lint:
+      run: pnpm run lint
+    3-typecheck:
+      run: pnpm run typecheck
+    4-test:
+      run: pnpm run test
+    5-example-basic:
+      run: pnpm --dir examples/basic test
+    6-example-wordpress:
+      run: pnpm --dir examples/wordpress test
+    7-ide-jetbrains:
+      run: scripts/ide-jetbrains-test.sh

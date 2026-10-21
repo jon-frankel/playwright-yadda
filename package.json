@@ -51,7 +51,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
-    "ide:jetbrains:test": "cd ide/jetbrains && ./gradlew test",
+    "ide:jetbrains:test": "scripts/ide-jetbrains-test.sh",
     "ide:jetbrains:build": "cd ide/jetbrains && ./gradlew buildPlugin",
     "verdaccio:start": "docker compose up -d --wait",
     "verdaccio:stop": "docker compose down",

@@ -6,7 +6,7 @@ WebStorm's bundled Cucumber.js support already jumps from a step in a `.feature`
 
 - **Cmd+B on a step definition** (on the `given` or on the step text) shows the feature steps that run it, instead of "Cannot find declaration to go to".
 - **Find Usages** (Alt+F7) on a step definition lists them in the Find window, labelled "step definition".
-- **`@Libraries` awareness, in both directions.** When two libraries define the same step text, as `examples/basic` does with "they remove the item", Cmd+B on a `.feature` step goes to the definition its scenario actually runs, and usages of a definition list only the scenarios that enable its library, and the "Ambiguous step reference with N definitions" warning goes away once the scenario's libraries leave a single definition.
+- **`@Libraries` awareness, in both directions.** When two libraries define the same step text, as `examples/basic` does with "they remove the item", Cmd+B on a `.feature` step goes to the definition its scenario actually runs, and usages of a definition list only the scenarios that enable its library, the "Ambiguous step reference with N definitions" warning goes away once the scenario's libraries leave a single definition, and when a step really is ambiguous the Cmd+B chooser shows the file each definition is in.
 
 It works for string steps and regex steps, in `.ts` and `.js` files.
 
@@ -76,6 +76,7 @@ The Java Cucumber plugin supports the same round trip, so reverse navigation fol
 | `YaddaStepReferencesSearch`       | Finds the Gherkin steps whose reference resolves to the definition, using the Cucumber plugin's own matching.                          |
 | `YaddaFindUsagesHandlerFactory`   | Enables Find Usages on the declaration and drops steps from scenarios that don't enable its library, for every consumer of the usages. |
 | `YaddaStepGotoDeclarationHandler` | Narrows Cmd+B on a `.feature` step to the definitions its scenario enables. Handlers run before reference resolution.                  |
+| `YaddaStepTarget`                 | A definition as a row in the Cmd+B chooser, labelled with its project-relative file path.                                              |
 | `YaddaAmbiguousStepSuppressor`    | Silences the Cucumber plugin's "Ambiguous step reference" warning when narrowing leaves one definition. Undefined steps still warn.    |
 | `YaddaStepDescriptionProvider`    | Labels the declaration "step definition" in the Find window.                                                                           |
 | `YaddaSteps`                      | What counts as a step definition: a cheap syntax check, confirmed against the Cucumber.js plugin's own list.                           |

@@ -49,11 +49,27 @@ object LibraryScope {
    * Null means "nothing to narrow": fewer than two candidates, nothing ruled out, or everything ruled
    * out (the step is defined, just not for this scenario). Callers then keep the IDE's own result.
    */
-  fun narrowedDefinitions(step: GherkinStep): List<PsiElement>? {
-    val reference = step.references.filterIsInstance<CucumberStepReference>().firstOrNull() ?: return null
-    val definitions = reference.multiResolve(false).mapNotNull { it.element }
-    if (definitions.size < 2) return null
+  fun narrowedDefinitions(step: GherkinStep): List<PsiElement>? = narrowed(step, definitionsOf(step))
 
+  /** What [step] can go to: [narrowedDefinitions], or every definition the IDE found if nothing is ruled out. */
+  fun candidateDefinitions(step: GherkinStep): Candidates {
+    val definitions = definitionsOf(step)
+    val narrowed = narrowed(step, definitions)
+    return Candidates(narrowed ?: definitions, narrowed != null)
+  }
+
+  class Candidates(val definitions: List<PsiElement>, val narrowed: Boolean)
+
+  private fun definitionsOf(step: GherkinStep): List<PsiElement> =
+    step.references
+      .filterIsInstance<CucumberStepReference>()
+      .firstOrNull()
+      ?.multiResolve(false)
+      ?.mapNotNull { it.element }
+      .orEmpty()
+
+  private fun narrowed(step: GherkinStep, definitions: List<PsiElement>): List<PsiElement>? {
+    if (definitions.size < 2) return null
     val enabled = definitions.filter { it !is JSLiteralExpression || isEnabledFor(it, step) }
     return enabled.takeIf { it.isNotEmpty() && it.size < definitions.size }
   }

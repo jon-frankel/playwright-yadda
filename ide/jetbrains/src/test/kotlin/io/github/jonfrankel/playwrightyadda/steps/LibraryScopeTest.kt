@@ -1,6 +1,7 @@
 package io.github.jonfrankel.playwrightyadda.steps
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
+import com.intellij.codeInsight.navigation.targetPresentation
 import com.intellij.lang.javascript.psi.JSLiteralExpression
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
@@ -327,6 +328,36 @@ class LibraryScopeTest : BasePlatformTestCase() {
       listOf("Ambiguous step reference with 2 definitions: a clash with common"),
       stepWarnings(feature),
     )
+  }
+
+  fun `test the chooser for an ambiguous step shows which file each definition is in`() {
+    libraries(registryOptions = """, { defaultLibraries: ["common"] }""", sharedStep = "a clash with common")
+    val feature =
+      feature(
+        "clash",
+        """
+        @Libraries=storefront
+        Feature: Clash
+          Scenario: S
+            Given a clash with common
+        """,
+      )
+    openAt(feature, "a clash", shift = 2)
+
+    val targets =
+      GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, myFixture.caretOffset)
+    // The same text twice: the rows only differ by the path next to them, which is what the popup renders.
+    val rows = targets.map { targetPresentation(it).let { p -> p.presentableText to p.containerText } }
+    assertEquals(
+      listOf("\"a clash with common\"" to "common.ts", "\"a clash with common\"" to "storefront.ts"),
+      rows.sortedBy { it.second },
+    )
+    // ...and each row still goes to its own definition.
+    assertEquals(
+      listOf("common.ts", "storefront.ts"),
+      targets.map { it.navigationElement.containingFile.name }.sorted(),
+    )
+    assertTrue(targets.all { it.navigationElement is JSLiteralExpression })
   }
 
   fun `test an undefined step is still reported`() {

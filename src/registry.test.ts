@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import Yadda from "yadda";
-import { createLibraryRegistry, resolveLibraries, UnknownLibraryError } from "./registry.js";
+import {
+  createLibraryRegistry,
+  LibraryRegistryManager,
+  resolveLibraries,
+  UnknownLibraryError,
+} from "./registry.js";
 
 describe("registry", () => {
   const commonLib = new Yadda.Library();
@@ -14,6 +19,27 @@ describe("registry", () => {
     catalog: catalogLib,
     checkout: checkoutLib,
   };
+
+  it("takes the keys from the libraries, not from defaultLibraries", () => {
+    // Inferring the key type from defaultLibraries as well narrowed it to "wp-common" and rejected the
+    // other keys at compile time (vitest doesn't typecheck, `pnpm typecheck` does).
+    const registry = createLibraryRegistry(
+      { "wp-common": commonLib, "wp-auth": authLib },
+      { defaultLibraries: ["wp-common"] },
+    );
+    expect(registry.getAvailableKeys()).toEqual(["wp-common", "wp-auth"]);
+
+    const manager = new LibraryRegistryManager(
+      { "wp-common": commonLib, "wp-auth": authLib },
+      { defaultLibraries: ["wp-common"] },
+    );
+    expect(manager.has("wp-auth")).toBe(true);
+    expect(
+      resolveLibraries({ "wp-common": commonLib, "wp-auth": authLib }, undefined, undefined, {
+        defaultLibraries: ["wp-common"],
+      }),
+    ).toEqual([commonLib]);
+  });
 
   it("should create a registry and retrieve available keys", () => {
     const registry = createLibraryRegistry(registryMap);

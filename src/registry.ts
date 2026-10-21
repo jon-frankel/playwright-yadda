@@ -48,7 +48,7 @@ export class LibraryRegistryManager<K extends string = string> {
   private readonly originalKeys: string[] = [];
   public readonly options: ResolveLibrariesOptions<K>;
 
-  constructor(libraries: LibraryRegistry<K>, options: ResolveLibrariesOptions<K> = {}) {
+  constructor(libraries: LibraryRegistry<K>, options: ResolveLibrariesOptions<NoInfer<K>> = {}) {
     this.options = options;
 
     for (const [key, library] of Object.entries(libraries)) {
@@ -120,7 +120,7 @@ export class LibraryRegistryManager<K extends string = string> {
  */
 export function createLibraryRegistry<K extends string = string>(
   libraries: LibraryRegistry<K>,
-  options?: ResolveLibrariesOptions<K>,
+  options?: ResolveLibrariesOptions<NoInfer<K>>,
 ): LibraryRegistryManager<K> {
   return new LibraryRegistryManager(libraries, options);
 }
@@ -132,7 +132,7 @@ export function resolveLibraries<K extends string = string>(
   registry: LibraryRegistry<K> | LibraryRegistryManager<K>,
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
-  options?: ResolveLibrariesOptions<K>,
+  options?: ResolveLibrariesOptions<NoInfer<K>>,
 ): StepLibrary[] {
   if (registry instanceof LibraryRegistryManager) {
     return registry.resolve(featureAnnotations, scenarioAnnotations, options);

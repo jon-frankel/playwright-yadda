@@ -7,5 +7,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*", "steps/**/*", "e2e/**/*", "playwright.config.ts"]
+  "include": ["steps/**/*", "e2e/**/*", "playwright.config.ts"]
 }

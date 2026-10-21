@@ -150,4 +150,30 @@ class YaddaDialectTest : BasePlatformTestCase() {
     myFixture.addFileToProject("package.json", "{ not json")
     assertEquals(GherkinLanguage.INSTANCE, myFixture.addFileToProject("features/a.feature", blocks).language)
   }
+
+  /** The real `examples/basic` project, as the IDE sees it: package.json, steps and features. */
+  private fun copyBasicExample(): Map<String, PsiFile> {
+    val root = java.io.File("../../examples/basic")
+    assertTrue("missing ${root.absolutePath}", root.isDirectory)
+    val files = listOf("package.json") +
+      listOf("steps", "features").flatMap { dir ->
+        java.io.File(root, dir).listFiles { f -> f.isFile }!!.map { "$dir/${it.name}" }
+      }
+    return files.associateWith { myFixture.addFileToProject(it, java.io.File(root, it).readText()) }
+  }
+
+  fun `test examples-basic's orders feature parses as Yadda with every step resolved`() {
+    val orders = copyBasicExample()["features/orders.feature"]!!
+    assertEquals(YaddaLanguage, orders.language)
+
+    myFixture.enableInspections(CucumberStepInspection::class.java)
+    myFixture.configureFromExistingVirtualFile(orders.virtualFile)
+    val problems = myFixture.doHighlighting().filter { it.description != null && it.severity.myVal >= 300 }
+      .map { "${it.description} :: '${orders.text.substring(it.startOffset, it.endOffset)}'" }
+    assertEquals(emptyList<String>(), problems)
+
+    val steps = PsiTreeUtil.findChildrenOfType(orders, GherkinStep::class.java)
+    assertEquals("the csv catalogue, the json order and the prose rejection", 4, steps.count { PsiTreeUtil.getChildOfType(it, GherkinPystring::class.java) != null })
+    assertEquals("the cart and receipt tables, the cart table of the outline", 3, steps.count { PsiTreeUtil.getChildOfType(it, GherkinTable::class.java) != null })
+  }
 }

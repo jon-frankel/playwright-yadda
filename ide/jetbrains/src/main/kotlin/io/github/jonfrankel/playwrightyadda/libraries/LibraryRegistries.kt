@@ -1,10 +1,12 @@
 package io.github.jonfrankel.playwrightyadda.libraries
 
+import com.intellij.lang.javascript.psi.JSArgumentList
 import com.intellij.lang.javascript.psi.JSArrayLiteralExpression
 import com.intellij.lang.javascript.psi.JSCallExpression
 import com.intellij.lang.javascript.psi.JSExpression
 import com.intellij.lang.javascript.psi.JSLiteralExpression
 import com.intellij.lang.javascript.psi.JSObjectLiteralExpression
+import com.intellij.lang.javascript.psi.JSProperty
 import com.intellij.lang.javascript.psi.JSReferenceExpression
 import com.intellij.lang.javascript.psi.JSVariable
 import com.intellij.openapi.project.Project
@@ -26,17 +28,36 @@ import com.intellij.util.Processor
  */
 class LibraryRegistry(
   private val libraries: List<Pair<String, PsiElement>>,
+  /** Every `key: …` property of the registry, whether or not its value could be followed to a library. */
+  private val keyProperties: List<Pair<String, PsiElement>>,
   val defaultLibraries: List<String>?,
   val inheritance: String?,
 ) {
   /** The registry keys under which [library] is registered (keys are case-insensitive, so lower-cased). */
   fun keysOf(library: PsiElement): List<String> =
     libraries.filter { (_, candidate) -> library.manager.areElementsEquivalent(candidate, library) }.map { it.first }
+
+  /** The properties that register [key] (case-insensitive): where the name `@Libraries=key` is defined. */
+  fun propertiesOf(key: String): List<PsiElement> =
+    keyProperties.filter { it.first == key.trim().lowercase() }.map { it.second }
 }
 
 object LibraryRegistries {
   private val REGISTRY_FACTORIES = setOf("createLibraryRegistry", "LibraryRegistryManager")
   private val SUITE_FUNCTIONS = setOf("defineFeatureSuite", "defineFeature")
+
+  /** Where each registry defines the library key [name], as written in `@Libraries=name`. */
+  fun definitionsOf(project: Project, name: String): List<PsiElement> =
+    registries(project).flatMap { it.propertiesOf(name) }
+
+  /** True for `key: …` in the object literal that `createLibraryRegistry({ … })` is called with. */
+  fun isRegistryKey(element: PsiElement): Boolean {
+    val property = element as? JSProperty ?: return false
+    val entries = property.parent as? JSObjectLiteralExpression ?: return false
+    val call = (entries.parent as? JSArgumentList)?.parent as? JSCallExpression ?: return false
+    return (call.methodExpression as? JSReferenceExpression)?.referenceName in REGISTRY_FACTORIES &&
+      call.arguments.firstOrNull() === entries
+  }
 
   /** The registries that [library] (a `createStepLibrary()` variable) is part of. */
   fun containing(library: PsiElement): List<LibraryRegistry> =
@@ -50,6 +71,7 @@ object LibraryRegistries {
   private class Draft(
     val call: JSCallExpression,
     val libraries: List<Pair<String, PsiElement>>,
+    val keyProperties: List<Pair<String, PsiElement>>,
     var defaults: List<String>?,
     var inheritance: String?,
   )
@@ -60,14 +82,17 @@ object LibraryRegistries {
 
     for (suite in callsNamed(project, SUITE_FUNCTIONS)) applySuiteOverrides(suite, drafts)
 
-    return drafts.map { LibraryRegistry(it.libraries, it.defaults, it.inheritance) }
+    return drafts.map { LibraryRegistry(it.libraries, it.keyProperties, it.defaults, it.inheritance) }
   }
 
   private fun draftOf(call: JSCallExpression): Draft? {
     val entries = call.arguments.firstOrNull() as? JSObjectLiteralExpression ?: return null
+    val keyed = entries.properties.mapNotNull { property ->
+      val key = property.name?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+      key to property
+    }
     val libraries =
-      entries.properties.mapNotNull { property ->
-        val key = property.name?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+      keyed.mapNotNull { (key, property) ->
         val target = (property.value as? JSReferenceExpression)?.resolve() ?: return@mapNotNull null
         key to target
       }
@@ -86,7 +111,7 @@ object LibraryRegistries {
         options.findProperty("inheritance")?.let { inheritance = readInheritance(it.value) }
       }
     }
-    return Draft(call, libraries, defaults, inheritance)
+    return Draft(call, libraries, keyed, defaults, inheritance)
   }
 
   /**

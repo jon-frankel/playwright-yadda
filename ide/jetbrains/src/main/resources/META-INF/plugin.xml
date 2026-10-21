@@ -15,6 +15,9 @@
         the definition from a feature step, and listing a definition's usages, only consider
         the libraries the scenario enables, and the "Ambiguous step reference" warning no
         longer fires for a step the scenario's libraries resolve to one definition.</li>
+      <li><b>Library names:</b> Cmd+B on a name in <code>@Libraries=…</code> goes to the registry
+        property that defines it, and from the property, Find Usages and rename reach every
+        feature that uses the name.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -32,11 +35,17 @@
     <!-- Finds the Gherkin steps that run a step definition. -->
     <referencesSearch
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepReferencesSearch"/>
+    <!-- ...and the names in @Libraries=… as references to the registry property that defines them. -->
+    <referencesSearch
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaLibraryNameReferencesSearch"/>
     <findUsagesHandlerFactory
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaFindUsagesHandlerFactory"/>
     <!-- Narrows Cmd+B on a feature step to the definitions its scenario's @Libraries enable. -->
     <gotoDeclarationHandler
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepGotoDeclarationHandler"/>
+    <!-- Cmd+B on a name in @Libraries=… goes to the registry property that defines it. -->
+    <gotoDeclarationHandler
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaLibraryNameGotoDeclarationHandler"/>
     <!-- ...and silences "Ambiguous step reference" once that leaves a single definition. -->
     <lang.inspectionSuppressor language="Gherkin"
         implementationClass="io.github.jonfrankel.playwrightyadda.steps.YaddaAmbiguousStepSuppressor"/>

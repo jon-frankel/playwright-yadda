@@ -8,6 +8,7 @@ WebStorm's bundled Cucumber.js support already jumps from a step in a `.feature`
 - **Find Usages** (Alt+F7) on a step definition lists them in the Find window, labelled "step definition".
 - **`@Libraries` awareness, in both directions.** When two libraries define the same step text, as `examples/basic` does with "they remove the item", Cmd+B on a `.feature` step goes to the definition its scenario actually runs, and usages of a definition list only the scenarios that enable its library, the "Ambiguous step reference with N definitions" warning goes away once the scenario's libraries leave a single definition, and when a step really is ambiguous the Cmd+B chooser shows the file each definition is in.
 
+- **Library names, both ways.** Cmd+B on a name in `@Libraries=storefront, admin` goes to the registry property that defines it (`storefront: storefrontSteps` in `createLibraryRegistry({ … })`). It goes to the property, not the library it points at, because the property is what the name means (`"wp-common": wpCommonSteps`); Cmd+B on its value reaches the library. A name no registry defines goes nowhere. From the property, Cmd+B and Find Usages list the feature and scenario tags that use the name, and renaming the property renames them too. Names don't say which registry they mean, so a name defined by two registries is a usage of both.
 - **The green run icon** next to `Feature:` and `Scenario:` (and Run from the context menu on a step) runs the tests through Playwright, narrowed to that feature or scenario, with WebStorm's usual test tree, re-run and debugging. The Cucumber.js plugin only knows how to run `cucumber-js`, so before this it said "Nothing here".
 
 Step navigation works for string steps and regex steps, in `.ts` and `.js` files.
@@ -86,19 +87,23 @@ The tests drive the same platform code paths the editor uses, including the exac
 
 The Java Cucumber plugin supports the same round trip, so reverse navigation follows its design. It is also where the Cucumber.js plugin stops.
 
-| Class                                  | Role                                                                                                                                   |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `YaddaStepPomDeclarationSearcher`      | Makes a step-definition call a declaration, so Cmd+B shows usages instead of failing.                                                  |
-| `YaddaStepReferencesSearch`            | Finds the Gherkin steps whose reference resolves to the definition, using the Cucumber plugin's own matching.                          |
-| `YaddaFindUsagesHandlerFactory`        | Enables Find Usages on the declaration and drops steps from scenarios that don't enable its library, for every consumer of the usages. |
-| `YaddaStepGotoDeclarationHandler`      | Narrows Cmd+B on a `.feature` step to the definitions its scenario enables. Handlers run before reference resolution.                  |
-| `YaddaStepTarget`                      | A definition as a row in the Cmd+B chooser, labelled with its project-relative file path.                                              |
-| `YaddaAmbiguousStepSuppressor`         | Silences the Cucumber plugin's "Ambiguous step reference" warning when narrowing leaves one definition. Undefined steps still warn.    |
-| `YaddaFeatureRunConfigurationProducer` | The run icon on a feature or scenario: a Playwright run configuration for the spec, narrowed with `--grep`.                            |
-| `YaddaFeatureSpecs`                    | Finds the spec file that calls `defineFeatureSuite` for a feature file.                                                                |
-| `PlaywrightGrep`                       | Builds the `--grep` pattern from the generated `Feature:` and `Scenario:` titles, escaped and anchored.                                |
-| `YaddaStepDescriptionProvider`         | Labels the declaration "step definition" in the Find window.                                                                           |
-| `YaddaSteps`                           | What counts as a step definition: a cheap syntax check, confirmed against the Cucumber.js plugin's own list.                           |
-| `LibraryScope`                         | The one question both directions ask: is this definition enabled for this step's scenario?                                             |
-| `LibraryRegistries`                    | Reads `createLibraryRegistry(…)` calls and `defineFeatureSuite` overrides from source.                                                 |
-| `FeatureTags`                          | Reads `@…` lines of a feature file like Yadda, and mirrors `resolveLibraryNames` from `src/annotations.ts`.                            |
+| Class                                    | Role                                                                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `YaddaStepPomDeclarationSearcher`        | Makes a step-definition call a declaration, so Cmd+B shows usages instead of failing.                                                  |
+| `YaddaStepReferencesSearch`              | Finds the Gherkin steps whose reference resolves to the definition, using the Cucumber plugin's own matching.                          |
+| `YaddaFindUsagesHandlerFactory`          | Enables Find Usages on the declaration and drops steps from scenarios that don't enable its library, for every consumer of the usages. |
+| `YaddaStepGotoDeclarationHandler`        | Narrows Cmd+B on a `.feature` step to the definitions its scenario enables. Handlers run before reference resolution.                  |
+| `YaddaStepTarget`                        | A definition as a row in the Cmd+B chooser, labelled with its project-relative file path.                                              |
+| `YaddaAmbiguousStepSuppressor`           | Silences the Cucumber plugin's "Ambiguous step reference" warning when narrowing leaves one definition. Undefined steps still warn.    |
+| `YaddaLibraryNameReferencesSearch`       | Reports the names in `@Libraries=…` as references to the registry property that defines them: usages, and rename.                      |
+| `YaddaLibraryNameReference`              | One such name. Rename rewrites every use of it in the file at once.                                                                    |
+| `LibraryNames`                           | Reads the names, and where they are, from the `@Libraries=` lines of a feature file.                                                   |
+| `YaddaLibraryNameGotoDeclarationHandler` | Cmd+B on a name in `@Libraries=…` goes to the registry property that defines it.                                                       |
+| `YaddaFeatureRunConfigurationProducer`   | The run icon on a feature or scenario: a Playwright run configuration for the spec, narrowed with `--grep`.                            |
+| `YaddaFeatureSpecs`                      | Finds the spec file that calls `defineFeatureSuite` for a feature file.                                                                |
+| `PlaywrightGrep`                         | Builds the `--grep` pattern from the generated `Feature:` and `Scenario:` titles, escaped and anchored.                                |
+| `YaddaStepDescriptionProvider`           | Labels the declaration "step definition" in the Find window.                                                                           |
+| `YaddaSteps`                             | What counts as a step definition: a cheap syntax check, confirmed against the Cucumber.js plugin's own list.                           |
+| `LibraryScope`                           | The one question both directions ask: is this definition enabled for this step's scenario?                                             |
+| `LibraryRegistries`                      | Reads `createLibraryRegistry(…)` calls and `defineFeatureSuite` overrides from source.                                                 |
+| `FeatureTags`                            | Reads `@…` lines of a feature file like Yadda, and mirrors `resolveLibraryNames` from `src/annotations.ts`.                            |

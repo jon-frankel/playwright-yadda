@@ -26,6 +26,9 @@ dependencies {
     // index and Gherkin step references this plugin extends.
     bundledPlugins("JavaScript", "gherkin", "cucumber-javascript")
 
+    // The Playwright run configuration: a module of the JavaScript plugin, not public API.
+    bundledModules("intellij.aqua.runners.playwright.js", "intellij.aqua.runners.js.core")
+
     testFramework(TestFrameworkType.Platform)
   }
 

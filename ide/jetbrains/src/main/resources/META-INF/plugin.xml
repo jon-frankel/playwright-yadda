@@ -7,10 +7,14 @@
     <p>IDE support for <a href="https://github.com/jon-frankel/playwright-yadda">playwright-yadda</a>,
     which runs Gherkin features through Playwright with Yadda step libraries.</p>
     <p>WebStorm's Cucumber.js support already navigates from a <code>.feature</code> step to its definition.
-    This plugin adds the other direction:</p>
+    This plugin adds the other direction, and teaches both about <code>@Libraries</code>:</p>
     <ul>
       <li><b>Go to usages / Find Usages</b> on a step definition
         (<code>steps.given("…", fn)</code>) lists the feature steps that run it.</li>
+      <li><b>Library-aware navigation:</b> when two libraries define the same step text, going to
+        the definition from a feature step, and listing a definition's usages, only consider
+        the libraries the scenario enables, and the "Ambiguous step reference" warning no
+        longer fires for a step the scenario's libraries resolve to one definition.</li>
     </ul>
   ]]></description>
 
@@ -28,6 +32,12 @@
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepReferencesSearch"/>
     <findUsagesHandlerFactory
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaFindUsagesHandlerFactory"/>
+    <!-- Narrows Cmd+B on a feature step to the definitions its scenario's @Libraries enable. -->
+    <gotoDeclarationHandler
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepGotoDeclarationHandler"/>
+    <!-- ...and silences "Ambiguous step reference" once that leaves a single definition. -->
+    <lang.inspectionSuppressor language="Gherkin"
+        implementationClass="io.github.jonfrankel.playwrightyadda.steps.YaddaAmbiguousStepSuppressor"/>
     <elementDescriptionProvider
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepDescriptionProvider"/>
   </extensions>

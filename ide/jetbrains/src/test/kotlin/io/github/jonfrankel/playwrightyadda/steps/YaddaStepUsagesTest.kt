@@ -140,8 +140,9 @@ class YaddaStepUsagesTest : BasePlatformTestCase() {
     assertEquals(2, usageTexts().size)
   }
 
-  // Documents a known limitation (see the plugin README): neither direction knows about @Libraries.
-  fun `test identical steps in two libraries are not told apart`() {
+  // With no registry to read, which library defines a step is unknown, so nothing is ruled out.
+  // (With a registry the two are told apart: see LibraryScopeTest.)
+  fun `test identical steps in two libraries are not told apart without a registry`() {
     openStepsWithCaretAt("a customer is on", shift = 4)
     myFixture.addFileToProject(
       "steps/admin.ts",

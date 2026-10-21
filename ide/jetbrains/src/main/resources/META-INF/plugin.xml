@@ -18,6 +18,8 @@
       <li><b>Library names:</b> Cmd+B on a name in <code>@Libraries=…</code> goes to the registry
         property that defines it, and from the property, Find Usages and rename reach every
         feature that uses the name.</li>
+      <li><b>Yadda syntax:</b> <code>---</code> fenced blocks under a step (tables, JSON, CSV)
+        parse cleanly instead of showing "Unexpected element", and tables align on reformat.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -29,6 +31,14 @@
   <depends>cucumber-javascript</depends>
 
   <extensions defaultExtensionNs="com.intellij">
+    <!-- *.yadda.feature: Gherkin as Yadda writes it, with dashed fences around multi-line steps. -->
+    <fileType name="Yadda" implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaFileType"
+              fieldName="INSTANCE" language="Yadda" patterns="*.yadda.feature"/>
+    <lang.parserDefinition language="Yadda"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaParserDefinition"/>
+    <!-- A .feature file in a project that depends on playwright-yadda is parsed as Yadda too. -->
+    <lang.substitutor language="Gherkin"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaLanguageSubstitutor"/>
     <!-- Makes a step-definition call a declaration, so Cmd+B on it shows its usages. -->
     <pom.declarationSearcher
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepPomDeclarationSearcher"/>

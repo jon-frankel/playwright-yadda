@@ -12,6 +12,7 @@ import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.util.Processor
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryNames
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaFileType
 import org.jetbrains.plugins.cucumber.psi.GherkinFileType
 
 /**
@@ -43,9 +44,13 @@ class YaddaLibraryNameReferencesSearch :
     val manager = PsiManager.getInstance(project)
     return when (val scope = parameters.effectiveSearchScope) {
       is GlobalSearchScope ->
-        FileTypeIndex.getFiles(GherkinFileType.INSTANCE, scope).mapNotNull { manager.findFile(it) }
-      is LocalSearchScope -> scope.scope.mapNotNull { it.containingFile }.distinct().filter { it.fileType == GherkinFileType.INSTANCE }
+        FEATURE_FILE_TYPES.flatMap { FileTypeIndex.getFiles(it, scope) }.mapNotNull { manager.findFile(it) }
+      is LocalSearchScope -> scope.scope.mapNotNull { it.containingFile }.distinct().filter { it.fileType in FEATURE_FILE_TYPES }
       else -> emptyList()
     }
+  }
+
+  private companion object {
+    val FEATURE_FILE_TYPES = listOf(GherkinFileType.INSTANCE, YaddaFileType)
   }
 }

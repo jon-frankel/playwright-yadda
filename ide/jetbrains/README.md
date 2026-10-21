@@ -11,6 +11,12 @@ WebStorm's bundled Cucumber.js support already jumps from a step in a `.feature`
 - **Library names, both ways.** Cmd+B on a name in `@Libraries=storefront, admin` goes to the registry property that defines it (`storefront: storefrontSteps` in `createLibraryRegistry({ … })`). It goes to the property, not the library it points at, because the property is what the name means (`"wp-common": wpCommonSteps`); Cmd+B on its value reaches the library. A name no registry defines goes nowhere. From the property, Cmd+B and Find Usages list the feature and scenario tags that use the name, and renaming the property renames them too. Names don't say which registry they mean, so a name defined by two registries is a usage of both.
 - **The green run icon** next to `Feature:` and `Scenario:` (and Run from the context menu on a step) runs the tests through Playwright, narrowed to that feature or scenario, with WebStorm's usual test tree, re-run and debugging. The Cucumber.js plugin only knows how to run `cucumber-js`, so before this it said "Nothing here".
 
+- **Yadda's multi-line steps.** WebStorm's Gherkin parser flags Yadda's `---` fences as "Unexpected element". In a project that depends on `playwright-yadda` (some `package.json` above the feature lists it), `.feature` files are parsed as Yadda instead, and so are files named `*.yadda.feature` anywhere. A block between two lines of dashes belongs to the step above it:
+  - a block of `| … |` rows is that step's table, which Reformat Code aligns like any Gherkin table;
+  - any other block (JSON, CSV, prose) is that step's doc string, closing fence optional on the last step. Yadda's `--- json` remark after the dashes is part of the fence.
+
+  Everything else in the plugin works on these files too.
+
 Step navigation works for string steps and regex steps, in `.ts` and `.js` files.
 
 ## Requirements
@@ -60,6 +66,8 @@ It runs from the nearest directory above the spec that has a `playwright.config.
 
 - **Running relies on a JetBrains-internal module.** The Playwright run configuration (`intellij.aqua.runners.playwright.js`) is part of WebStorm's JavaScript plugin but not public API. It is only available in WebStorm and the other IDEs that bundle it, and `verifyPlugin` plus the run tests are what to check on a new IDE version.
 
+- **Yadda syntax is covered only for multi-line steps.** `Where:`, `[name]` placeholders, steps without a keyword, `┆` separators and the Markdown parser are still read the way Gherkin would read them. Language injection into a fenced JSON block doesn't recognise the `--- json` remark yet, and Reformat Code doesn't move a fence with its step.
+- **Step definitions with a table need an optional table group.** The IDE matches a step by its first line, as it does for any Gherkin table, so `/^the rows are:\n([\s\S]+)$/` shows "Undefined step reference". `/^the rows are:(?:\n([\s\S]+))?$/` resolves in the IDE and runs in Yadda.
 - **No warning yet for a step whose library isn't enabled,** and no completion or validation of the names in `@Libraries=`. Those would be separate additions.
 - **Which registry a feature runs under isn't known.** A definition is shown if any registry containing its library enables it.
 - **Only what the Cucumber.js plugin indexes.** A step definition is a call whose method name is a Gherkin keyword and whose first argument is a string or regex literal. Anything else, such as `lib.define(...)` or a step text held in a variable, is not recognised, in the same way the IDE doesn't recognise it going forward.
@@ -102,6 +110,9 @@ The Java Cucumber plugin supports the same round trip, so reverse navigation fol
 | `YaddaFeatureRunConfigurationProducer`   | The run icon on a feature or scenario: a Playwright run configuration for the spec, narrowed with `--grep`.                            |
 | `YaddaFeatureSpecs`                      | Finds the spec file that calls `defineFeatureSuite` for a feature file.                                                                |
 | `PlaywrightGrep`                         | Builds the `--grep` pattern from the generated `Feature:` and `Scenario:` titles, escaped and anchored.                                |
+| `YaddaLexer`                             | Gherkin's lexer, plus Yadda's `---` blocks: a table's fences become comments, any other block becomes a doc string. Restartable.       |
+| `YaddaParserDefinition`, `YaddaFile`     | The Yadda language: Gherkin's parser and PSI over `YaddaLexer`, with Gherkin as its base language so its features apply.               |
+| `YaddaLanguageSubstitutor`               | Parses a `.feature` file as Yadda when the project depends on `playwright-yadda` (`PlaywrightYaddaProjects`).                          |
 | `YaddaStepDescriptionProvider`           | Labels the declaration "step definition" in the Find window.                                                                           |
 | `YaddaSteps`                             | What counts as a step definition: a cheap syntax check, confirmed against the Cucumber.js plugin's own list.                           |
 | `LibraryScope`                           | The one question both directions ask: is this definition enabled for this step's scenario?                                             |

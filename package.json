@@ -1,6 +1,6 @@
 {
   "name": "playwright-yadda",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Dynamic step library loading for Playwright and Yadda BDD",
   "license": "MIT",
   "files": [

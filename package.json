@@ -44,6 +44,7 @@
     "build": "tsdown",
     "dev": "tsdown --watch",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "pnpm --dir examples/basic typecheck && pnpm --dir examples/wordpress typecheck",
     "lint": "oxlint --type-aware",
     "lint:fix": "oxlint --fix",
     "format": "oxfmt --check .",

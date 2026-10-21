@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
+    "typecheck": "tsc --noEmit",
     "serve": "node scripts/serve.mjs"
   },
   "dependencies": {

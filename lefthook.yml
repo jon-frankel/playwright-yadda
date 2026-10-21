@@ -9,6 +9,9 @@ pre-commit:
       run: pnpm oxlint {staged_files}
     typecheck:
       run: pnpm typecheck
+    # The examples are checked against the published playwright-yadda, as a user's project would be.
+    typecheck-examples:
+      run: pnpm typecheck:examples
 
 # Everything CI-worthy before code leaves the machine. Checks only: nothing here rewrites files.
 # Skip in an emergency with `git push --no-verify`.
@@ -21,11 +24,13 @@ pre-push:
       run: pnpm run lint
     3-typecheck:
       run: pnpm run typecheck
-    4-test:
+    4-typecheck-examples:
+      run: pnpm run typecheck:examples
+    5-test:
       run: pnpm run test
-    5-example-basic:
+    6-example-basic:
       run: pnpm --dir examples/basic test
-    6-example-wordpress:
+    7-example-wordpress:
       run: pnpm --dir examples/wordpress test
-    7-ide-jetbrains:
+    8-ide-jetbrains:
       run: scripts/ide-jetbrains-test.sh

@@ -21,13 +21,14 @@ interface OrdersContext {
 
 export const orderSteps = createStepLibrary();
 
-// Every definition that takes a block makes it optional, `(?:\n([\s\S]+))?`. Yadda always supplies it,
-// and the IDE matches a step by its first line only, so it would show "Undefined step reference"
-// for a definition that insisted on the block.
+// A definition that takes a block says so: `\n([\s\S]+)$` after the first line. Yadda matches the whole
+// step, block included, so a step without its block is not this definition. The IDE plugin (0.8.0 and
+// later) matches the same way. Before that it matched the first line only and showed "Undefined step
+// reference" for these, which is why an older version of this file wrote the block as optional.
 
 orderSteps.given(
-  /^the catalogue is imported from:(?:\n([\s\S]+))?$/,
-  function (this: OrdersContext, block?: string) {
+  /^the catalogue is imported from:\n([\s\S]+)$/,
+  function (this: OrdersContext, block: string) {
     const rows = parseCsv(requireBlock(block, "the catalogue is imported from:"));
     this.catalogue = new Map(
       rows.map((row) => [row.sku!, { name: row.name!, price: Number(row.price) }]),
@@ -35,23 +36,20 @@ orderSteps.given(
   },
 );
 
-orderSteps.given(
-  /^the cart holds:(?:\n([\s\S]+))?$/,
-  function (this: OrdersContext, block?: string) {
-    this.lines = parseTable(requireBlock(block, "the cart holds:")).map((row) => ({
-      sku: row.sku!,
-      qty: Number(row.qty),
-    }));
-  },
-);
+orderSteps.given(/^the cart holds:\n([\s\S]+)$/, function (this: OrdersContext, block: string) {
+  this.lines = parseTable(requireBlock(block, "the cart holds:")).map((row) => ({
+    sku: row.sku!,
+    qty: Number(row.qty),
+  }));
+});
 
 orderSteps.when("the customer checks out", function (this: OrdersContext) {
   placeOrder(this, this.lines);
 });
 
 orderSteps.when(
-  /^the customer places an order with:(?:\n([\s\S]+))?$/,
-  function (this: OrdersContext, block?: string) {
+  /^the customer places an order with:\n([\s\S]+)$/,
+  function (this: OrdersContext, block: string) {
     const order = JSON.parse(requireBlock(block, "the customer places an order with:")) as {
       lines: OrderLine[];
     };
@@ -59,25 +57,22 @@ orderSteps.when(
   },
 );
 
-orderSteps.then(
-  /^the receipt reads:(?:\n([\s\S]+))?$/,
-  function (this: OrdersContext, block?: string) {
-    const expected = parseTable(requireBlock(block, "the receipt reads:"));
-    expect(
-      this.receipt?.lines.map(({ sku, qty, amount }) => ({ sku, qty: String(qty), amount })),
-    ).toEqual(expected);
-  },
-);
+orderSteps.then(/^the receipt reads:\n([\s\S]+)$/, function (this: OrdersContext, block: string) {
+  const expected = parseTable(requireBlock(block, "the receipt reads:"));
+  expect(
+    this.receipt?.lines.map(({ sku, qty, amount }) => ({ sku, qty: String(qty), amount })),
+  ).toEqual(expected);
+});
 
-// `(.+)` rather than a number pattern: in the outline the step reads "the order total is [total]", and
-// the IDE doesn't substitute Yadda's [placeholders] into step text (it only knows Gherkin's <placeholders>).
-orderSteps.then(/^the order total is (.+)$/, function (this: OrdersContext, total: string) {
+// A number pattern: in the outline the step reads "the order total is [total]", and the IDE fills in
+// Yadda's [placeholders] from the first examples row before matching it against this.
+orderSteps.then(/^the order total is ([\d.]+)$/, function (this: OrdersContext, total: string) {
   expect(this.receipt?.total).toBe(total);
 });
 
 orderSteps.then(
-  /^the order is rejected with:(?:\n([\s\S]+))?$/,
-  function (this: OrdersContext, block?: string) {
+  /^the order is rejected with:\n([\s\S]+)$/,
+  function (this: OrdersContext, block: string) {
     expect(this.rejection).toBe(requireBlock(block, "the order is rejected with:").trim());
   },
 );

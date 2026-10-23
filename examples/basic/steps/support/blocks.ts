@@ -1,9 +1,9 @@
 // Yadda hands a multi-line step to its definition as one string: the step's first line, a newline,
 // then the lines between the two `---` fences. These read the three shapes the orders feature uses.
 
-/** The fenced block of a step, which a definition declares optional so the IDE can match its first line. */
-export function requireBlock(block: string | undefined, step: string): string {
-  if (!block?.trim()) throw new Error(`"${step}" needs a block between two --- lines`);
+/** The fenced block of a step; a blank one is as good as none. */
+export function requireBlock(block: string, step: string): string {
+  if (!block.trim()) throw new Error(`"${step}" needs a block between two --- lines`);
   return block;
 }
 

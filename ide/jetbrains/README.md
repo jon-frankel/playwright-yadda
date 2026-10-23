@@ -13,7 +13,10 @@ WebStorm's bundled Cucumber.js support already jumps from a step in a `.feature`
 
 - **Yadda's multi-line steps.** WebStorm's Gherkin parser flags Yadda's `---` fences as "Unexpected element". In a project that depends on `playwright-yadda` (some `package.json` above the feature lists it), `.feature` files are parsed as Yadda instead, and so are files named `*.yadda.feature` anywhere. A block between two lines of dashes belongs to the step above it:
   - a block of `| … |` rows is that step's table, which Reformat Code aligns like any Gherkin table;
-  - any other block (JSON, CSV, prose) is that step's doc string, closing fence optional on the last step. Yadda's `--- json` remark after the dashes is part of the fence.
+  - any other block (JSON, CSV, prose) is that step's doc string, closing fence optional on the last step. Yadda's `--- json` remark after the dashes is part of the fence;
+  - the remark can also name a language: `--- json` (or `--- sql`, `--- xml`, any language the IDE knows by that name) injects it into the block, with its highlighting, error checking and Reformat. A remark that is not a language (`--- the response body`) injects nothing;
+  - Enter at the end of an opening fence adds the closing one (with the same dashes), unless content for it is already under it, and "Edit JSON Fragment" writes back between the fences instead of turning them into `"""`;
+  - `--- csv` and `--- tsv` blocks are checked for rows with more or fewer fields than the header, and for a quoted field left open (WebStorm itself has no CSV language, so the "Ragged CSV block" inspection does that checking; with a CSV plugin installed, `--- csv` is injected as well).
 
   Everything else in the plugin works on these files too.
 
@@ -66,7 +69,7 @@ It runs from the nearest directory above the spec that has a `playwright.config.
 
 - **Running relies on a JetBrains-internal module.** The Playwright run configuration (`intellij.aqua.runners.playwright.js`) is part of WebStorm's JavaScript plugin but not public API. It is only available in WebStorm and the other IDEs that bundle it, and `verifyPlugin` plus the run tests are what to check on a new IDE version.
 
-- **Yadda syntax is covered only for multi-line steps.** `Where:`, `[name]` placeholders, steps without a keyword, `┆` separators and the Markdown parser are still read the way Gherkin would read them. Language injection into a fenced JSON block doesn't recognise the `--- json` remark yet, and Reformat Code doesn't move a fence with its step.
+- **Yadda syntax is covered only for multi-line steps.** `Where:`, `[name]` placeholders, steps without a keyword, `┆` separators and the Markdown parser are still read the way Gherkin would read them. Reformat Code doesn't move a fence with its step, a quick fix inside an injected block still goes through Gherkin's `updateText` (which assumes `"""`; untested), and `--- csv` is highlighted only if a CSV plugin (such as Rainbow CSV) is installed.
 - **Step definitions with a table need an optional table group.** The IDE matches a step by its first line, as it does for any Gherkin table, so `/^the rows are:\n([\s\S]+)$/` shows "Undefined step reference". `/^the rows are:(?:\n([\s\S]+))?$/` resolves in the IDE and runs in Yadda.
 - **No warning yet for a step whose library isn't enabled,** and no completion or validation of the names in `@Libraries=`. Those would be separate additions.
 - **Which registry a feature runs under isn't known.** A definition is shown if any registry containing its library enables it.
@@ -95,26 +98,29 @@ The tests drive the same platform code paths the editor uses, including the exac
 
 The Java Cucumber plugin supports the same round trip, so reverse navigation follows its design. It is also where the Cucumber.js plugin stops.
 
-| Class                                    | Role                                                                                                                                   |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `YaddaStepPomDeclarationSearcher`        | Makes a step-definition call a declaration, so Cmd+B shows usages instead of failing.                                                  |
-| `YaddaStepReferencesSearch`              | Finds the Gherkin steps whose reference resolves to the definition, using the Cucumber plugin's own matching.                          |
-| `YaddaFindUsagesHandlerFactory`          | Enables Find Usages on the declaration and drops steps from scenarios that don't enable its library, for every consumer of the usages. |
-| `YaddaStepGotoDeclarationHandler`        | Narrows Cmd+B on a `.feature` step to the definitions its scenario enables. Handlers run before reference resolution.                  |
-| `YaddaStepTarget`                        | A definition as a row in the Cmd+B chooser, labelled with its project-relative file path.                                              |
-| `YaddaAmbiguousStepSuppressor`           | Silences the Cucumber plugin's "Ambiguous step reference" warning when narrowing leaves one definition. Undefined steps still warn.    |
-| `YaddaLibraryNameReferencesSearch`       | Reports the names in `@Libraries=…` as references to the registry property that defines them: usages, and rename.                      |
-| `YaddaLibraryNameReference`              | One such name. Rename rewrites every use of it in the file at once.                                                                    |
-| `LibraryNames`                           | Reads the names, and where they are, from the `@Libraries=` lines of a feature file.                                                   |
-| `YaddaLibraryNameGotoDeclarationHandler` | Cmd+B on a name in `@Libraries=…` goes to the registry property that defines it.                                                       |
-| `YaddaFeatureRunConfigurationProducer`   | The run icon on a feature or scenario: a Playwright run configuration for the spec, narrowed with `--grep`.                            |
-| `YaddaFeatureSpecs`                      | Finds the spec file that calls `defineFeatureSuite` for a feature file.                                                                |
-| `PlaywrightGrep`                         | Builds the `--grep` pattern from the generated `Feature:` and `Scenario:` titles, escaped and anchored.                                |
-| `YaddaLexer`                             | Gherkin's lexer, plus Yadda's `---` blocks: a table's fences become comments, any other block becomes a doc string. Restartable.       |
-| `YaddaParserDefinition`, `YaddaFile`     | The Yadda language: Gherkin's parser and PSI over `YaddaLexer`, with Gherkin as its base language so its features apply.               |
-| `YaddaLanguageSubstitutor`               | Parses a `.feature` file as Yadda when the project depends on `playwright-yadda` (`PlaywrightYaddaProjects`).                          |
-| `YaddaStepDescriptionProvider`           | Labels the declaration "step definition" in the Find window.                                                                           |
-| `YaddaSteps`                             | What counts as a step definition: a cheap syntax check, confirmed against the Cucumber.js plugin's own list.                           |
-| `LibraryScope`                           | The one question both directions ask: is this definition enabled for this step's scenario?                                             |
-| `LibraryRegistries`                      | Reads `createLibraryRegistry(…)` calls and `defineFeatureSuite` overrides from source.                                                 |
-| `FeatureTags`                            | Reads `@…` lines of a feature file like Yadda, and mirrors `resolveLibraryNames` from `src/annotations.ts`.                            |
+| Class                                           | Role                                                                                                                                    |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `YaddaStepPomDeclarationSearcher`               | Makes a step-definition call a declaration, so Cmd+B shows usages instead of failing.                                                   |
+| `YaddaStepReferencesSearch`                     | Finds the Gherkin steps whose reference resolves to the definition, using the Cucumber plugin's own matching.                           |
+| `YaddaFindUsagesHandlerFactory`                 | Enables Find Usages on the declaration and drops steps from scenarios that don't enable its library, for every consumer of the usages.  |
+| `YaddaStepGotoDeclarationHandler`               | Narrows Cmd+B on a `.feature` step to the definitions its scenario enables. Handlers run before reference resolution.                   |
+| `YaddaStepTarget`                               | A definition as a row in the Cmd+B chooser, labelled with its project-relative file path.                                               |
+| `YaddaAmbiguousStepSuppressor`                  | Silences the Cucumber plugin's "Ambiguous step reference" warning when narrowing leaves one definition. Undefined steps still warn.     |
+| `YaddaLibraryNameReferencesSearch`              | Reports the names in `@Libraries=…` as references to the registry property that defines them: usages, and rename.                       |
+| `YaddaLibraryNameReference`                     | One such name. Rename rewrites every use of it in the file at once.                                                                     |
+| `LibraryNames`                                  | Reads the names, and where they are, from the `@Libraries=` lines of a feature file.                                                    |
+| `YaddaLibraryNameGotoDeclarationHandler`        | Cmd+B on a name in `@Libraries=…` goes to the registry property that defines it.                                                        |
+| `YaddaFeatureRunConfigurationProducer`          | The run icon on a feature or scenario: a Playwright run configuration for the spec, narrowed with `--grep`.                             |
+| `YaddaFeatureSpecs`                             | Finds the spec file that calls `defineFeatureSuite` for a feature file.                                                                 |
+| `PlaywrightGrep`                                | Builds the `--grep` pattern from the generated `Feature:` and `Scenario:` titles, escaped and anchored.                                 |
+| `YaddaLexer`                                    | Gherkin's lexer, plus Yadda's `---` blocks: a table's fences become comments, any other block becomes a doc string. Restartable.        |
+| `YaddaParserDefinition`, `YaddaFile`            | The Yadda language: Gherkin's parser and PSI over `YaddaLexer`, with Gherkin as its base language so its features apply.                |
+| `YaddaLanguageInjector`, `FencedBlock`          | Injects the language a block's remark names (`--- json`) into its content. `FencedBlock` reads the remark and content range of a block. |
+| `YaddaEnterHandler`, `YaddaPystringManipulator` | Enter on an opening fence adds a closing fence, and a fragment edit keeps the fences. Both run before Gherkin's, which assume `"""`.    |
+| `YaddaCsvBlockInspection`, `CsvRecords`         | The "Ragged CSV block" warning: rows whose field count differs from the header, and unclosed quotes.                                    |
+| `YaddaLanguageSubstitutor`                      | Parses a `.feature` file as Yadda when the project depends on `playwright-yadda` (`PlaywrightYaddaProjects`).                           |
+| `YaddaStepDescriptionProvider`                  | Labels the declaration "step definition" in the Find window.                                                                            |
+| `YaddaSteps`                                    | What counts as a step definition: a cheap syntax check, confirmed against the Cucumber.js plugin's own list.                            |
+| `LibraryScope`                                  | The one question both directions ask: is this definition enabled for this step's scenario?                                              |
+| `LibraryRegistries`                             | Reads `createLibraryRegistry(…)` calls and `defineFeatureSuite` overrides from source.                                                  |
+| `FeatureTags`                                   | Reads `@…` lines of a feature file like Yadda, and mirrors `resolveLibraryNames` from `src/annotations.ts`.                             |

@@ -19,7 +19,9 @@
         property that defines it, and from the property, Find Usages and rename reach every
         feature that uses the name.</li>
       <li><b>Yadda syntax:</b> <code>---</code> fenced blocks under a step (tables, JSON, CSV)
-        parse cleanly instead of showing "Unexpected element", and tables align on reformat.</li>
+        parse cleanly instead of showing "Unexpected element", and tables align on reformat.
+        A remark such as <code>--- json</code> injects that language into the block, and a
+        <code>--- csv</code> block is checked for ragged rows.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -39,6 +41,15 @@
     <!-- A .feature file in a project that depends on playwright-yadda is parsed as Yadda too. -->
     <lang.substitutor language="Gherkin"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaLanguageSubstitutor"/>
+    <!-- A dashed block that names a language after its dashes (json, sql, and so on) is that language. -->
+    <multiHostInjector implementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaLanguageInjector"/>
+    <!-- Gherkin's would close the block with quote marks and rewrite a fragment edit's fences into them. -->
+    <enterHandlerDelegate implementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaEnterHandler" order="first"/>
+    <lang.elementManipulator forClass="org.jetbrains.plugins.cucumber.psi.GherkinPystring"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaPystringManipulator" order="first"/>
+    <localInspection language="Gherkin" shortName="YaddaCsvBlock" groupName="Playwright Yadda"
+        displayName="Ragged CSV block" enabledByDefault="true" level="WARNING"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaCsvBlockInspection"/>
     <!-- Makes a step-definition call a declaration, so Cmd+B on it shows its usages. -->
     <pom.declarationSearcher
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepPomDeclarationSearcher"/>

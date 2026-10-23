@@ -22,6 +22,9 @@
         parse cleanly instead of showing "Unexpected element", and tables align on reformat.
         A remark such as <code>--- json</code> injects that language into the block, and a
         <code>--- csv</code> block is checked for ragged rows.</li>
+      <li><b>Yadda's own style:</b> steps with no <code>Given</code>/<code>When</code>/<code>Then</code>,
+        <code>Where:</code> and <code>Examples:</code> rows without pipes (<code>qty | total</code>) read
+        as tables that Reformat aligns, tags and dashed groups between rows, and keywords in any case.</li>
       <li><b>What Yadda would make of the file:</b> Yadda's own parser errors, on the line they are
         about, before the tests run; a warning for <code>Rule:</code>, whose scenarios playwright-yadda
         doesn't run; unused <code>[column]</code>s of an examples table; and step definitions that
@@ -42,6 +45,12 @@
               fieldName="INSTANCE" language="Yadda" patterns="*.yadda.feature"/>
     <lang.parserDefinition language="Yadda"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaParserDefinition"/>
+    <!-- Gherkin's colours over the Yadda lexer, so a row without pipes and a Where: are coloured as what they are. -->
+    <lang.syntaxHighlighterFactory language="Yadda"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaSyntaxHighlighterFactory"/>
+    <!-- Gherkin's formatting, with the rows of an Examples table that start with a cell. -->
+    <lang.formatter language="Yadda"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaFormattingModelBuilder"/>
     <!-- A .feature file in a project that depends on playwright-yadda is parsed as Yadda too. -->
     <lang.substitutor language="Gherkin"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaLanguageSubstitutor"/>

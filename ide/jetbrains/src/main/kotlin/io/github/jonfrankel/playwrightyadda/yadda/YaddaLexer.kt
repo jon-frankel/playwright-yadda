@@ -19,6 +19,12 @@ import java.util.regex.Pattern
  *
  * A block's closing fence is optional for the last step, so an unclosed block runs to the end.
  *
+ * Under `Examples:` (or `Where:`) the lines are table rows, whether or not they start with a pipe.
+ * Gherkin lexes `qty | total` as one text token, so those lines are cut into cells and pipes here,
+ * and the fences that group a row over several lines stay comments. Yadda's keywords are matched
+ * without regard to case, and `Where:` is Yadda's other word for `Examples:`; the lines Gherkin
+ * read as text are given the keyword tokens it would have given them.
+ *
  * Which of the two a block is depends on the rows after the opening fence, so those are read ahead;
  * editing the closing fence changes how the opening one is coloured only once the file is re-lexed.
  *
@@ -43,15 +49,33 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
   private var tableOpen = -1
   private var tableClose = -1
 
+  // Whether the lexer is under an `Examples:` keyword, after the token being reported.
+  private var examples = false
+
+  // The pieces a single token of the delegate's is cut into, and which one is being reported.
+  private var pieces: List<Piece> = emptyList()
+  private var pieceIndex = 0
+
+  // Where the delegate starts again once the pieces are done, when they cover more than its token.
+  private var resumeAt = -1
+
+  private class Piece(val type: IElementType, val start: Int, val end: Int)
+
+  private fun cut() = pieceIndex < pieces.size
+
   override fun start(buffer: CharSequence, startOffset: Int, endOffset: Int, initialState: Int) {
     buf = buffer
     end = endOffset
     own = false
     tableOpen = -1
     tableClose = -1
+    pieces = emptyList()
+    pieceIndex = 0
+    resumeAt = -1
 
     val mode = initialState ushr MODE_SHIFT
     val delegateState = initialState and DELEGATE_MASK
+    examples = initialState and EXAMPLES_BIT != 0
     if (startOffset >= endOffset) {
       delegate.start(buffer, startOffset, endOffset, delegateState)
       return
@@ -74,10 +98,12 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
 
   override fun getState(): Int {
     if (own) return if (stage == STAGE_OPEN) delegate.state else stage shl MODE_SHIFT
-    return (if (inTable()) MODE_TABLE shl MODE_SHIFT else 0) or delegate.state
+    val flag = if (examples) EXAMPLES_BIT else 0
+    return (if (inTable()) MODE_TABLE shl MODE_SHIFT else 0) or flag or delegate.state
   }
 
   override fun getTokenType(): IElementType? {
+    if (cut()) return pieces[pieceIndex].type
     if (own) return ownType
     val type = delegate.tokenType
     if (type == GherkinTokenTypes.TEXT && FENCE_LINE.matcher(delegate.tokenText).matches()) {
@@ -86,9 +112,9 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     return type
   }
 
-  override fun getTokenStart(): Int = if (own) ownStart else delegate.tokenStart
+  override fun getTokenStart(): Int = if (cut()) pieces[pieceIndex].start else if (own) ownStart else delegate.tokenStart
 
-  override fun getTokenEnd(): Int = if (own) ownEnd else delegate.tokenEnd
+  override fun getTokenEnd(): Int = if (cut()) pieces[pieceIndex].end else if (own) ownEnd else delegate.tokenEnd
 
   override fun getBufferSequence(): CharSequence = buf
 
@@ -99,6 +125,18 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
       enter(stage + 1)
       return
     }
+    if (cut()) {
+      pieceIndex++
+      if (cut()) return
+      pieces = emptyList()
+      pieceIndex = 0
+      if (resumeAt >= 0) {
+        delegate.start(buf, resumeAt, end, 0)
+        resumeAt = -1
+        settle()
+        return
+      }
+    }
     if (delegate.tokenStart >= tableClose && tableClose >= 0) {
       tableOpen = -1
       tableClose = -1
@@ -107,14 +145,31 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     settle()
   }
 
-  /** Looks at the delegate's current token and takes over if it opens a block that is a doc string. */
+  /**
+   * Looks at the delegate's current token and takes over if it opens a block that is a doc string,
+   * or cuts it into pieces if it is a line of Yadda's that Gherkin read as plain text.
+   */
   private fun settle() {
     if (own || delegate.tokenType == null) return
     val type = delegate.tokenType
-    if (type != GherkinTokenTypes.TEXT && type != GherkinTokenTypes.PIPE) return
     val start = delegate.tokenStart
-    if (!startsFenceLine(start)) return
-    if (start == tableClose) return
+    // Under Examples a line is a row, even one that starts with a word Gherkin reads as a step keyword.
+    if (examples && type == GherkinTokenTypes.STEP_KEYWORD && onlyBlankBefore(start)) {
+      var rowEnd = lineEnd(start)
+      while (rowEnd > start && buf[rowEnd - 1].isWhitespace()) rowEnd--
+      pieces = cells(start, rowEnd)
+      pieceIndex = 0
+      resumeAt = rowEnd
+      return
+    }
+    if (type != GherkinTokenTypes.TEXT) track(type)
+    if (type != GherkinTokenTypes.TEXT && type != GherkinTokenTypes.PIPE) return
+    if (!startsFenceLine(start)) {
+      if (type == GherkinTokenTypes.TEXT && onlyBlankBefore(start)) cutLine(start, delegate.tokenEnd)
+      return
+    }
+    // The fences of a row that goes over several lines are comments, and so is a table's.
+    if (start == tableClose || examples) return
 
     val openEnd = lineEnd(start)
     val close = findFence(minOf(openEnd + 1, end))
@@ -132,6 +187,95 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     ownStart = start
     ownEnd = openEnd
     stage = STAGE_OPEN
+  }
+
+  /** Whether the rows of an Examples block are what follows [type], which is a token of the delegate's. */
+  private fun track(type: IElementType?) {
+    when (type) {
+      GherkinTokenTypes.EXAMPLES_KEYWORD -> examples = true
+      GherkinTokenTypes.FEATURE_KEYWORD,
+      GherkinTokenTypes.RULE_KEYWORD,
+      GherkinTokenTypes.BACKGROUND_KEYWORD,
+      GherkinTokenTypes.SCENARIO_KEYWORD,
+      GherkinTokenTypes.SCENARIO_OUTLINE_KEYWORD,
+      -> examples = false
+      GherkinTokenTypes.TAG -> if (examples && tagsLeaveExamples(delegate.tokenStart)) examples = false
+    }
+  }
+
+  /**
+   * A tag line inside a table annotates the row under it. It ends the table when what follows the tags
+   * is a heading, or nothing.
+   */
+  private fun tagsLeaveExamples(tagStart: Int): Boolean {
+    var from = lineStart(tagStart)
+    while (from < end) {
+      val to = lineEnd(from)
+      val line = buf.subSequence(from, to).trim()
+      if (line.isNotEmpty() && line[0] != '@' && line[0] != '#') return HEADING_LINE.matcher(line).find()
+      from = to + 1
+    }
+    return true
+  }
+
+  /** Cuts the line of text the delegate found at [start] into the tokens Gherkin would have made of it. */
+  private fun cutLine(start: Int, lineEnd: Int) {
+    val text = buf.subSequence(start, lineEnd)
+    val word = YADDA_KEYWORD.matcher(text)
+    if (word.find()) {
+      val type = keywordType(word.group(1).lowercase())
+      val colon = start + word.end(1)
+      val list = mutableListOf(Piece(type, start, colon), Piece(GherkinTokenTypes.COLON, colon, colon + 1))
+      var title = colon + 1
+      while (title < lineEnd && buf[title].isWhitespace()) title++
+      if (title > colon + 1) list.add(Piece(TokenType.WHITE_SPACE, colon + 1, title))
+      if (title < lineEnd) list.add(Piece(GherkinTokenTypes.TEXT, title, lineEnd))
+      pieces = list
+      track(type)
+    } else if (examples && !FENCE_LINE.matcher(text).matches()) {
+      pieces = cells(start, lineEnd)
+    }
+    pieceIndex = 0
+  }
+
+  /**
+   * A row of an Examples table that does not start with a pipe: its cells, and the pipes between
+   * them. Yadda splits a row on `┆` if there is one in it, and on `|` if not.
+   */
+  private fun cells(start: Int, lineEnd: Int): List<Piece> {
+    val separator = if ((start until lineEnd).any { buf[it] == '┆' }) '┆' else '|'
+    val list = mutableListOf<Piece>()
+    fun cell(from: Int, to: Int) {
+      var a = from
+      var b = to
+      while (a < b && buf[a].isWhitespace()) a++
+      while (b > a && buf[b - 1].isWhitespace()) b--
+      if (a == b) {
+        if (to > from) list.add(Piece(TokenType.WHITE_SPACE, from, to))
+        return
+      }
+      if (a > from) list.add(Piece(TokenType.WHITE_SPACE, from, a))
+      list.add(Piece(GherkinTokenTypes.TABLE_CELL, a, b))
+      if (to > b) list.add(Piece(TokenType.WHITE_SPACE, b, to))
+    }
+    var from = start
+    for (i in start until lineEnd) {
+      if (buf[i] != separator) continue
+      cell(from, i)
+      list.add(Piece(GherkinTokenTypes.PIPE, i, i + 1))
+      from = i + 1
+    }
+    cell(from, lineEnd)
+    return list
+  }
+
+  private fun keywordType(word: String): IElementType = when (word) {
+    "feature" -> GherkinTokenTypes.FEATURE_KEYWORD
+    "rule" -> GherkinTokenTypes.RULE_KEYWORD
+    "background" -> GherkinTokenTypes.BACKGROUND_KEYWORD
+    "scenario outline" -> GherkinTokenTypes.SCENARIO_OUTLINE_KEYWORD
+    "scenario" -> GherkinTokenTypes.SCENARIO_KEYWORD
+    else -> GherkinTokenTypes.EXAMPLES_KEYWORD
   }
 
   /** Reports the token of [stage] of the current block, or hands back to the delegate after its last. */
@@ -190,6 +334,8 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     return start > tableOpen && start <= tableClose
   }
 
+  private fun onlyBlankBefore(tokenStart: Int): Boolean = buf.subSequence(lineStart(tokenStart), tokenStart).isBlank()
+
   private fun startsFenceLine(tokenStart: Int): Boolean {
     val lineStart = lineStart(tokenStart)
     if (!buf.subSequence(lineStart, tokenStart).isBlank()) return false
@@ -238,9 +384,11 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
   }
 
   companion object {
-    // The state is the delegate's, below 8, with where in a block the token is above it.
+    // The state is the delegate's, below 8, with whether it is under `Examples:` above that, and above
+    // that where in a block the token is.
     private const val MODE_SHIFT = 24
-    private const val DELEGATE_MASK = (1 shl MODE_SHIFT) - 1
+    private const val EXAMPLES_BIT = 1 shl 23
+    private const val DELEGATE_MASK = EXAMPLES_BIT - 1
     private const val MODE_NORMAL = 0
     private const val MODE_TABLE = 5
 
@@ -255,5 +403,14 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     private val FENCE = Pattern.compile(FENCE_SOURCE)
     private val FENCE_LINES = Pattern.compile("^$FENCE_SOURCE$", Pattern.MULTILINE)
     private val FENCE_LINE = Pattern.compile("""[|┆]?-{3,}.*""")
+
+    // The keywords Yadda finds at the start of a line, whatever the case, with the colon directly after.
+    private val YADDA_KEYWORD = Pattern.compile("""^(feature|rule|scenario outline|scenario|background|examples|where)(?=:)""", Pattern.CASE_INSENSITIVE)
+
+    // What a tag line can be followed by that ends a table: Gherkin's headings as well as Yadda's.
+    private val HEADING_LINE = Pattern.compile(
+      """^(feature|rule|scenario outline|scenario template|scenarios?|background|examples?|where)\s*:""",
+      Pattern.CASE_INSENSITIVE,
+    )
   }
 }

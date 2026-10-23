@@ -59,6 +59,8 @@ class YaddaLexerTest : BasePlatformTestCase() {
           | x |
           | 1 |
           ---
+
+      Scenario: Tail
         When the last step has no closing fence
         ---
         plain text
@@ -128,5 +130,82 @@ class YaddaLexerTest : BasePlatformTestCase() {
   fun `test only the lexer's own tokens and Gherkin's appear`() {
     val known = tokens(everything).map { it.type }.toSet()
     assertTrue(known.toString(), TokenType.WHITE_SPACE.toString() in known)
+  }
+
+  /** Examples in every spelling, then a step, so the lexer has to leave them. */
+  private val examples = """
+    Feature: F
+      scenario: lower [a]
+        the first step
+        Where: the old name
+          a | bb
+          @skip
+          1 | one
+          ---
+          Then | and
+          ---
+
+      @slow
+      Scenario Outline: O [a]
+        Given x
+        Examples:
+          | a | b |
+          ┆
+          3 ┆ 4 | 5
+          6
+
+      Scenario: Last
+        the last step | with a pipe
+  """.trimIndent() + "\n"
+
+  private fun typesOf(source: String, vararg wanted: String): List<String> =
+    tokens(source).filter { it.type in wanted }.map { text(it, source) }
+
+  fun `test the rows of an Examples table are cells and pipes, whether or not they start with a pipe`() {
+    val cell = GherkinTokenTypes.TABLE_CELL.toString()
+    val pipe = GherkinTokenTypes.PIPE.toString()
+    assertEquals(
+      // A row with a ┆ in it is split on that alone, so "4 | 5" is one cell.
+      listOf("a", "bb", "1", "one", "Then", "and", "a", "b", "3", "4 | 5", "6"),
+      typesOf(examples, cell),
+    )
+    // The pipe in the last step is text, not a separator.
+    assertEquals(listOf("|", "|", "|", "|", "|", "|", "┆", "┆"), typesOf(examples, pipe))
+    assertEquals(listOf("the last step | with a pipe"), tokens(examples).filter { it.type == GherkinTokenTypes.TEXT.toString() }.map { text(it, examples) }.takeLast(1))
+  }
+
+  fun `test Yadda's keywords are keywords in any case, and Where is Examples`() {
+    val keywords = tokens(examples).filter { it.type.endsWith("_KEYWORD") }.map { it.type to text(it, examples) }
+    assertEquals(
+      listOf(
+        GherkinTokenTypes.FEATURE_KEYWORD.toString() to "Feature",
+        GherkinTokenTypes.SCENARIO_KEYWORD.toString() to "scenario",
+        GherkinTokenTypes.EXAMPLES_KEYWORD.toString() to "Where",
+        GherkinTokenTypes.SCENARIO_OUTLINE_KEYWORD.toString() to "Scenario Outline",
+        GherkinTokenTypes.STEP_KEYWORD.toString() to "Given",
+        GherkinTokenTypes.EXAMPLES_KEYWORD.toString() to "Examples",
+        GherkinTokenTypes.SCENARIO_KEYWORD.toString() to "Scenario",
+      ),
+      keywords,
+    )
+  }
+
+  fun `test the tokens of rows and keywords cover the text without gaps`() {
+    val all = tokens(examples)
+    assertEquals(0, all.first().start)
+    assertEquals(examples.length, all.last().end)
+    all.zipWithNext { a, b -> assertEquals("gap after '${text(a, examples)}'", a.end, b.start) }
+  }
+
+  fun `test lexing restarts at every token in the initial state, with Examples in the text`() {
+    assertRestartsAt(examples, tokens(examples)) { it.state == 0 }
+  }
+
+  fun `test a row is not in the initial state, so the editor never restarts in the middle of one`() {
+    val all = tokens(examples)
+    val rows = all.filter { it.type == GherkinTokenTypes.TABLE_CELL.toString() }
+    assertTrue(rows.isNotEmpty() && rows.none { it.state == 0 })
+    val last = all.first { it.start == examples.indexOf("the last step") }
+    assertEquals("the lexer is out of the table by the last scenario", 0, last.state and 0xFF000000.toInt())
   }
 }

@@ -105,3 +105,52 @@ class YaddaTypingTest : BasePlatformTestCase() {
     assertEquals("| a | b |\n| c |", myFixture.editor.document.text)
   }
 }
+
+/** Rows of an Examples table without pipes at the start. */
+class YaddaPipelessTypingTest : BasePlatformTestCase() {
+  private fun typed(text: String, chars: String = "|"): String {
+    myFixture.configureByText("a.yadda.feature", text.trimIndent())
+    myFixture.type(chars)
+    return myFixture.editor.document.text
+  }
+
+  private val rows = """
+    Feature: F
+      Scenario: S [qty]
+        Given x
+        Examples:
+          qty | total
+          1   | 80.00
+          2 <caret>
+  """
+
+  fun `test a pipe typed after a space lines up under the pipe above`() {
+    assertTrue(typed(rows).contains("  2   |"))
+  }
+
+  fun `test the same under Where, and for the cell after the pipe`() {
+    val text = rows.replace("Examples:", "Where:").replace("2 <caret>", "2   | 3<caret>")
+    assertTrue(typed(text).contains("2   | 3"))
+    val third = """
+      Feature: F
+        Scenario: S [a]
+          Given x
+          Where:
+            a | bbb | c
+            1 | 2   | 3
+            4 | 5 <caret>
+    """
+    assertTrue(typed(third).contains("4 | 5   |"))
+  }
+
+  fun `test a line of text that is not in a table is left alone`() {
+    val text = """
+      Feature: F
+        Scenario: S
+          the cart | one
+          the cart <caret>
+    """
+    assertTrue(typed(text).contains("the cart |"))
+    assertFalse(typed(text).contains("the cart  "))
+  }
+}

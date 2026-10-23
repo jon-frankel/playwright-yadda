@@ -12,13 +12,13 @@ import com.intellij.psi.tree.IFileElementType
 import com.intellij.psi.tree.TokenSet
 import org.jetbrains.plugins.cucumber.psi.GherkinParserDefinition
 
-/** Gherkin's parser, with [YaddaLexer] in front of it. The PSI is Gherkin's, so every Gherkin feature reads it. */
+/** [YaddaParser] over [YaddaLexer]. The PSI is Gherkin's, so every Gherkin feature reads it. */
 class YaddaParserDefinition : ParserDefinition {
   private val gherkin = GherkinParserDefinition()
 
   override fun createLexer(project: Project?): Lexer = YaddaLexer(gherkin.createLexer(project))
 
-  override fun createParser(project: Project?): PsiParser = gherkin.createParser(project)
+  override fun createParser(project: Project?): PsiParser = YaddaParser()
 
   override fun getFileNodeType(): IFileElementType = YADDA_FILE
 

@@ -88,6 +88,16 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
     assertEquals(emptyList<String>(), problems().filter { "Yadda" in it || "Unused" in it || "Examples" in it })
   }
 
+  fun `test Yadda's own style is clean, and Reformat Code leaves it exactly as it is`() {
+    open("yadda-style.feature")
+    assertEquals(emptyList<String>(), problems())
+    val before = myFixture.file.text
+    com.intellij.openapi.command.WriteCommandAction.runWriteCommandAction(project) {
+      com.intellij.psi.codeStyle.CodeStyleManager.getInstance(project).reformat(myFixture.file)
+    }
+    assertEquals(before, myFixture.file.text)
+  }
+
   fun `test Gherkin's table and outline checks stay quiet on the unused-column file`() {
     open("unused-column.feature")
     assertTrue(problems().none { "Unused table column" in it || "Scenario with Examples" in it })

@@ -9,6 +9,7 @@
     "ide/jetbrains/build",
     "ide/jetbrains/.gradle",
     "ide/jetbrains/.intellijPlatform",
-    "ide/jetbrains/.kotlin"
+    "ide/jetbrains/.kotlin",
+    "ide/jetbrains/src/test/resources/yadda/parser-cases.json"
   ]
 }

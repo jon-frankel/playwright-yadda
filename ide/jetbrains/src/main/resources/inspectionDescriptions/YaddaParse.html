@@ -1,0 +1,12 @@
+<html>
+  <body>
+    Reports what Yadda would throw about the feature file: a scenario without steps, an examples row
+    with a different number of fields than its heading, <code>@a @b</code> on one line, a second
+    <code>Feature:</code>, content indented less than its fence, and the other things its parser
+    refuses.
+    <p>
+      The check is a port of Yadda's own parser, so it flags the same line, with Yadda's message,
+      that playwright-yadda would fail on when it loads the file.
+    </p>
+  </body>
+</html>

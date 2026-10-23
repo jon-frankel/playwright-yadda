@@ -22,6 +22,10 @@
         parse cleanly instead of showing "Unexpected element", and tables align on reformat.
         A remark such as <code>--- json</code> injects that language into the block, and a
         <code>--- csv</code> block is checked for ragged rows.</li>
+      <li><b>What Yadda would make of the file:</b> Yadda's own parser errors, on the line they are
+        about, before the tests run; a warning for <code>Rule:</code>, whose scenarios playwright-yadda
+        doesn't run; unused <code>[column]</code>s of an examples table; and step definitions that
+        match the whole step, block included, with <code>[name]</code> filled in.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -47,9 +51,24 @@
     <enterHandlerDelegate implementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaEnterHandler" order="first"/>
     <lang.elementManipulator forClass="org.jetbrains.plugins.cucumber.psi.GherkinPystring"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaPystringManipulator" order="first"/>
+    <!-- Gherkin's pads a row so a typed pipe lines up, but only in files of its own type. -->
+    <typedHandler implementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaTypedHandler"/>
     <localInspection language="Gherkin" shortName="YaddaCsvBlock" groupName="Playwright Yadda"
         displayName="Ragged CSV block" enabledByDefault="true" level="WARNING"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaCsvBlockInspection"/>
+    <localInspection language="Gherkin" shortName="YaddaParse" groupName="Playwright Yadda"
+        displayName="Feature Yadda can't parse" enabledByDefault="true" level="ERROR"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaParseInspection"/>
+    <localInspection language="Gherkin" shortName="YaddaRule" groupName="Playwright Yadda"
+        displayName="Rule whose scenarios are not run" enabledByDefault="true" level="WARNING"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaRuleInspection"/>
+    <localInspection language="Gherkin" shortName="YaddaUnusedColumn" groupName="Playwright Yadda"
+        displayName="Unused examples column" enabledByDefault="true" level="WARNING"
+        editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaUnusedColumnInspection"/>
+    <!-- Gherkin's unused-column, scenario-with-examples and outline-without-examples checks don't apply to Yadda. -->
+    <lang.inspectionSuppressor language="Gherkin"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaInspectionSuppressor"/>
     <!-- Makes a step-definition call a declaration, so Cmd+B on it shows its usages. -->
     <pom.declarationSearcher
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepPomDeclarationSearcher"/>
@@ -75,5 +94,9 @@
         implementation="io.github.jonfrankel.playwrightyadda.run.YaddaFeatureRunConfigurationProducer"/>
     <elementDescriptionProvider
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepDescriptionProvider"/>
+  </extensions>
+  <extensions defaultExtensionNs="org.jetbrains.plugins.cucumber.steps">
+    <!-- What Yadda matches a step against: the whole step, fenced block included, with [name] filled in. -->
+    <cucumberJvmExtensionPoint implementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaCucumberExtension"/>
   </extensions>
 </idea-plugin>

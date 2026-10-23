@@ -2,9 +2,13 @@ package io.github.jonfrankel.playwrightyadda.yadda
 
 import com.intellij.extapi.psi.PsiFileBase
 import com.intellij.openapi.fileTypes.FileType
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.text.StringUtil
 import com.intellij.psi.FileViewProvider
 import com.intellij.psi.PsiElement
 import com.intellij.psi.TokenType
+import com.intellij.psi.util.CachedValueProvider
+import com.intellij.psi.util.CachedValuesManager
 import org.jetbrains.plugins.cucumber.psi.GherkinFeature
 import org.jetbrains.plugins.cucumber.psi.GherkinFile
 import org.jetbrains.plugins.cucumber.psi.GherkinLexer
@@ -21,6 +25,19 @@ class YaddaFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, Yadd
   override fun getFileType(): FileType = viewProvider.fileType
 
   override fun toString(): String = "YaddaFile:$name"
+
+  /** What Yadda's own parser makes of the file, kept until the file changes. */
+  val grammar: YaddaGrammar.Result
+    get() = CachedValuesManager.getCachedValue(this) { CachedValueProvider.Result.create(YaddaGrammar.analyze(text), this) }
+
+  /** The text of the 1-based [line], without its indentation and trailing space. */
+  fun lineRange(line: Int): TextRange {
+    val start = StringUtil.lineColToOffset(text, line - 1, 0).coerceAtLeast(0)
+    val end = text.indexOf('\n', start).let { if (it < 0) textLength else it }
+    val trimmed = text.substring(start, end)
+    val lead = trimmed.length - trimmed.trimStart().length
+    return TextRange(start + lead, start + trimmed.trimEnd().length.coerceAtLeast(lead))
+  }
 
   override fun getStepKeywords(): List<String> {
     val provider = JsonGherkinKeywordProvider.getKeywordProvider(this)

@@ -1,0 +1,744 @@
+[
+  {
+    "name": "a feature",
+    "input": "Feature: F\n  Scenario: S\n    Given a\n    Then b\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a",
+        "Then b"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "no feature heading",
+    "input": "Scenario: S\n  Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "text before the feature",
+    "input": "some preamble\nFeature: F\n  Scenario: S\n    Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "empty scenario in the middle",
+    "input": "Feature: F\n  Scenario: A\n  Scenario: B\n    Given x\n",
+    "ok": false,
+    "line": 3,
+    "message": "Scenario requires one or more steps"
+  },
+  {
+    "name": "empty scenario at the end",
+    "input": "Feature: F\n  Scenario: A\n    Given x\n  Scenario: B\n",
+    "ok": false,
+    "message": "Scenario requires one or more steps"
+  },
+  {
+    "name": "feature without scenarios",
+    "input": "Feature: F\n  some description\n",
+    "ok": false,
+    "message": "Feature requires one or more scenarios"
+  },
+  {
+    "name": "empty file",
+    "input": "",
+    "ok": false,
+    "message": "A feature must contain one or more scenarios"
+  },
+  {
+    "name": "comments only",
+    "input": "# nothing here\n",
+    "ok": false,
+    "message": "A feature must contain one or more scenarios"
+  },
+  {
+    "name": "two features",
+    "input": "Feature: A\n  Scenario: S\n    Given x\nFeature: B\n  Scenario: T\n    Given y\n",
+    "ok": false,
+    "line": 4,
+    "message": "Feature is unexpected at this time"
+  },
+  {
+    "name": "background",
+    "input": "Feature: F\n  Background:\n    Given a\n  Scenario: S\n    Given b\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a",
+        "Given b"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "empty background",
+    "input": "Feature: F\n  Background:\n  Scenario: S\n    Given b\n",
+    "ok": false,
+    "line": 3,
+    "message": "Background requires one or more steps"
+  },
+  {
+    "name": "background after a scenario",
+    "input": "Feature: F\n  Scenario: S\n    Given a\n  Background:\n    Given b\n  Scenario: T\n    Given c\n",
+    "ok": false,
+    "line": 4,
+    "message": "Background is unexpected at this time"
+  },
+  {
+    "name": "background after a tag",
+    "input": "Feature: F\n  @t\n  Background:\n    Given b\n  Scenario: S\n    Given c\n",
+    "ok": false,
+    "line": 3,
+    "message": "Background is unexpected at this time"
+  },
+  {
+    "name": "description then tag then text",
+    "input": "Feature: F\n  about it\n  @t\n  more about it\n  Scenario: S\n    Given a\n",
+    "ok": false,
+    "line": 4,
+    "message": "Text is unexpected at this time"
+  },
+  {
+    "name": "a rule",
+    "input": "Feature: F\n  Rule: R\n    Scenario: S\n      Given a\n",
+    "ok": true,
+    "steps": [],
+    "titles": [],
+    "rules": 1
+  },
+  {
+    "name": "a rule and a scenario",
+    "input": "Feature: F\n  Scenario: A\n    Given a\n  Rule: R\n    Scenario: S\n      Given b\n  Scenario: B\n    Given c\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "A"
+    ],
+    "rules": 1
+  },
+  {
+    "name": "an empty rule",
+    "input": "Feature: F\n  Rule: R\n  Scenario: S\n    Given a\n",
+    "ok": true,
+    "steps": [],
+    "titles": [],
+    "rules": 1
+  },
+  {
+    "name": "two rules",
+    "input": "Feature: F\n  Rule: R\n    Scenario: S\n      Given a\n  Rule: Q\n    Scenario: T\n      Given b\n",
+    "ok": true,
+    "steps": [],
+    "titles": [],
+    "rules": 2
+  },
+  {
+    "name": "a rule with a background",
+    "input": "Feature: F\n  Rule: R\n    Background:\n      Given z\n    Scenario: S\n      Given a\n",
+    "ok": true,
+    "steps": [],
+    "titles": [],
+    "rules": 1
+  },
+  {
+    "name": "rule only",
+    "input": "Rule: R\n  Scenario: S\n    Given a\n",
+    "ok": true,
+    "steps": [],
+    "titles": [],
+    "rules": 1
+  },
+  {
+    "name": "two tags on one line",
+    "input": "@a @b\nFeature: F\n  Scenario: S\n    Given a\n",
+    "ok": false,
+    "line": 1,
+    "message": "Invalid annotation: a @b"
+  },
+  {
+    "name": "name-value tags",
+    "input": "@Libraries=x, y\n@only\nFeature: F\n  @pending\n  Scenario: S\n    Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "tag with spaces in the name",
+    "input": "Feature: F\n  @my tag=1\n  Scenario: S\n    Given a\n",
+    "ok": false,
+    "line": 2,
+    "message": "Invalid annotation: my tag"
+  },
+  {
+    "name": "tag in a scenario starts the next",
+    "input": "Feature: F\n  Scenario: S\n    Given a\n  @t\n  Scenario: T\n    Given b\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ],
+      [
+        "Given b"
+      ]
+    ],
+    "titles": [
+      "S",
+      "T"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "tag then text then scenario",
+    "input": "Feature: F\n  Scenario: S\n    Given a\n  @t\n  oops\n  Scenario: T\n    Given b\n",
+    "ok": false,
+    "line": 5,
+    "message": "Text is unexpected at this time"
+  },
+  {
+    "name": "outline with pipeless examples",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n] things\n  Examples:\n    n | m\n    1 | 2\n    3 | 4\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1 things"
+      ],
+      [
+        "Given 3 things"
+      ]
+    ],
+    "titles": [
+      "S 1",
+      "S 3"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "outline with outer pipes",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n] things\n  Examples:\n    | n | m |\n    | 1 | 2 |\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1 things"
+      ]
+    ],
+    "titles": [
+      "S 1"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "where and scenario outline",
+    "input": "Feature: F\n  Scenario Outline: S [n]\n    Given [n]\n  Where:\n    n\n    1\n    2\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1"
+      ],
+      [
+        "Given 2"
+      ]
+    ],
+    "titles": [
+      "S 1",
+      "S 2"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "wrong number of fields",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n    n | m\n    1\n",
+    "ok": false,
+    "line": 6,
+    "message": "Incorrect number of fields in example table. Expected 2 but found 1"
+  },
+  {
+    "name": "examples without rows",
+    "input": "Feature: F\n  Scenario: S\n    Given a\n  Examples:\n    n | m\n",
+    "ok": false,
+    "message": "Examples table requires one or more rows"
+  },
+  {
+    "name": "examples without anything",
+    "input": "Feature: F\n  Scenario: S\n    Given a\n  Examples:\n",
+    "ok": false,
+    "message": "Examples table requires one or more headings"
+  },
+  {
+    "name": "examples then a scenario",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n    n\n    1\n  Scenario: T\n    Given b\n",
+    "ok": false,
+    "line": 7,
+    "message": "Scenario is unexpected at this time"
+  },
+  {
+    "name": "blank line ends the examples",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n    n\n    1\n\n    2\n",
+    "ok": false,
+    "line": 8,
+    "message": "Text is unexpected at this time"
+  },
+  {
+    "name": "examples with a leading dash line",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n  ---\n    n\n    1\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1"
+      ]
+    ],
+    "titles": [
+      "S 1"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "multi-line example rows",
+    "input": "Feature: F\n  Scenario: S [a]\n    Given [a]\n  Examples:\n    a | b\n    ---\n    1 | 2\n    3 | 4\n    ---\n    5 | 6\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1\n3"
+      ],
+      [
+        "Given 5"
+      ]
+    ],
+    "titles": [
+      "S 1\n3",
+      "S 5"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "example row annotation",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n    n\n    @pending\n    1\n    2\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1"
+      ],
+      [
+        "Given 2"
+      ]
+    ],
+    "titles": [
+      "S 1",
+      "S 2"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "unicode separators",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n    n ┆ m\n    1 ┆ 2\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 1"
+      ]
+    ],
+    "titles": [
+      "S 1"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "example indentation",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n      n | m\n    1 | 2\n",
+    "ok": false,
+    "line": 6,
+    "message": "Indentation error"
+  },
+  {
+    "name": "meta placeholders",
+    "input": "Feature: F\n  Scenario: S [n.index]\n    Given [n.start.line] [n]\n  Examples:\n    n\n    a\n    b\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given 6 a"
+      ],
+      [
+        "Given 7 b"
+      ]
+    ],
+    "titles": [
+      "S 1",
+      "S 2"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a fenced step",
+    "input": "Feature: F\n  Scenario: S\n    Given rows:\n    ---\n    | a | b |\n    | 1 | 2 |\n    ---\n    Then done\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given rows:\n| a | b |\n| 1 | 2 |",
+        "Then done"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a fenced step with a remark",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    --- json\n    {\"a\": 1}\n    ---\n    Then done\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\n{\"a\": 1}",
+        "Then done"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "an unclosed fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    hello\n    world\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nhello\nworld"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a fence with a blank line inside",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    hello\n\n    world\n    ---\n    Then done\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nhello\n\nworld",
+        "Then done"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a fence with a trailing blank line",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    hello\n\n    ---\n    Then done\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nhello\n",
+        "Then done"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "content indented less than its fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n      ---\n    hello\n      ---\n",
+    "ok": false,
+    "line": 5,
+    "message": "Indentation error"
+  },
+  {
+    "name": "a keyword inside a fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    hello\n    Scenario: T\n    Given b\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nhello"
+      ],
+      [
+        "Given b"
+      ]
+    ],
+    "titles": [
+      "S",
+      "T"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a tag inside a fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    @oops\n    ---\n",
+    "ok": false,
+    "line": 5,
+    "message": "Annotation is unexpected at this time"
+  },
+  {
+    "name": "a comment inside a fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    # kept? no\n    text\n    ---\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\ntext"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "block comment inside a fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    ###\n    text\n    ###\n    more\n    ---\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nmore"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a keyword straight after the opening fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    Scenario: T\n    Given b\n",
+    "ok": false,
+    "line": 5,
+    "message": "Scenario is unexpected at this time"
+  },
+  {
+    "name": "two fences in a row",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    x\n    ---\n    ---\n    y\n    ---\n",
+    "ok": false,
+    "line": 7,
+    "message": "Dash is unexpected at this time"
+  },
+  {
+    "name": "an empty fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    ---\n    Then done\n",
+    "ok": false,
+    "line": 5,
+    "message": "Dash is unexpected at this time"
+  },
+  {
+    "name": "a blank line before the fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n\n    ---\n    x\n    ---\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nx"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a pipe fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    |---\n    | a |\n    |---\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\n| a |"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "a fence at feature level",
+    "input": "Feature: F\n  ---\n  x\n  ---\n  Scenario: S\n    Given a\n",
+    "ok": false,
+    "line": 2,
+    "message": "Dash is unexpected at this time"
+  },
+  {
+    "name": "a fence before the feature",
+    "input": "---\nFeature: F\n  Scenario: S\n    Given a\n",
+    "ok": false,
+    "line": 1,
+    "message": "Dash is unexpected at this time"
+  },
+  {
+    "name": "a fence in a background",
+    "input": "Feature: F\n  Background:\n    Given a doc:\n    ---\n    x\n    ---\n  Scenario: S\n    Given b\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a doc:\nx",
+        "Given b"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "examples inside a fence",
+    "input": "Feature: F\n  Scenario: S\n    Given a doc:\n    ---\n    Examples:\n    ---\n",
+    "ok": false,
+    "line": 5,
+    "message": "Examples is unexpected at this time"
+  },
+  {
+    "name": "examples at feature level",
+    "input": "Feature: F\n  Examples:\n  Scenario: S\n    Given a\n",
+    "ok": false,
+    "line": 2,
+    "message": "Examples is unexpected at this time"
+  },
+  {
+    "name": "block comments",
+    "input": "Feature: F\n###\nScenario: ignored\n###\n  Scenario: S\n    Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "line comments",
+    "input": "# top\nFeature: F\n  # c\n  Scenario: S\n    # c\n    Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "keywords are case-insensitive",
+    "input": "FEATURE: F\n  SCENARIO: S\n    Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "keyword without a colon is a step",
+    "input": "Feature: F\n  Scenario: S\n    Examples\n",
+    "ok": true,
+    "steps": [
+      [
+        "Examples"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "feature title is optional",
+    "input": "Feature:\n  Scenario:\n    Given a\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      ""
+    ],
+    "rules": 0
+  },
+  {
+    "name": "windows line endings",
+    "input": "Feature: F\r\n  Scenario: S\r\n    Given a\r\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "background in a rule after a scenario",
+    "input": "Feature: F\n  Rule: R\n    Scenario: S\n      Given a\n    Background:\n      Given b\n    Scenario: T\n      Given c\n",
+    "ok": false,
+    "line": 5,
+    "message": "Background is unexpected at this time"
+  },
+  {
+    "name": "blank lines everywhere",
+    "input": "\n\nFeature: F\n\n  Scenario: S\n\n    Given a\n\n    Then b\n\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given a",
+        "Then b"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "name": "second examples replaces the first",
+    "input": "Feature: F\n  Scenario: S [n]\n    Given [n]\n  Examples:\n    n\n    1\n  Examples:\n    n\n    2\n",
+    "ok": false,
+    "line": 7,
+    "message": "Examples is unexpected at this time"
+  }
+]

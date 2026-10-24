@@ -21,7 +21,8 @@ class YaddaStepReferencesSearch :
 
     val enabledOnly =
       Processor<PsiReference> { reference ->
-        !LibraryScope.isEnabledFor(literal, reference.element) || consumer.process(reference)
+        !LibraryScope.isEnabledFor(literal, reference.element, reference.element.textRange.startOffset + reference.rangeInElement.startOffset) ||
+          consumer.process(reference)
       }
 
     CucumberUtil.findGherkinReferencesToElement(

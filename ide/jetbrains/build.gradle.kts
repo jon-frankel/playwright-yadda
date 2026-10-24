@@ -29,6 +29,9 @@ dependencies {
     // The Playwright run configuration: a module of the JavaScript plugin, not public API.
     bundledModules("intellij.aqua.runners.playwright.js", "intellij.aqua.runners.js.core", "org.intellij.intelliLang")
 
+    // The plugin names no Markdown class and works with the Markdown plugin off; the tests need it on.
+    testBundledPlugin("org.intellij.plugins.markdown")
+
     testFramework(TestFrameworkType.Platform)
   }
 

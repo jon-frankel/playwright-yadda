@@ -25,6 +25,10 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
       CucumberStepInspection::class.java,
       CucumberTableInspection::class.java,
       GherkinScenarioToScenarioOutlineInspection::class.java,
+      YaddaMarkdownParseInspection::class.java,
+      YaddaMarkdownRuleInspection::class.java,
+      YaddaMarkdownUnusedColumnInspection::class.java,
+      YaddaMarkdownUndefinedStepInspection::class.java,
     )
     myFixture.configureByText(name, File(example, "ide-playground/$name").readText())
   }
@@ -101,5 +105,42 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
   fun `test Gherkin's table and outline checks stay quiet on the unused-column file`() {
     open("unused-column.feature")
     assertTrue(problems().none { "Unused table column" in it || "Scenario with Examples" in it })
+  }
+
+  fun `test the Markdown style file is clean`() {
+    open("markdown-style.md")
+    assertEquals(emptyList<String>(), problems())
+  }
+
+  fun `test the Markdown warnings file has its three warnings and nothing else`() {
+    open("markdown-warnings.md")
+    assertEquals(
+      listOf(
+        "Nothing in the scenario uses this column :: price",
+        "Undefined step :: Then the moon is full",
+        "playwright-yadda doesn't run the scenarios under a Rule :: ## Rule: Discounts",
+      ),
+      problems(),
+    )
+  }
+
+  fun `test the Markdown error file has Yadda's error on the short row`() {
+    open("markdown-error.md")
+    assertEquals(
+      listOf("Yadda can't parse this: Incorrect number of fields in example table. Expected 1 but found 2 :: | 1 | 2 |"),
+      problems(),
+    )
+  }
+
+  fun `test the playground README is no feature`() {
+    open("markdown-style.md")
+    val readme = myFixture.addFileToProject("README.md", File(example, "ide-playground/README.md").readText())
+    assertFalse(YaddaMarkdown.isFeature(readme))
+  }
+
+  fun `test the Markdown feature that runs is clean with the example's own definitions`() {
+    open("markdown-style.md")
+    myFixture.configureByText("checkout.md", File(example, "features/checkout.md").readText())
+    assertEquals(emptyList<String>(), problems())
   }
 }

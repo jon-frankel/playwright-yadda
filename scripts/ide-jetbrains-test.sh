@@ -47,4 +47,5 @@ if [ -n "$webstorm" ]; then
   args+=("-PlocalIdePath=$webstorm")
 fi
 
-exec ./gradlew "${args[@]}"
+# Extra arguments pass through to Gradle, e.g. --tests "*YaddaGrammarTest".
+exec ./gradlew "${args[@]}" "$@"

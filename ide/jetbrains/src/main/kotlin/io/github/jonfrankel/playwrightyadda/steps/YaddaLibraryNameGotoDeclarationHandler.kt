@@ -5,6 +5,7 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryNames
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
 import org.jetbrains.plugins.cucumber.psi.GherkinFile
 
 /**
@@ -23,8 +24,10 @@ class YaddaLibraryNameGotoDeclarationHandler : GotoDeclarationHandler {
     offset: Int,
     editor: Editor?,
   ): Array<PsiElement>? {
-    val file = sourceElement?.containingFile as? GherkinFile ?: return null
-    val name = LibraryNames.nameAt(file.text, offset) ?: return null
+    val file = sourceElement?.containingFile ?: return null
+    val markdown = YaddaMarkdown.isFeature(file)
+    if (!markdown && file !is GherkinFile) return null
+    val name = LibraryNames.nameAt(file.text, offset, markdown) ?: return null
 
     val definitions = LibraryRegistries.definitionsOf(file.project, name)
     return definitions.takeIf { it.isNotEmpty() }?.toTypedArray()

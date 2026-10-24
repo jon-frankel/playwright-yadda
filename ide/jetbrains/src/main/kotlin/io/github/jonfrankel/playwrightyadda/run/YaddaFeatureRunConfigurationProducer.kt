@@ -12,7 +12,9 @@ import com.intellij.openapi.util.Ref
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.util.execution.ParametersListUtil
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
 import org.jetbrains.plugins.cucumber.psi.GherkinFeature
 import org.jetbrains.plugins.cucumber.psi.GherkinScenarioOutline
 import org.jetbrains.plugins.cucumber.psi.GherkinStepsHolder
@@ -61,11 +63,12 @@ class YaddaFeatureRunConfigurationProducer : LazyRunConfigurationProducer<Playwr
   }
 
   /** The Feature or Scenario [element] is in, with the `--grep` that selects it. */
-  private class Target(val name: String, val grep: String, val file: com.intellij.psi.PsiFile)
+  private class Target(val name: String, val grep: String, val file: PsiFile)
 
   private fun targetOf(element: PsiElement?): Target? {
     element ?: return null
     val file = element.containingFile ?: return null
+    if (YaddaMarkdown.isFeature(file)) return markdownTargetOf(element, file)
     if (file.virtualFile?.extension != "feature") return null
 
     val feature = PsiTreeUtil.getParentOfType(element, GherkinFeature::class.java, false) ?: return null
@@ -82,6 +85,10 @@ class YaddaFeatureRunConfigurationProducer : LazyRunConfigurationProducer<Playwr
       else -> null
     }
   }
+
+  /** The same for a Markdown feature: the nearest heading above [element] says what it is in. */
+  private fun markdownTargetOf(element: PsiElement, file: PsiFile): Target? =
+    YaddaMarkdownRuns.targetAt(file, element.textRange.startOffset)?.let { Target(it.name, it.grep, file) }
 
   /** The spec file's settings, narrowed with a `--grep`. Null when there is no spec to run. */
   private fun settingsFor(configuration: PlaywrightRunConfiguration, target: Target): Pair<PlaywrightRunSettings, PsiElement>? {

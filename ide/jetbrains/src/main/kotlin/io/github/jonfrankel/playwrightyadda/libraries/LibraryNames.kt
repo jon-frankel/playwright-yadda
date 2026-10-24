@@ -1,6 +1,7 @@
 package io.github.jonfrankel.playwrightyadda.libraries
 
 import com.intellij.openapi.util.TextRange
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaGrammar
 
 /**
  * The library names written in `@Libraries=a, b` lines of a feature file, with where they are.
@@ -13,12 +14,14 @@ object LibraryNames {
 
   private val LIBRARIES_LINE = Regex("""^\s*@([^=]*)=(.*)$""")
 
-  fun parse(text: CharSequence): List<Occurrence> {
+  /** Every name in [text]; [annotationLines] limits it to those 1-based lines, for a format where not every line that looks like an annotation is one. */
+  fun parse(text: CharSequence, annotationLines: Set<Int>? = null): List<Occurrence> {
     val result = mutableListOf<Occurrence>()
     var lineStart = 0
-    for (rawLine in text.split('\n')) {
+    for ((index, rawLine) in text.split('\n').withIndex()) {
       val line = rawLine.trimEnd('\r')
-      LIBRARIES_LINE.find(line)?.takeIf { it.groupValues[1].trim().equals(FeatureTags.DEFAULT_ANNOTATION_KEY, true) }?.let { match ->
+      val isAnnotation = annotationLines == null || index + 1 in annotationLines
+      LIBRARIES_LINE.find(line)?.takeIf { isAnnotation && it.groupValues[1].trim().equals(FeatureTags.DEFAULT_ANNOTATION_KEY, true) }?.let { match ->
         var entryStart = lineStart + match.groups[2]!!.range.first
         for (entry in match.groupValues[2].split(',')) {
           val name = entry.trim()
@@ -38,7 +41,16 @@ object LibraryNames {
     return result
   }
 
+  /** The names in a Markdown feature, where a fence or a comment can hold a line that looks like `@Libraries=…`. */
+  fun parseMarkdown(text: CharSequence): List<Occurrence> =
+    parse(
+      text,
+      YaddaGrammar.analyzeMarkdown(text.toString()).markers
+        .filter { it.kind == YaddaGrammar.MarkerKind.ANNOTATION }
+        .mapTo(HashSet()) { it.line },
+    )
+
   /** The name under [offset]: the caret anywhere in its entry, including at its edges, counts. */
-  fun nameAt(text: CharSequence, offset: Int): String? =
-    parse(text).firstOrNull { offset in it.entryRange.startOffset..it.entryRange.endOffset }?.name
+  fun nameAt(text: CharSequence, offset: Int, markdown: Boolean = false): String? =
+    (if (markdown) parseMarkdown(text) else parse(text)).firstOrNull { offset in it.entryRange.startOffset..it.entryRange.endOffset }?.name
 }

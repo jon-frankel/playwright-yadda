@@ -6,11 +6,13 @@ import com.intellij.lang.javascript.psi.JSLiteralExpression
 import com.intellij.lang.javascript.psi.JSReferenceExpression
 import com.intellij.openapi.project.DumbService
 import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
 import io.github.jonfrankel.playwrightyadda.libraries.FeatureTags
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
 import io.github.jonfrankel.playwrightyadda.libraries.enabledLibraries
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
 import org.jetbrains.plugins.cucumber.psi.GherkinStep
 import org.jetbrains.plugins.cucumber.steps.reference.CucumberStepReference
 
@@ -22,8 +24,11 @@ import org.jetbrains.plugins.cucumber.steps.reference.CucumberStepReference
  * literals. Anything else counts as enabled, so the IDE never shows less than it did before.
  */
 object LibraryScope {
-  /** False only if [definition] is certainly in a library that the scenario of [step] does not enable. */
-  fun isEnabledFor(definition: JSLiteralExpression, step: PsiElement): Boolean {
+  /**
+   * False only if [definition] is certainly in a library that the scenario of [step] does not enable.
+   * [offset] is where the step is in its file; for an element that is the whole file, it says which step.
+   */
+  fun isEnabledFor(definition: JSLiteralExpression, step: PsiElement, offset: Int = step.textRange.startOffset): Boolean {
     if (DumbService.isDumb(definition.project)) return true
 
     val library = libraryOf(definition) ?: return true
@@ -32,7 +37,7 @@ object LibraryScope {
 
     val file = step.containingFile ?: return true
     val tags = featureTags(file)
-    val libraries = tags.librariesAt(tags.lineOf(step.textRange.startOffset)) ?: return true
+    val libraries = tags.librariesAt(tags.lineOf(offset)) ?: return true
 
     for (registry in registries) {
       val defaults = registry.defaultLibraries ?: return true
@@ -52,8 +57,10 @@ object LibraryScope {
   fun narrowedDefinitions(step: GherkinStep): List<PsiElement>? = narrowed(step, definitionsOf(step))
 
   /** What [step] can go to: [narrowedDefinitions], or every definition the IDE found if nothing is ruled out. */
-  fun candidateDefinitions(step: GherkinStep): Candidates {
-    val definitions = definitionsOf(step)
+  fun candidateDefinitions(step: GherkinStep): Candidates = candidates(definitionsOf(step), step)
+
+  /** The same for [definitions] already found for the step at [step], whatever the file it is in. */
+  fun candidates(definitions: List<PsiElement>, step: PsiElement): Candidates {
     val narrowed = narrowed(step, definitions)
     return Candidates(narrowed ?: definitions, narrowed != null)
   }
@@ -68,7 +75,7 @@ object LibraryScope {
       ?.mapNotNull { it.element }
       .orEmpty()
 
-  private fun narrowed(step: GherkinStep, definitions: List<PsiElement>): List<PsiElement>? {
+  private fun narrowed(step: PsiElement, definitions: List<PsiElement>): List<PsiElement>? {
     if (definitions.size < 2) return null
     val enabled = definitions.filter { it !is JSLiteralExpression || isEnabledFor(it, step) }
     return enabled.takeIf { it.isNotEmpty() && it.size < definitions.size }
@@ -81,8 +88,9 @@ object LibraryScope {
     return receiver?.resolve()
   }
 
-  private fun featureTags(file: PsiElement): FeatureTags =
+  private fun featureTags(file: PsiFile): FeatureTags =
     CachedValuesManager.getCachedValue(file) {
-      CachedValueProvider.Result.create(FeatureTags.parse(file.text), file)
+      val tags = if (YaddaMarkdown.isFeature(file)) FeatureTags.parseMarkdown(file.text) else FeatureTags.parse(file.text)
+      CachedValueProvider.Result.create(tags, file)
     }
 }

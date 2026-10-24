@@ -13,6 +13,7 @@ import com.intellij.util.Processor
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryNames
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaFileType
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
 import org.jetbrains.plugins.cucumber.psi.GherkinFileType
 
 /**
@@ -32,7 +33,8 @@ class YaddaLibraryNameReferencesSearch :
     val key = property.name?.trim()?.lowercase() ?: return
 
     for (file in featureFiles(queryParameters)) {
-      for (occurrence in LibraryNames.parse(file.text)) {
+      val names = if (YaddaMarkdown.isFeature(file)) LibraryNames.parseMarkdown(file.text) else LibraryNames.parse(file.text)
+      for (occurrence in names) {
         if (occurrence.name != key) continue
         if (!consumer.process(YaddaLibraryNameReference(file, occurrence.nameRange, property, key))) return
       }
@@ -42,12 +44,13 @@ class YaddaLibraryNameReferencesSearch :
   private fun featureFiles(parameters: ReferencesSearch.SearchParameters): List<PsiFile> {
     val project = parameters.project
     val manager = PsiManager.getInstance(project)
-    return when (val scope = parameters.effectiveSearchScope) {
+    val features = when (val scope = parameters.effectiveSearchScope) {
       is GlobalSearchScope ->
         FEATURE_FILE_TYPES.flatMap { FileTypeIndex.getFiles(it, scope) }.mapNotNull { manager.findFile(it) }
       is LocalSearchScope -> scope.scope.mapNotNull { it.containingFile }.distinct().filter { it.fileType in FEATURE_FILE_TYPES }
       else -> emptyList()
     }
+    return features + YaddaMarkdown.featureFiles(project, parameters.effectiveSearchScope)
   }
 
   private companion object {

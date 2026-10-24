@@ -1,5 +1,7 @@
 package io.github.jonfrankel.playwrightyadda.libraries
 
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaGrammar
+
 /**
  * The `@Libraries=…` annotations of a feature file, read the way Yadda reads them.
  *
@@ -46,8 +48,46 @@ class FeatureTags private constructor(
     private val SCENARIO = Regex("""^\s*(?:scenario|scenario outline):""", FLAGS)
     private val EXAMPLES = Regex("""^\s*(?:examples|where):""", FLAGS)
 
+    /** One line that starts a construct or is an annotation, 0-based. */
+    private class Item(val line: Int, val kind: YaddaGrammar.MarkerKind, val key: String = "", val value: String? = null)
+
     fun parse(text: CharSequence): FeatureTags {
       val lines = text.split('\n')
+      val items = mutableListOf<Item>()
+      lines.forEachIndexed { index, line ->
+        val annotation = parseAnnotation(line)
+        val kind = when {
+          annotation != null -> YaddaGrammar.MarkerKind.ANNOTATION
+          FEATURE.containsMatchIn(line) -> YaddaGrammar.MarkerKind.FEATURE
+          RULE.containsMatchIn(line) -> YaddaGrammar.MarkerKind.RULE
+          BACKGROUND.containsMatchIn(line) -> YaddaGrammar.MarkerKind.BACKGROUND
+          EXAMPLES.containsMatchIn(line) -> YaddaGrammar.MarkerKind.EXAMPLES
+          SCENARIO.containsMatchIn(line) -> YaddaGrammar.MarkerKind.SCENARIO
+          else -> return@forEachIndexed
+        }
+        items += Item(index, kind, annotation?.first.orEmpty(), annotation?.second)
+      }
+      return assemble(lines, items)
+    }
+
+    /**
+     * The same for a Markdown feature, where a keyword is a heading and a fence, a comment or a table hides
+     * what looks like one, so what is a heading is Yadda's own reading of it.
+     */
+    fun parseMarkdown(text: CharSequence): FeatureTags {
+      val items = YaddaGrammar.analyzeMarkdown(text.toString()).markers.mapNotNull { marker ->
+        if (marker.kind == YaddaGrammar.MarkerKind.ANNOTATION) {
+          // As in parseAnnotation: a key with a space in it is not an annotation Yadda would accept.
+          if (marker.key.isEmpty() || marker.key.any(Char::isWhitespace)) return@mapNotNull null
+          Item(marker.line - 1, marker.kind, marker.key.lowercase(), marker.value)
+        } else {
+          Item(marker.line - 1, marker.kind)
+        }
+      }
+      return assemble(text.split('\n'), items)
+    }
+
+    private fun assemble(lines: List<String>, items: List<Item>): FeatureTags {
       val lineStarts = IntArray(lines.size)
       var start = 0
       lines.forEachIndexed { index, line ->
@@ -60,27 +100,24 @@ class FeatureTags private constructor(
       var inRule = false
       val headers = mutableListOf<Header>()
 
-      lines.forEachIndexed { index, line ->
-        val annotation = parseAnnotation(line)
-        if (annotation != null) {
-          // The last occurrence of a key wins, as in Yadda's Annotations.stash().
-          pending[annotation.first] = annotation.second
-          return@forEachIndexed
-        }
-        when {
-          FEATURE.containsMatchIn(line) -> {
+      for (item in items) {
+        when (item.kind) {
+          YaddaGrammar.MarkerKind.ANNOTATION -> {
+            // The last occurrence of a key wins, as in Yadda's Annotations.stash().
+            pending[item.key] = item.value
+            continue
+          }
+          YaddaGrammar.MarkerKind.FEATURE -> {
             featureTags = pending
-            headers += Header(index, null)
+            headers += Header(item.line, null)
           }
           // Everything under a Rule is skipped by playwright-yadda, so it never has a known scenario.
-          RULE.containsMatchIn(line) -> {
+          YaddaGrammar.MarkerKind.RULE -> {
             inRule = true
-            headers += Header(index, null)
+            headers += Header(item.line, null)
           }
-          BACKGROUND.containsMatchIn(line) || EXAMPLES.containsMatchIn(line) ->
-            headers += Header(index, null)
-          SCENARIO.containsMatchIn(line) -> headers += Header(index, if (inRule) null else pending)
-          else -> return@forEachIndexed
+          YaddaGrammar.MarkerKind.BACKGROUND, YaddaGrammar.MarkerKind.EXAMPLES -> headers += Header(item.line, null)
+          YaddaGrammar.MarkerKind.SCENARIO -> headers += Header(item.line, if (inRule) null else pending)
         }
         pending = LinkedHashMap()
       }

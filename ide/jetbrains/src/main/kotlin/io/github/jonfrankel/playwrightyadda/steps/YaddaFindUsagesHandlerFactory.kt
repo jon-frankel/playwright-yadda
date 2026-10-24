@@ -35,7 +35,7 @@ class YaddaFindUsagesHandlerFactory : FindUsagesHandlerFactory() {
             val step = usage.element
             definition == null ||
               step == null ||
-              !LibraryScope.isEnabledFor(definition, step) ||
+              !LibraryScope.isEnabledFor(definition, step, usage.segment?.startOffset ?: step.textRange.startOffset) ||
               processor.process(usage)
           }
         return super.processElementUsages(element, enabledOnly, options)

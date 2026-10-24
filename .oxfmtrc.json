@@ -10,6 +10,8 @@
     "ide/jetbrains/.gradle",
     "ide/jetbrains/.intellijPlatform",
     "ide/jetbrains/.kotlin",
-    "ide/jetbrains/src/test/resources/yadda/parser-cases.json"
+    "ide/jetbrains/src/test/resources/yadda/parser-cases.json",
+    "ide/jetbrains/src/test/resources/yadda/markdown-cases.json",
+    "examples/basic/ide-playground/markdown-*.md"
   ]
 }

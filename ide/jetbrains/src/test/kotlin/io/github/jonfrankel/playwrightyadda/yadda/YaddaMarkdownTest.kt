@@ -3,6 +3,9 @@ package io.github.jonfrankel.playwrightyadda.yadda
 import com.intellij.aqua.runners.playwright.js.PlaywrightRunConfiguration
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.application.ApplicationManager
+import java.util.concurrent.Callable
+import java.util.concurrent.TimeUnit
 import com.intellij.openapi.actionSystem.ActionPromoter
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.KeyboardShortcut
@@ -449,6 +452,19 @@ class YaddaMarkdownTest : BasePlatformTestCase() {
     project()
     assertTrue(bold in runsOnCmdB("Scenario: Remove", 3))
     assertTrue(bold in runsOnCmdB("they remove", 2, select = true))
+  }
+
+  fun `test the promoter works off the UI thread, where the key dispatcher asks it`() {
+    project()
+    val file = markdown()
+    open(file, "they remove", 2)
+    val actions = ActionManager.getInstance()
+    val candidates = listOf(bold, "GotoDeclaration").mapNotNull { actions.getAction(it) }
+    val context = Utils.getUiOnlyDataContext((myFixture.editor as EditorEx).dataContext)
+    val suppressed = ApplicationManager.getApplication()
+      .executeOnPooledThread(Callable { YaddaMarkdownActionPromoter().suppress(candidates, context).mapNotNull { actions.getId(it) } })
+      .get(30, TimeUnit.SECONDS)
+    assertEquals(listOf(bold), suppressed)
   }
 
   fun `test in an ordinary Markdown file Cmd+B stays Bold`() {

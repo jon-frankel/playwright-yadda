@@ -5,6 +5,7 @@ import com.intellij.openapi.actionSystem.ActionPromoter
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.DataContext
+import com.intellij.openapi.application.ReadAction
 import com.intellij.psi.PsiDocumentManager
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryNames
 
@@ -22,7 +23,11 @@ class YaddaMarkdownActionPromoter : ActionPromoter {
   override fun suppress(actions: List<AnAction>, context: DataContext): List<AnAction> =
     if (onStep(context)) actions.filter { ActionManager.getInstance().getId(it) == BOLD } else emptyList()
 
-  private fun onStep(context: DataContext): Boolean {
+  // The key dispatcher asks promoters on a background thread, where the editor's caret and selection and
+  // the PSI may only be read under a read action.
+  private fun onStep(context: DataContext): Boolean = ReadAction.computeBlocking<Boolean, RuntimeException> { onStepUnderReadAction(context) }
+
+  private fun onStepUnderReadAction(context: DataContext): Boolean {
     // The key dispatcher hands promoters a UI-only snapshot of the context, which has the editor but not
     // the PSI file, so the file is the editor's document's, if its PSI is built already (it is, in an open editor).
     val editor = CommonDataKeys.EDITOR.getData(context) ?: return false

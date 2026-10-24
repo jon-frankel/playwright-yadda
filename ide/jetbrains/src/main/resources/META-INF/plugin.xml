@@ -32,6 +32,10 @@
       <li><b>Markdown features:</b> a <code>.md</code> file with a <code>Feature:</code> heading in a project
         that uses playwright-yadda gets step navigation, usages, <code>@Libraries</code> support, Yadda's
         parse errors, undefined-step warnings and the run icon, and stays the Markdown file it is.</li>
+      <li><b>Create Yadda step definition:</b> on a step with no definition, Alt+Enter writes
+        <code>library.given(/^…$/, async function () {})</code> into the library the scenario's
+        <code>@Libraries</code> enable, in <code>.feature</code> and Markdown features. It replaces the
+        Cucumber.js plugin's fix there, which writes a <code>Given(…)</code> call that isn't a Yadda step.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -126,6 +130,21 @@
     <!-- The run icon next to Feature:/Scenario: runs the spec through Playwright, narrowed by a grep pattern. -->
     <runConfigurationProducer
         implementation="io.github.jonfrankel.playwrightyadda.run.YaddaFeatureRunConfigurationProducer"/>
+    <!-- The Cucumber.js plugin's "Create step definition" writes a Given(...) call, not a Yadda step, and throws without a keyword. -->
+    <daemon.intentionActionFilter
+        implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaCucumberFixFilter"/>
+    <intentionAction>
+      <className>io.github.jonfrankel.playwrightyadda.steps.YaddaCreateStepIntention</className>
+      <category>Playwright Yadda</category>
+      <descriptionDirectoryName>YaddaCreateStepIntention</descriptionDirectoryName>
+    </intentionAction>
+    <intentionAction>
+      <className>io.github.jonfrankel.playwrightyadda.steps.YaddaCreateAllStepsIntention</className>
+      <category>Playwright Yadda</category>
+      <descriptionDirectoryName>YaddaCreateAllStepsIntention</descriptionDirectoryName>
+    </intentionAction>
+    <!-- Rename throws on a step with no keyword; say why it can't be done instead. -->
+    <renameHandler implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaKeywordlessRenameHandler"/>
     <elementDescriptionProvider
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepDescriptionProvider"/>
   </extensions>

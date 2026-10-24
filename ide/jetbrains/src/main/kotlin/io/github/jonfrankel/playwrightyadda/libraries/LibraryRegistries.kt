@@ -37,6 +37,10 @@ class LibraryRegistry(
   fun keysOf(library: PsiElement): List<String> =
     libraries.filter { (_, candidate) -> library.manager.areElementsEquivalent(candidate, library) }.map { it.first }
 
+  /** The `createStepLibrary()` variables registered under [keys] (lower-case), in the order of [keys]. */
+  fun librariesFor(keys: Collection<String>): List<PsiElement> =
+    keys.flatMap { key -> libraries.filter { it.first == key }.map { it.second } }
+
   /** The properties that register [key] (case-insensitive): where the name `@Libraries=key` is defined. */
   fun propertiesOf(key: String): List<PsiElement> =
     keyProperties.filter { it.first == key.trim().lowercase() }.map { it.second }
@@ -58,6 +62,15 @@ object LibraryRegistries {
     return (call.methodExpression as? JSReferenceExpression)?.referenceName in REGISTRY_FACTORIES &&
       call.arguments.firstOrNull() === entries
   }
+
+  /** Every registry the project defines. */
+  fun all(project: Project): List<LibraryRegistry> = registries(project)
+
+  /** Every `const x = createStepLibrary()` in the project: the places a step definition can go. */
+  fun stepLibraries(project: Project): List<JSVariable> =
+    callsNamed(project, setOf("createStepLibrary")).mapNotNull { call ->
+      PsiTreeUtil.getParentOfType(call, JSVariable::class.java)?.takeIf { it.initializer == call }
+    }
 
   /** The registries that [library] (a `createStepLibrary()` variable) is part of. */
   fun containing(library: PsiElement): List<LibraryRegistry> =

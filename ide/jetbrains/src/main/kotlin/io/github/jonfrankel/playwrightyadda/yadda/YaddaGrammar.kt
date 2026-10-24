@@ -25,6 +25,9 @@ object YaddaGrammar {
     /** The block under the first line, without the fences; null for a step of one line. */
     val block: String? get() = if ('\n' in text) text.substringAfter('\n') else null
 
+    /** The steps of the scenario (or background) this one is in, in order, this one included. */
+    val siblings: List<Step> get() = scope.steps
+
     /** [name] with the placeholders of the scenario's first examples row filled in, as Yadda does for each row. */
     fun expanded(name: String): String = scope.first?.let { substitute(it, name) } ?: name
   }

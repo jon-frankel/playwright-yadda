@@ -1,0 +1,342 @@
+[
+  {
+    "language": "French",
+    "name": "a feature",
+    "input": "Fonctionnalité: F\n  Scénario: S\n    Soit un panier\n    Alors il est vide\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit un panier",
+        "Alors il est vide"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "an outline",
+    "input": "Fonctionnalité: F\n  Scénario: S [n]\n    Soit [n] articles\n  Exemples:\n    n\n    1\n    2\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit 1 articles"
+      ],
+      [
+        "Soit 2 articles"
+      ]
+    ],
+    "titles": [
+      "S 1",
+      "S 2"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "the other word for examples",
+    "input": "Fonctionnalité: F\n  Scénario: S [n]\n    Soit [n] articles\n  Où:\n    n\n    1\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit 1 articles"
+      ]
+    ],
+    "titles": [
+      "S 1"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "a background",
+    "input": "Fonctionnalité: F\n  Contexte:\n    Soit un site\n  Scénario: S\n    Alors ok\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit un site",
+        "Alors ok"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "a rule",
+    "input": "Fonctionnalité: F\n  Règle: R\n    Scénario: S\n      Soit x\n",
+    "ok": true,
+    "steps": [],
+    "titles": [],
+    "rules": 1
+  },
+  {
+    "language": "French",
+    "name": "an outline's other word",
+    "input": "Fonctionnalité: F\n  Plan du scénario: S\n    Soit x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit x"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "upper case",
+    "input": "FONCTIONNALITÉ: F\n  SCÉNARIO: S\n    Soit x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit x"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "English headings are text",
+    "input": "Feature: F\n  Scenario: S\n    Given x\n",
+    "ok": false,
+    "message": "A feature must contain one or more scenarios"
+  },
+  {
+    "language": "French",
+    "name": "an empty scenario",
+    "input": "Fonctionnalité: F\n  Scénario: A\n  Scénario: B\n    Soit x\n",
+    "ok": false,
+    "line": 3,
+    "message": "Scenario requires one or more steps"
+  },
+  {
+    "language": "French",
+    "name": "no scenario",
+    "input": "Fonctionnalité: F\n  une description\n",
+    "ok": false,
+    "message": "Feature requires one or more scenarios"
+  },
+  {
+    "language": "French",
+    "name": "a block",
+    "input": "Fonctionnalité: F\n  Scénario: S\n    Soit les lignes:\n    ---\n    a | b\n    ---\n    Alors ok\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit les lignes:\na | b",
+        "Alors ok"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "tags",
+    "input": "@Libraries=x\nFonctionnalité: F\n  @pending\n  Scénario: S\n    Soit x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit x"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Spanish",
+    "name": "a feature",
+    "input": "Funcionalidad: F\n  Escenario: S\n    Dado x\n    Cuando y\n    Entonces z\n",
+    "ok": true,
+    "steps": [
+      [
+        "Dado x",
+        "Cuando y",
+        "Entonces z"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Spanish",
+    "name": "the other words",
+    "input": "Característica: F\n  Fondo:\n    Dado x\n  Caso: S\n    Entonces z\n",
+    "ok": true,
+    "steps": [
+      [
+        "Dado x",
+        "Entonces z"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Spanish",
+    "name": "examples",
+    "input": "Funcionalidad: F\n  Escenario: S [n]\n    Dado [n]\n  Ejemplos:\n    n\n    1\n",
+    "ok": true,
+    "steps": [
+      [
+        "Dado 1"
+      ]
+    ],
+    "titles": [
+      "S 1"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Russian",
+    "name": "a feature",
+    "input": "Функция: Ф\n  Сценарий: С\n    Допустим x\n    Тогда y\n",
+    "ok": true,
+    "steps": [
+      [
+        "Допустим x",
+        "Тогда y"
+      ]
+    ],
+    "titles": [
+      "С"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Russian",
+    "name": "examples",
+    "input": "Функция: Ф\n  Сценарий: С [n]\n    Допустим [n]\n  Примеры:\n    n\n    1\n    2\n",
+    "ok": true,
+    "steps": [
+      [
+        "Допустим 1"
+      ],
+      [
+        "Допустим 2"
+      ]
+    ],
+    "titles": [
+      "С 1",
+      "С 2"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Russian",
+    "name": "case is the word list's",
+    "input": "функция: Ф\n  сценарий: С\n    Допустим x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Допустим x"
+      ]
+    ],
+    "titles": [
+      "С"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Chinese",
+    "name": "a feature",
+    "input": "功能: F\n  场景: S\n    假如 x\n    那么 y\n",
+    "ok": true,
+    "steps": [
+      [
+        "假如 x",
+        "那么 y"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Chinese",
+    "name": "examples",
+    "input": "功能: F\n  场景: S [n]\n    假如 [n]\n  例子:\n    n\n    1\n",
+    "ok": true,
+    "steps": [
+      [
+        "假如 1"
+      ]
+    ],
+    "titles": [
+      "S 1"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Chinese",
+    "name": "English words too",
+    "input": "Feature: F\n  Scenario: S\n    Given x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Given x"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Chinese",
+    "name": "a line that starts with feature",
+    "input": "Features of the app\n  场景: S\n    假如 x\n",
+    "ok": true,
+    "steps": [
+      [
+        "假如 x"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "German",
+    "name": "a feature",
+    "input": "Funktionalität: F\n  Szenario: S\n    Angenommen x\n    Dann y\n",
+    "ok": true,
+    "steps": [
+      [
+        "Angenommen x",
+        "Dann y"
+      ]
+    ],
+    "titles": [
+      null
+    ],
+    "rules": 0
+  },
+  {
+    "language": "German",
+    "name": "no scenario",
+    "input": "Funktionalität: F\n  Beschreibung\n",
+    "ok": false,
+    "message": "Feature requires one or more scenarios"
+  }
+]

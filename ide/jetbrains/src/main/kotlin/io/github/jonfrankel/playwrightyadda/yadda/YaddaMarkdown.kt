@@ -31,7 +31,6 @@ import com.intellij.psi.util.PsiModificationTracker
 object YaddaMarkdown {
   private val EXTENSIONS = listOf("md", "markdown")
   private val FORCED_NAMES = listOf(".yadda.md", ".yadda.markdown")
-  private val MENTIONS_FEATURE = Regex("feature:", RegexOption.IGNORE_CASE)
 
   /** A step as the IDE sees it in the file: where its first line is, and the text Yadda makes of it. */
   class Site(val step: YaddaGrammar.Step, val line: TextRange, val range: TextRange)
@@ -40,7 +39,7 @@ object YaddaMarkdown {
     if (file == null || file.language.id != MARKDOWN_LANGUAGE_ID) return false
     // A package.json can change which files count, so any change in the project is a reason to ask again.
     return CachedValuesManager.getCachedValue(file) {
-      CachedValueProvider.Result.create(isFeatureNow(file), PsiModificationTracker.MODIFICATION_COUNT)
+      CachedValueProvider.Result.create(isFeatureNow(file), PsiModificationTracker.MODIFICATION_COUNT, YaddaSettings.of(file.project).tracker)
     }
   }
 
@@ -50,7 +49,7 @@ object YaddaMarkdown {
     val forced = FORCED_NAMES.any { name.endsWith(it) }
     if (!forced) {
       if (EXTENSIONS.none { name.endsWith(".$it") } || !PlaywrightYaddaProjects.isYaddaFeature(virtualFile)) return false
-      if (!MENTIONS_FEATURE.containsMatchIn(file.text)) return false
+      if (!YaddaSettings.vocabularyOf(file.project).mentionsFeature.containsMatchIn(file.text)) return false
     }
     // A fence or a comment can hold a "Feature:" that isn't one, so ask Yadda's parser, not a regex.
     return forced || analysis(file).markers.any { it.kind == YaddaGrammar.MarkerKind.FEATURE }
@@ -59,13 +58,14 @@ object YaddaMarkdown {
   /** What Yadda makes of the file, kept until it changes. */
   fun analysis(file: PsiFile): YaddaGrammar.Result =
     CachedValuesManager.getCachedValue(file, ANALYSIS) {
-      CachedValueProvider.Result.create(YaddaGrammar.analyzeMarkdown(file.text), file)
+      val settings = YaddaSettings.of(file.project)
+      CachedValueProvider.Result.create(YaddaGrammar.analyzeMarkdown(file.text, settings.vocabulary), file, settings.tracker)
     }
 
   /** The steps of a feature, where each starts. */
   fun sites(file: PsiFile): List<Site> =
     CachedValuesManager.getCachedValue(file, SITES) {
-      CachedValueProvider.Result.create(sitesOf(file), file)
+      CachedValueProvider.Result.create(sitesOf(file), file, YaddaSettings.of(file.project).tracker)
     }
 
   /** A heading that starts a construct, with where its keyword is in the file. */
@@ -75,7 +75,7 @@ object YaddaMarkdown {
   fun headings(file: PsiFile): List<Heading> =
     CachedValuesManager.getCachedValue(file, HEADINGS) {
       val markers = analysis(file).markers.filter { it.kind != YaddaGrammar.MarkerKind.ANNOTATION }
-      CachedValueProvider.Result.create(markers.map { Heading(it, FeatureLines.start(file, it.line) + it.column) }, file)
+      CachedValueProvider.Result.create(markers.map { Heading(it, FeatureLines.start(file, it.line) + it.column) }, file, YaddaSettings.of(file.project).tracker)
     }
 
   /** The step whose line holds [offset], bullet and all. */

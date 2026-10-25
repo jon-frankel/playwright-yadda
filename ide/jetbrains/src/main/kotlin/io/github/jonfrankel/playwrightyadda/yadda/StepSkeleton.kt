@@ -3,9 +3,10 @@ package io.github.jonfrankel.playwrightyadda.yadda
 /**
  * The step definition a step needs, written the way this library's steps are: `library.given(/^…$/, …)`.
  *
- * Yadda's English library prefixes a `given`, `when` or `then` definition with its own keyword, and the
- * prefix also accepts `And` and `But`, so a step's keyword picks the method and `And` or `But` take the
- * method of the step before. A step with no keyword has no such method: Yadda matches it only against a
+ * Yadda's library prefixes a `given`, `when` or `then` definition with the keywords of its language, and the
+ * prefix also accepts a word like `And` or `But` for all three, so a step's keyword picks the method and
+ * such a word takes the method of the step before. `given`, `when` and `then` are the method names in every
+ * language, so the skeleton is the same whichever the project's features are written in. A step with no keyword has no such method: Yadda matches it only against a
  * `define`, which the IDE doesn't read as a step definition (it would still show the step as undefined),
  * so there is no skeleton for it.
  */
@@ -25,7 +26,6 @@ class StepSkeleton private constructor(
   }
 
   companion object {
-    private val KEYWORD = Regex("""^(Given|With|Except|When|If|Then|Expect|And|But)\s+(\S.*)$""", RegexOption.IGNORE_CASE)
     private val PLACEHOLDER = Regex("""\[([^\[\]]+)]""")
     private val RESERVED = setOf(
       "break", "case", "catch", "class", "const", "continue", "debugger", "default", "delete", "do", "else", "enum", "export", "extends",
@@ -34,13 +34,12 @@ class StepSkeleton private constructor(
     )
     private val REGEX_SPECIAL = "\\^$.|?*+()[]{}/"
 
-    /** The skeleton for [step], or null when it has no keyword to take a method from. */
-    fun of(step: YaddaGrammar.Step): StepSkeleton? {
+    /** The skeleton for [step], read in the language of [vocabulary], or null when it has no keyword to take a method from. */
+    fun of(step: YaddaGrammar.Step, vocabulary: Vocabulary = Vocabulary.ENGLISH): StepSkeleton? {
       val first = step.text.substringBefore('\n')
-      val match = KEYWORD.find(first) ?: return null
-      val keyword = match.groupValues[1].lowercase()
-      val method = methodOf(keyword) ?: inherited(step)
-      val text = match.groupValues[2].trimEnd()
+      val keyword = vocabulary.stepKeyword(first)?.takeIf { it.rest.isNotBlank() } ?: return null
+      val method = keyword.method ?: inherited(step, vocabulary)
+      val text = keyword.rest.trimEnd()
 
       val parameters = mutableListOf<String>()
       val pattern = StringBuilder()
@@ -65,20 +64,11 @@ class StepSkeleton private constructor(
       return StepSkeleton(method, if (plain) text else pattern.toString(), parameters, plain)
     }
 
-    private fun methodOf(keyword: String): String? =
-      when (keyword) {
-        "given", "with", "except" -> "given"
-        "when", "if" -> "when"
-        "then", "expect" -> "then"
-        else -> null
-      }
-
     /** `And`/`But` run whichever of `given`, `when` and `then` the step before them did; before any, `given`. */
-    private fun inherited(step: YaddaGrammar.Step): String {
+    private fun inherited(step: YaddaGrammar.Step, vocabulary: Vocabulary): String {
       val before = step.siblings.takeWhile { it !== step }
       for (previous in before.asReversed()) {
-        val match = KEYWORD.find(previous.text.substringBefore('\n')) ?: continue
-        methodOf(match.groupValues[1].lowercase())?.let { return it }
+        vocabulary.stepKeyword(previous.text.substringBefore('\n'))?.method?.let { return it }
       }
       return "given"
     }

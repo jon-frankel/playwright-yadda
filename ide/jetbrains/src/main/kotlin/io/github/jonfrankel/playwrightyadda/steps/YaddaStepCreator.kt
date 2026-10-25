@@ -21,6 +21,7 @@ import io.github.jonfrankel.playwrightyadda.yadda.StepSkeleton
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaFile
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaGrammar
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaSettings
 import org.jetbrains.plugins.cucumber.psi.GherkinStep
 import org.jetbrains.plugins.cucumber.steps.reference.CucumberStepReference
 
@@ -87,14 +88,14 @@ object YaddaStepCreator {
   private fun undefinedOf(file: YaddaFile, step: GherkinStep): Undefined? {
     val line = file.viewProvider.document?.getLineNumber(step.textOffset)?.plus(1) ?: return null
     val yadda = file.grammar.steps[line] ?: return null
-    val skeleton = StepSkeleton.of(yadda) ?: return null
+    val skeleton = StepSkeleton.of(yadda, YaddaSettings.vocabularyOf(file.project)) ?: return null
     val reference = step.references.filterIsInstance<CucumberStepReference>().firstOrNull() ?: return null
     if (reference.multiResolve(false).isNotEmpty()) return null
     return Undefined(yadda, skeleton, file, step.textRange)
   }
 
   private fun undefinedOf(file: PsiFile, site: YaddaMarkdown.Site): Undefined? {
-    val skeleton = StepSkeleton.of(site.step) ?: return null
+    val skeleton = StepSkeleton.of(site.step, YaddaSettings.vocabularyOf(file.project)) ?: return null
     if (YaddaMarkdownSteps.definitions(file, site).isNotEmpty()) return null
     return Undefined(site.step, skeleton, file, site.range)
   }
@@ -107,7 +108,8 @@ object YaddaStepCreator {
   fun targetsFor(undefined: Undefined): List<Target> {
     val file = undefined.anchor
     val project = file.project
-    val tags = if (file is YaddaFile) FeatureTags.parse(file.text) else FeatureTags.parseMarkdown(file.text)
+    val vocabulary = YaddaSettings.vocabularyOf(project)
+    val tags = if (file is YaddaFile) FeatureTags.parse(file.text, vocabulary) else FeatureTags.parseMarkdown(file.text, vocabulary)
     val libraries = tags.librariesAt(undefined.step.line - 1)
     val registries = LibraryRegistries.all(project)
 

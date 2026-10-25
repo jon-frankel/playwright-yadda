@@ -13,10 +13,12 @@ import org.jetbrains.plugins.cucumber.psi.i18n.JsonGherkinKeywordProvider
  * lexer, so rows without pipes, `Where:` and a fenced block would be coloured as the plain text they
  * look like to it.
  */
-class YaddaSyntaxHighlighter : GherkinSyntaxHighlighter(JsonGherkinKeywordProvider.getKeywordProvider(true)) {
-  override fun getHighlightingLexer(): Lexer = YaddaLexer(super.getHighlightingLexer())
+class YaddaSyntaxHighlighter(private val vocabulary: Vocabulary = Vocabulary.ENGLISH) :
+  GherkinSyntaxHighlighter(JsonGherkinKeywordProvider.getKeywordProvider(true)) {
+  override fun getHighlightingLexer(): Lexer = YaddaLexer(super.getHighlightingLexer(), vocabulary)
 }
 
 class YaddaSyntaxHighlighterFactory : SyntaxHighlighterFactory() {
-  override fun getSyntaxHighlighter(project: Project?, virtualFile: VirtualFile?): SyntaxHighlighter = YaddaSyntaxHighlighter()
+  override fun getSyntaxHighlighter(project: Project?, virtualFile: VirtualFile?): SyntaxHighlighter =
+    YaddaSyntaxHighlighter(YaddaSettings.vocabularyOf(project))
 }

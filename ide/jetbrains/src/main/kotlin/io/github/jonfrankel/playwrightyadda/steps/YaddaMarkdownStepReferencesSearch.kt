@@ -6,6 +6,7 @@ import com.intellij.psi.PsiReference
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.util.Processor
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaSettings
 
 /**
  * Reports the steps of Markdown features that run a step definition as references to it, leaving
@@ -24,7 +25,7 @@ class YaddaMarkdownStepReferencesSearch :
 
     for (file in YaddaMarkdown.featureFiles(queryParameters.project, queryParameters.effectiveSearchScope)) {
       for (site in YaddaMarkdown.sites(file)) {
-        if (YaddaMarkdownSteps.texts(site).none { definition.matches(it) }) continue
+        if (YaddaMarkdownSteps.texts(site, YaddaSettings.vocabularyOf(file.project)).none { definition.matches(it) }) continue
         if (!LibraryScope.isEnabledFor(literal, file, site.range.startOffset)) continue
         if (!consumer.process(YaddaMarkdownStepReference(file, site.range, literal))) return
       }

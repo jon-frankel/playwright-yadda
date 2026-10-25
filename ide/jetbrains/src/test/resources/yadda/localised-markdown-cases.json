@@ -1,0 +1,105 @@
+[
+  {
+    "language": "French",
+    "name": "a feature",
+    "input": "# Fonctionnalité: F\n## Scénario: S\n- Soit un panier\n- Alors il est vide\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit un panier",
+        "Alors il est vide"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "an outline",
+    "input": "# Fonctionnalité: F\n## Scénario: S [n]\n- Soit [n]\n## Exemples:\n| n |\n|---|\n| 1 |\n| 2 |\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit 1"
+      ],
+      [
+        "Soit 2"
+      ]
+    ],
+    "titles": [
+      "S 1",
+      "S 2"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "a background",
+    "input": "# Fonctionnalité: F\n## Contexte:\n- Soit x\n## Scénario: S\n- Alors y\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit x",
+        "Alors y"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "French",
+    "name": "English headings are steps",
+    "input": "# Feature: F\n## Scenario: S\n- Given x\n",
+    "ok": false,
+    "message": "A feature must contain one or more scenarios"
+  },
+  {
+    "language": "French",
+    "name": "a fence hides a heading",
+    "input": "# Fonctionnalité: F\n## Scénario: S\n- Soit x\n```\n## Scénario: T\n```\n",
+    "ok": true,
+    "steps": [
+      [
+        "Soit x\n## Scénario: T"
+      ]
+    ],
+    "titles": [
+      "S"
+    ],
+    "rules": 0
+  },
+  {
+    "language": "German",
+    "name": "a feature",
+    "input": "# Funktionalität: F\n## Szenario: S\n- Angenommen x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Angenommen x"
+      ]
+    ],
+    "titles": [
+      null
+    ],
+    "rules": 0
+  },
+  {
+    "language": "Russian",
+    "name": "a feature",
+    "input": "# Функция: Ф\n## Сценарий: С\n- Допустим x\n",
+    "ok": true,
+    "steps": [
+      [
+        "Допустим x"
+      ]
+    ],
+    "titles": [
+      "С"
+    ],
+    "rules": 0
+  }
+]

@@ -55,7 +55,9 @@ class YaddaCucumberExtension : AbstractCucumberExtension(), OptionalStepDefiniti
     val file = step.containingFile as? YaddaFile ?: return null
     val line = file.viewProvider.document?.getLineNumber(step.textOffset)?.plus(1) ?: return null
     val yadda = file.grammar.steps[line] ?: return null
-    val name = yadda.expanded(step.name)
+    // A word like `With` or `Soit` that Gherkin doesn't know starts a step it reads as having no keyword, so it is part of the name.
+    val expanded = yadda.expanded(step.name)
+    val name = if (step.keyword == null) YaddaSettings.vocabularyOf(step.project).withoutStepKeyword(expanded) else expanded
     val text = yadda.block?.let { "$name\n$it" } ?: name
     return text.takeIf { it != step.substitutedName }
   }

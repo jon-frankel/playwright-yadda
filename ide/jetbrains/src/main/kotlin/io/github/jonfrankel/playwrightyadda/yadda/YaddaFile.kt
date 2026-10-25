@@ -27,7 +27,10 @@ class YaddaFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, Yadd
 
   /** What Yadda's own parser makes of the file, kept until the file changes. */
   val grammar: YaddaGrammar.Result
-    get() = CachedValuesManager.getCachedValue(this) { CachedValueProvider.Result.create(YaddaGrammar.analyze(text), this) }
+    get() = CachedValuesManager.getCachedValue(this) {
+      val settings = YaddaSettings.of(project)
+      CachedValueProvider.Result.create(YaddaGrammar.analyze(text, settings.vocabulary), this, settings.tracker)
+    }
 
   /** The text of the 1-based [line], without its indentation and trailing space. */
   fun lineRange(line: Int): TextRange = FeatureLines.range(this, line)

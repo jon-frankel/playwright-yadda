@@ -31,7 +31,7 @@ import java.util.regex.Pattern
  * The editor restarts lexing from any token with the state it reported, so [getState] says where in
  * a block a token is, and [start] rebuilds the block's bounds from the text.
  */
-class YaddaLexer(private val delegate: Lexer) : LexerBase() {
+class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary = Vocabulary.ENGLISH) : LexerBase() {
   private var buf: CharSequence = ""
   private var end = 0
 
@@ -60,6 +60,11 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
   private var resumeAt = -1
 
   private class Piece(val type: IElementType, val start: Int, val end: Int)
+
+  private val headingLine: Pattern = Pattern.compile(
+    "^(?:$GHERKIN_HEADINGS|${vocabulary.headingWords})\\s*:",
+    Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE,
+  )
 
   private fun cut() = pieceIndex < pieces.size
 
@@ -212,7 +217,7 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     while (from < end) {
       val to = lineEnd(from)
       val line = buf.subSequence(from, to).trim()
-      if (line.isNotEmpty() && line[0] != '@' && line[0] != '#') return HEADING_LINE.matcher(line).find()
+      if (line.isNotEmpty() && line[0] != '@' && line[0] != '#') return headingLine.matcher(line).find()
       from = to + 1
     }
     return true
@@ -221,10 +226,10 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
   /** Cuts the line of text the delegate found at [start] into the tokens Gherkin would have made of it. */
   private fun cutLine(start: Int, lineEnd: Int) {
     val text = buf.subSequence(start, lineEnd)
-    val word = YADDA_KEYWORD.matcher(text)
-    if (word.find()) {
-      val type = keywordType(word.group(1).lowercase())
-      val colon = start + word.end(1)
+    val word = vocabulary.keywordAt(text)
+    if (word != null) {
+      val type = keywordType(word.first, text.subSequence(0, word.second))
+      val colon = start + word.second
       val list = mutableListOf(Piece(type, start, colon), Piece(GherkinTokenTypes.COLON, colon, colon + 1))
       var title = colon + 1
       while (title < lineEnd && buf[title].isWhitespace()) title++
@@ -269,13 +274,14 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     return list
   }
 
-  private fun keywordType(word: String): IElementType = when (word) {
-    "feature" -> GherkinTokenTypes.FEATURE_KEYWORD
-    "rule" -> GherkinTokenTypes.RULE_KEYWORD
-    "background" -> GherkinTokenTypes.BACKGROUND_KEYWORD
-    "scenario outline" -> GherkinTokenTypes.SCENARIO_OUTLINE_KEYWORD
-    "scenario" -> GherkinTokenTypes.SCENARIO_KEYWORD
-    else -> GherkinTokenTypes.EXAMPLES_KEYWORD
+  private fun keywordType(heading: Vocabulary.Heading, word: CharSequence): IElementType = when (heading) {
+    Vocabulary.Heading.FEATURE -> GherkinTokenTypes.FEATURE_KEYWORD
+    Vocabulary.Heading.RULE -> GherkinTokenTypes.RULE_KEYWORD
+    Vocabulary.Heading.BACKGROUND -> GherkinTokenTypes.BACKGROUND_KEYWORD
+    Vocabulary.Heading.SCENARIO ->
+      if (word.toString().equals("scenario outline", ignoreCase = true)) GherkinTokenTypes.SCENARIO_OUTLINE_KEYWORD
+      else GherkinTokenTypes.SCENARIO_KEYWORD
+    Vocabulary.Heading.EXAMPLES -> GherkinTokenTypes.EXAMPLES_KEYWORD
   }
 
   /** Reports the token of [stage] of the current block, or hands back to the delegate after its last. */
@@ -404,13 +410,7 @@ class YaddaLexer(private val delegate: Lexer) : LexerBase() {
     private val FENCE_LINES = Pattern.compile("^$FENCE_SOURCE$", Pattern.MULTILINE)
     private val FENCE_LINE = Pattern.compile("""[|┆]?-{3,}.*""")
 
-    // The keywords Yadda finds at the start of a line, whatever the case, with the colon directly after.
-    private val YADDA_KEYWORD = Pattern.compile("""^(feature|rule|scenario outline|scenario|background|examples|where)(?=:)""", Pattern.CASE_INSENSITIVE)
-
-    // What a tag line can be followed by that ends a table: Gherkin's headings as well as Yadda's.
-    private val HEADING_LINE = Pattern.compile(
-      """^(feature|rule|scenario outline|scenario template|scenarios?|background|examples?|where)\s*:""",
-      Pattern.CASE_INSENSITIVE,
-    )
+    // What a tag line can be followed by that ends a table: Gherkin's English headings as well as Yadda's.
+    private const val GHERKIN_HEADINGS = "(?:feature|rule|scenario outline|scenario template|scenarios?|background|examples?|where)"
   }
 }

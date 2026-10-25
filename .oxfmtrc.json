@@ -12,6 +12,8 @@
     "ide/jetbrains/.kotlin",
     "ide/jetbrains/src/test/resources/yadda/parser-cases.json",
     "ide/jetbrains/src/test/resources/yadda/markdown-cases.json",
+    "ide/jetbrains/src/test/resources/yadda/localised-cases.json",
+    "ide/jetbrains/src/test/resources/yadda/localised-markdown-cases.json",
     "examples/basic/ide-playground/markdown-*.md"
   ]
 }

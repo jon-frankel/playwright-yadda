@@ -1,0 +1,123 @@
+[
+  {
+    "name": "Chinese",
+    "feature": "[Ff]eature|功能",
+    "rule": "[Rr]ule|规则",
+    "scenario": "(?:[Ss]cenario|[Ss]cenario [Oo]utline|场景|剧本|(?:场景|剧本)?大纲)",
+    "background": "[Bb]ackground|背景|前提",
+    "examples": "(?:[Ee]xamples|[Ww]here|例子|示例|举例|样例)",
+    "given": "(?:[Gg]iven|[Ww]ith|[Aa]nd|[Bb]ut|[Ee]xcept|假如|假设|假定|并且|而且|同时|但是)",
+    "when": "(?:[Ww]hen|[Ii]f|[Aa]nd|[Bb]ut|当|如果|并且|而且|同时|但是)",
+    "then": "(?:[Tt]hen|[Ee]xpect|[Aa]nd|[Bb]ut|那么|期望|并且|而且|同时|但是)"
+  },
+  {
+    "name": "English",
+    "feature": "[Ff]eature",
+    "rule": "[Rr]ule",
+    "scenario": "(?:[Ss]cenario|[Ss]cenario [Oo]utline)",
+    "background": "[Bb]ackground",
+    "examples": "(?:[Ee]xamples|[Ww]here)",
+    "given": "(?:[Gg]iven|[Ww]ith|[Aa]nd|[Bb]ut|[Ee]xcept)",
+    "when": "(?:[Ww]hen|[Ii]f|[Aa]nd|[Bb]ut)",
+    "then": "(?:[Tt]hen|[Ee]xpect|[Aa]nd|[Bb]ut)"
+  },
+  {
+    "name": "French",
+    "feature": "(?:[Ff]onctionnalité)",
+    "rule": "(?:[Rr]ègle)",
+    "scenario": "(?:[Ss]cénario|[Pp]lan [Dd]u [Ss]cénario)",
+    "background": "(?:[Cc]ontexte)",
+    "examples": "(?:[Ee]xemples|[Ee]xemple|[Oo][uù])",
+    "given": "(?:[Ss]oit|[ÉéEe]tant données|[ÉéEe]tant donnée|[ÉéEe]tant donnés|[ÉéEe]tant donné|[Aa]vec|[Ee]t|[Mm]ais|[Aa]ttendre)",
+    "when": "(?:[Qq]uand|[Ll]orsqu'|[Ll]orsque|[Ss]i|[Ee]t|[Mm]ais)",
+    "then": "(?:[Aa]lors|[Aa]ttendre|[Ee]t|[Mm]ais)"
+  },
+  {
+    "name": "German",
+    "feature": "(?:[Ff]unktionalität|[Ff]eature|[Aa]spekt|[Uu]secase|[Aa]nwendungsfall)",
+    "rule": "(?:[Rr]egel)",
+    "scenario": "(?:[Ss]zenario|[Ss]zenario( g|G)rundriss|[Gg]eschehnis)",
+    "background": "(?:[Gg]rundlage|[Hh]intergrund|[Ss]etup|[Vv]orausgesetzt)",
+    "examples": "(?:[Bb]eispiele?)",
+    "given": "(?:[Aa]ngenommen|[Gg]egeben( sei(en)?)?|[Mm]it|[Uu]nd|[Aa]ber|[Aa]ußer)",
+    "when": "(?:[Ww]enn|[Ff]alls|[Uu]nd|[Aa]ber)",
+    "then": "(?:[Dd]ann|[Ff]olglich|[Aa]ußer|[Uu]nd|[Aa]ber)"
+  },
+  {
+    "name": "Norwegian",
+    "feature": "[Ee]genskap",
+    "rule": "[Rr]egel",
+    "scenario": "[Ss]cenario",
+    "background": "[Bb]akgrunn",
+    "examples": "[Ee]ksempler",
+    "given": "(?:[Gg]itt|[Mm]ed|[Oo]g|[Mm]en|[Uu]nntatt)",
+    "when": "(?:[Nn]år|[Oo]g|[Mm]en)",
+    "then": "(?:[Ss]å|[Ff]forvent|[Oo]g|[Mm]en)"
+  },
+  {
+    "name": "Pirate",
+    "feature": "(?:[Tt]ale|[Yy]arn)",
+    "rule": "(?:[Cc]ode|[Ee]dict)",
+    "scenario": "(?:[Aa]dventure|[Ss]ortie)",
+    "background": "[Aa]ftground",
+    "examples": "[Ww]herest",
+    "given": "(?:[Gg]iveth|[Ww]ith|[Aa]nd|[Bb]ut|[Ee]xcept)",
+    "when": "(?:[Ww]hence|[Ii]f|[Aa]nd|[Bb]ut)",
+    "then": "(?:[Tt]hence|[Ee]xpect|[Aa]nd|[Bb]ut)"
+  },
+  {
+    "name": "Ukrainian",
+    "feature": "(?:[Фф]ункція|[Фф]ункціонал|[Пп]отреба|[Аа]спект|[Оо]собливість|[Вв]ластивість)",
+    "rule": "[Пп]равило",
+    "scenario": "(?:[Сс]ценарій|[Шш]аблон)",
+    "background": "[Кк]онтекст",
+    "examples": "[Пп]риклади",
+    "given": "(?:[Дд]ано|[Пп]ри|[Нн]ехай|[Іі]|[Тт]а|[Аа]ле)",
+    "when": "(?:[Яя]кщо|[Дд]е|[Кк]оли|[Іі]|[Тт]а|[Аа]ле)",
+    "then": "(?:[Тт]оді|[Іі]|[Тт]а|[Аа]ле)"
+  },
+  {
+    "name": "Polish",
+    "feature": "(?:[Ww]łaściwość|[Ff]unkcja|[Aa]spekt|[Pp]otrzeba [Bb]iznesowa)",
+    "rule": "(?:[Zz]asada|[Rr]eguła)",
+    "scenario": "(?:[Ss]cenariusz|[Ss]zablon [Ss]cenariusza)",
+    "background": "[Zz]ałożenia",
+    "examples": "[Pp]rzykłady",
+    "given": "(?:[Zz]akładając|[Mm]ając|[Oo]raz|[Ii]|[Aa]le)",
+    "when": "(?:[Jj]eżeli|[Jj]eśli|[Gg]dy|[Kk]iedy|[Oo]raz|[Ii]|[Aa]le)",
+    "then": "(?:[Ww]tedy|[Oo]raz|[Ii]|[Aa]le)"
+  },
+  {
+    "name": "Spanish",
+    "feature": "(?:[Ff]uncionalidad|[Cc]aracterística)",
+    "rule": "(?:[Rr]egla)",
+    "scenario": "(?:[Ee]scenario|[Cc]aso)",
+    "background": "[Ff]ondo",
+    "examples": "(?:[Ee]jemplos|[Ee]jemplo)",
+    "given": "(?:[Ss]ea|[Ss]ean|[Dd]ado|[Dd]ada|[Dd]ados|[Dd]adas)",
+    "when": "(?:[Cc]uando|[Ss]i|[Qq]ue)",
+    "then": "(?:[Ee]ntonces)"
+  },
+  {
+    "name": "Russian",
+    "feature": "(?:[Фф]ункция|[Фф]ункционал|[Сс]войство)",
+    "rule": "[Пп]равило",
+    "scenario": "Сценарий",
+    "background": "(?:[Пп]редыстория|[Кк]онтекст)",
+    "examples": "Примеры?",
+    "given": "(?:[Дд]опустим|[Дд]ано|[Пп]усть|[Ии]|[Н]о)(?:\\s[Яя])?",
+    "when": "(?:[Ее]сли|[Кк]огда|[Ии]|[Н]о)(?:\\s[Яя])?",
+    "then": "(?:[Тт]о|[Тт]огда|[Ии]|[Н]о)(?:\\s[Яя])?"
+  },
+  {
+    "name": "Portuguese",
+    "feature": "(?:[Ff]uncionalidade|[Cc]aracter[íi]stica)",
+    "rule": "(?:[Rr]egra)",
+    "scenario": "(?:[Cc]en[aá]rio|[Cc]aso)",
+    "background": "[Ff]undo",
+    "examples": "(?:[Ee]xemplos|[Ee]xemplo)",
+    "given": "(?:[Ss]eja|[Ss]ejam|[Dd]ado|[Dd]ada|[Dd]ados|[Dd]adas|[Ee]|[Mm]as)",
+    "when": "(?:[Qq]uando|[Ss]e|[Qq]ue|[Ee]|[Mm]as)",
+    "then": "(?:[Ee]nt[aã]o|[Ee]|[Mm]as)"
+  }
+]

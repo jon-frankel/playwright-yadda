@@ -69,32 +69,23 @@ object YaddaGrammar {
   private val DASH = Regex("""(^\s*[|┆]?-{3,})""")
   private val SIMPLE_ANNOTATION = Regex("""^\s*@([^=]*)$""")
   private val NVP_ANNOTATION = Regex("""^\s*@([^=]*)=(.*)$""")
-  private val FEATURE = keyword("[Ff]eature", heading = true)
-  private val RULE = keyword("[Rr]ule", heading = true)
-  private val SCENARIO = keyword("(?:[Ss]cenario|[Ss]cenario [Oo]utline)", heading = true)
-  private val BACKGROUND = keyword("[Bb]ackground", heading = true)
-  private val EXAMPLES = keyword("(?:[Ee]xamples|[Ww]here)", heading = false)
-
-  private fun keyword(word: String, heading: Boolean) =
-    Regex("""^\s*$word:\s*${if (heading) "(.*)" else ""}""", RegexOption.IGNORE_CASE)
-
-  /** What Yadda makes of a `.feature` file. */
-  fun analyze(text: String): Result {
+  /** What Yadda makes of a `.feature` file written in the language of [vocabulary]. */
+  fun analyze(text: String, vocabulary: Vocabulary = Vocabulary.ENGLISH): Result {
     val events = mutableListOf<Event>()
     var comment = false
     for ((index, line) in text.split("\r\n", "\n").withIndex()) {
       if (MULTI_LINE_COMMENT.containsMatchIn(line)) {
         comment = !comment
       } else if (!comment && !SINGLE_LINE_COMMENT.containsMatchIn(line)) {
-        events += classify(line, index + 1)
+        events += classify(line, index + 1, vocabulary)
       }
     }
     return run(events)
   }
 
-  /** What Yadda makes of a Markdown feature (`MarkdownFeatureParser`). */
-  fun analyzeMarkdown(text: String): Result {
-    val scan = MarkdownScan()
+  /** What Yadda makes of a Markdown feature (`MarkdownFeatureParser`) written in the language of [vocabulary]. */
+  fun analyzeMarkdown(text: String, vocabulary: Vocabulary = Vocabulary.ENGLISH): Result {
+    val scan = MarkdownScan(vocabulary)
     val events = mutableListOf<Event>()
     for ((index, line) in text.split("\r\n", "\n").withIndex()) scan.line(line, index + 1, events)
     return run(events)
@@ -129,17 +120,26 @@ object YaddaGrammar {
   }
 
   /** A line's event, in the order Yadda tries the line classes. */
-  private fun classify(line: String, number: Int): Event {
+  private fun classify(line: String, number: Int, vocabulary: Vocabulary): Event {
     SIMPLE_ANNOTATION.find(line)?.let { return annotation(number, line, it.groupValues[1].trim(), null) }
     NVP_ANNOTATION.find(line)?.let { return annotation(number, line, it.groupValues[1].trim(), it.groupValues[2].trim()) }
-    FEATURE.find(line)?.let { return Event(Kind.FEATURE, number, title = it.groupValues[1], column = keywordColumn(line)) }
-    RULE.find(line)?.let { return Event(Kind.RULE, number, title = it.groupValues[1], column = keywordColumn(line)) }
-    SCENARIO.find(line)?.let { return Event(Kind.SCENARIO, number, title = it.groupValues[1], column = keywordColumn(line)) }
-    BACKGROUND.find(line)?.let { return Event(Kind.BACKGROUND, number, title = it.groupValues[1], column = keywordColumn(line)) }
-    if (EXAMPLES.containsMatchIn(line)) return Event(Kind.EXAMPLES, number, column = keywordColumn(line))
+    heading(vocabulary, line, number, keywordColumn(line))?.let { return it }
     if (BLANK.containsMatchIn(line)) return Event(Kind.BLANK, number, data = line)
     DASH.find(line)?.let { return Event(Kind.DASH, number, data = it.groupValues[1]) }
     return Event(Kind.TEXT, number, data = line)
+  }
+
+  /** The event for [text] if it starts a construct: a heading's keyword and title. [column] is where the keyword starts in its line. */
+  private fun heading(vocabulary: Vocabulary, text: String, number: Int, column: Int): Event? {
+    val found = vocabulary.match(text) ?: return null
+    val kind = when (found.heading) {
+      Vocabulary.Heading.FEATURE -> Kind.FEATURE
+      Vocabulary.Heading.RULE -> Kind.RULE
+      Vocabulary.Heading.SCENARIO -> Kind.SCENARIO
+      Vocabulary.Heading.BACKGROUND -> Kind.BACKGROUND
+      Vocabulary.Heading.EXAMPLES -> Kind.EXAMPLES
+    }
+    return Event(kind, number, title = found.title, column = column)
   }
 
   private fun annotation(number: Int, line: String, key: String, value: String?) =
@@ -182,7 +182,7 @@ object YaddaGrammar {
    * a fenced block or a table is a dashed block around lines, and a blockquote or `<!-- -->` is a comment.
    * It remembers whether it is inside a fence, a comment or a table, which the lines alone don't say.
    */
-  private class MarkdownScan {
+  private class MarkdownScan(private val vocabulary: Vocabulary) {
     private var inFence = false
     private var fenceMarker = ' '
     private var inComment = false
@@ -249,14 +249,8 @@ object YaddaGrammar {
       out += Event(Kind.TEXT, number, data = decodeEntities(line))
     }
 
-    private fun heading(text: String, column: Int, number: Int): Event {
-      FEATURE.find(text)?.let { return Event(Kind.FEATURE, number, title = it.groupValues[1], column = column) }
-      RULE.find(text)?.let { return Event(Kind.RULE, number, title = it.groupValues[1], column = column) }
-      SCENARIO.find(text)?.let { return Event(Kind.SCENARIO, number, title = it.groupValues[1], column = column) }
-      BACKGROUND.find(text)?.let { return Event(Kind.BACKGROUND, number, title = it.groupValues[1], column = column) }
-      if (EXAMPLES.containsMatchIn(text)) return Event(Kind.EXAMPLES, number, column = column)
-      return Event(Kind.TEXT, number, data = decodeEntities(text), column = column)
-    }
+    private fun heading(text: String, column: Int, number: Int): Event =
+      heading(vocabulary, text, number, column) ?: Event(Kind.TEXT, number, data = decodeEntities(text), column = column)
 
     private fun closesFence(line: String): Boolean = Regex("""^\s*${Regex.escape(fenceMarker.toString())}{3,}\s*$""").containsMatchIn(line)
   }

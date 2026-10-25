@@ -1,5 +1,5 @@
-// Regenerates parser-cases.json and markdown-cases.json: what the installed yadda's FeatureParser and
-// MarkdownFeatureParser make of each input below. YaddaGrammarTest holds the Kotlin port of those
+// Regenerates parser-cases.json, markdown-cases.json and localised-cases.json: what the installed yadda's
+// FeatureParser and MarkdownFeatureParser make of each input below (the localised ones, in another language). YaddaGrammarTest holds the Kotlin port of those
 // parsers to these answers, so rerun this after upgrading yadda, or adding a case:
 //
 //   node ide/jetbrains/src/test/resources/yadda/generate-parser-cases.mjs
@@ -412,11 +412,11 @@ const markdownCases = [
   ],
 ];
 
-function expected(Parser, cases) {
+function expected(Parser, cases, language) {
   return cases.map(([name, input]) => {
     let result;
     try {
-      const feature = new Parser().parse(input);
+      const feature = new Parser(language).parse(input);
       result = {
         ok: true,
         steps: feature.scenarios.map((s) => s.steps),
@@ -435,11 +435,121 @@ function expected(Parser, cases) {
   });
 }
 
-function write(file, Parser, cases) {
-  const out = expected(Parser, cases);
+function write(file, Parser, cases, language) {
+  const out = expected(Parser, cases, language);
+  writeFileSync(resolve(here, file), JSON.stringify(out, null, 2) + "\n");
+  console.log(`${file}: ${out.length} cases, ${out.filter((c) => c.ok).length} parse`);
+}
+
+// Features in other languages: [language, name, input]. Yadda's own word lists are used as they are, so
+// these include what its Chinese list does (its "feature" word has no group round it, so a line that starts
+// with "feature" is a Feature) and German's (a group in a word list moves the title, so a German scenario
+// has none, and an outline fails inside Yadda; only a plain German scenario is a case).
+const localisedCases = [
+  [
+    "French",
+    "a feature",
+    "Fonctionnalité: F\n  Scénario: S\n    Soit un panier\n    Alors il est vide\n",
+  ],
+  [
+    "French",
+    "an outline",
+    "Fonctionnalité: F\n  Scénario: S [n]\n    Soit [n] articles\n  Exemples:\n    n\n    1\n    2\n",
+  ],
+  [
+    "French",
+    "the other word for examples",
+    "Fonctionnalité: F\n  Scénario: S [n]\n    Soit [n] articles\n  Où:\n    n\n    1\n",
+  ],
+  [
+    "French",
+    "a background",
+    "Fonctionnalité: F\n  Contexte:\n    Soit un site\n  Scénario: S\n    Alors ok\n",
+  ],
+  ["French", "a rule", "Fonctionnalité: F\n  Règle: R\n    Scénario: S\n      Soit x\n"],
+  ["French", "an outline's other word", "Fonctionnalité: F\n  Plan du scénario: S\n    Soit x\n"],
+  ["French", "upper case", "FONCTIONNALITÉ: F\n  SCÉNARIO: S\n    Soit x\n"],
+  ["French", "English headings are text", "Feature: F\n  Scenario: S\n    Given x\n"],
+  ["French", "an empty scenario", "Fonctionnalité: F\n  Scénario: A\n  Scénario: B\n    Soit x\n"],
+  ["French", "no scenario", "Fonctionnalité: F\n  une description\n"],
+  [
+    "French",
+    "a block",
+    "Fonctionnalité: F\n  Scénario: S\n    Soit les lignes:\n    ---\n    a | b\n    ---\n    Alors ok\n",
+  ],
+  ["French", "tags", "@Libraries=x\nFonctionnalité: F\n  @pending\n  Scénario: S\n    Soit x\n"],
+  [
+    "Spanish",
+    "a feature",
+    "Funcionalidad: F\n  Escenario: S\n    Dado x\n    Cuando y\n    Entonces z\n",
+  ],
+  [
+    "Spanish",
+    "the other words",
+    "Característica: F\n  Fondo:\n    Dado x\n  Caso: S\n    Entonces z\n",
+  ],
+  [
+    "Spanish",
+    "examples",
+    "Funcionalidad: F\n  Escenario: S [n]\n    Dado [n]\n  Ejemplos:\n    n\n    1\n",
+  ],
+  ["Russian", "a feature", "Функция: Ф\n  Сценарий: С\n    Допустим x\n    Тогда y\n"],
+  [
+    "Russian",
+    "examples",
+    "Функция: Ф\n  Сценарий: С [n]\n    Допустим [n]\n  Примеры:\n    n\n    1\n    2\n",
+  ],
+  ["Russian", "case is the word list's", "функция: Ф\n  сценарий: С\n    Допустим x\n"],
+  ["Chinese", "a feature", "功能: F\n  场景: S\n    假如 x\n    那么 y\n"],
+  ["Chinese", "examples", "功能: F\n  场景: S [n]\n    假如 [n]\n  例子:\n    n\n    1\n"],
+  ["Chinese", "English words too", "Feature: F\n  Scenario: S\n    Given x\n"],
+  ["Chinese", "a line that starts with feature", "Features of the app\n  场景: S\n    假如 x\n"],
+  ["German", "a feature", "Funktionalität: F\n  Szenario: S\n    Angenommen x\n    Dann y\n"],
+  ["German", "no scenario", "Funktionalität: F\n  Beschreibung\n"],
+];
+
+const localisedMarkdownCases = [
+  [
+    "French",
+    "a feature",
+    "# Fonctionnalité: F\n## Scénario: S\n- Soit un panier\n- Alors il est vide\n",
+  ],
+  [
+    "French",
+    "an outline",
+    "# Fonctionnalité: F\n## Scénario: S [n]\n- Soit [n]\n## Exemples:\n| n |\n|---|\n| 1 |\n| 2 |\n",
+  ],
+  [
+    "French",
+    "a background",
+    "# Fonctionnalité: F\n## Contexte:\n- Soit x\n## Scénario: S\n- Alors y\n",
+  ],
+  ["French", "English headings are steps", "# Feature: F\n## Scenario: S\n- Given x\n"],
+  [
+    "French",
+    "a fence hides a heading",
+    "# Fonctionnalité: F\n## Scénario: S\n- Soit x\n```\n## Scénario: T\n```\n",
+  ],
+  ["German", "a feature", "# Funktionalität: F\n## Szenario: S\n- Angenommen x\n"],
+  ["Russian", "a feature", "# Функция: Ф\n## Сценарий: С\n- Допустим x\n"],
+];
+
+function writeLocalised(file, Parser, cases) {
+  const out = cases.flatMap(([language, name, input]) =>
+    expected(Parser, [[name, input]], Yadda.localisation[language]).map((c) => ({
+      language,
+      ...c,
+    })),
+  );
   writeFileSync(resolve(here, file), JSON.stringify(out, null, 2) + "\n");
   console.log(`${file}: ${out.length} cases, ${out.filter((c) => c.ok).length} parse`);
 }
 
 write("parser-cases.json", Yadda.parsers.FeatureParser, cases);
 write("markdown-cases.json", Yadda.parsers.MarkdownFeatureParser, markdownCases);
+writeLocalised("localised-cases.json", Yadda.parsers.FeatureParser, localisedCases);
+writeLocalised(
+  "localised-markdown-cases.json",
+  Yadda.parsers.MarkdownFeatureParser,
+  localisedMarkdownCases,
+);

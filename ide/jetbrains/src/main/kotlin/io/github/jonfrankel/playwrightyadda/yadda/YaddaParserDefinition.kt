@@ -16,7 +16,7 @@ import org.jetbrains.plugins.cucumber.psi.GherkinParserDefinition
 class YaddaParserDefinition : ParserDefinition {
   private val gherkin = GherkinParserDefinition()
 
-  override fun createLexer(project: Project?): Lexer = YaddaLexer(gherkin.createLexer(project))
+  override fun createLexer(project: Project?): Lexer = YaddaLexer(gherkin.createLexer(project), YaddaSettings.vocabularyOf(project))
 
   override fun createParser(project: Project?): PsiParser = YaddaParser()
 

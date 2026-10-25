@@ -13,6 +13,7 @@ import io.github.jonfrankel.playwrightyadda.libraries.FeatureTags
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
 import io.github.jonfrankel.playwrightyadda.libraries.enabledLibraries
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaSettings
 import org.jetbrains.plugins.cucumber.psi.GherkinStep
 import org.jetbrains.plugins.cucumber.steps.reference.CucumberStepReference
 
@@ -90,7 +91,8 @@ object LibraryScope {
 
   private fun featureTags(file: PsiFile): FeatureTags =
     CachedValuesManager.getCachedValue(file) {
-      val tags = if (YaddaMarkdown.isFeature(file)) FeatureTags.parseMarkdown(file.text) else FeatureTags.parse(file.text)
-      CachedValueProvider.Result.create(tags, file)
+      val settings = YaddaSettings.of(file.project)
+      val tags = if (YaddaMarkdown.isFeature(file)) FeatureTags.parseMarkdown(file.text, settings.vocabulary) else FeatureTags.parse(file.text, settings.vocabulary)
+      CachedValueProvider.Result.create(tags, file, settings.tracker)
     }
 }

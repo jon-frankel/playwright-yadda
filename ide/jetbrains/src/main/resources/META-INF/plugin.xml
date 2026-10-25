@@ -36,6 +36,10 @@
         <code>library.given(/^…$/, async function () {})</code> into the library the scenario's
         <code>@Libraries</code> enable, in <code>.feature</code> and Markdown features. It replaces the
         Cucumber.js plugin's fix there, which writes a <code>Given(…)</code> call that isn't a Yadda step.</li>
+      <li><b>Other languages:</b> set the language of the project's features (the one passed to
+        <code>defineFeatureSuite({ language })</code>) in Settings | Tools | Playwright Yadda, and
+        <code>Fonctionnalité:</code>, <code>Scénario:</code>, <code>Soit</code> and their kin in Yadda's
+        localisations are read as headings and step keywords.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -58,6 +62,10 @@
     <!-- Gherkin's formatting, with the rows of an Examples table that start with a cell. -->
     <lang.formatter language="Yadda"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaFormattingModelBuilder"/>
+    <!-- The language of the project's features, which sets the words the lexer and Yadda's parser read as headings. -->
+    <projectService serviceImplementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaSettings"/>
+    <projectConfigurable parentId="tools" instance="io.github.jonfrankel.playwrightyadda.yadda.YaddaSettingsConfigurable"
+        id="io.github.jonfrankel.playwrightyadda.settings" displayName="Playwright Yadda"/>
     <!-- A .feature file in a project that depends on playwright-yadda is parsed as Yadda too. -->
     <lang.substitutor language="Gherkin"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaLanguageSubstitutor"/>

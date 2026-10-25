@@ -5,11 +5,17 @@ import junit.framework.TestCase
 
 /** The Kotlin port of Yadda's parser against the real one: `parser-cases.json` is what Yadda said. */
 class YaddaGrammarTest : TestCase() {
-  private class Case(val name: String, val input: String, val ok: Boolean, val line: Int?, val message: String?, val steps: List<List<String>>, val rules: Int, val titles: List<String>)
+  private class Case(val name: String, val input: String, val ok: Boolean, val line: Int?, val message: String?, val steps: List<List<String>>, val rules: Int, val titles: List<String>, val language: String = "")
 
   private val cases: List<Case> by lazy { load("/yadda/parser-cases.json") }
 
   private val markdownCases: List<Case> by lazy { load("/yadda/markdown-cases.json") }
+
+  private val localisedCases: List<Case> by lazy { load("/yadda/localised-cases.json") }
+
+  private val localisedMarkdownCases: List<Case> by lazy { load("/yadda/localised-markdown-cases.json") }
+
+  private fun vocabularyOf(case: Case): Vocabulary = Vocabulary.byName(case.language) ?: error("no vocabulary for ${case.language}")
 
   private fun load(resource: String): List<Case> {
     val json = javaClass.getResourceAsStream(resource)!!.reader().use { JsonParser.parseReader(it) }
@@ -24,7 +30,8 @@ class YaddaGrammarTest : TestCase() {
         case["message"]?.asString,
         if (ok) case["steps"].asJsonArray.map { steps -> steps.asJsonArray.map { step -> step.asString } } else emptyList(),
         if (ok) case["rules"].asInt else 0,
-        if (ok) case["titles"].asJsonArray.map { title -> title.asString } else emptyList(),
+        if (ok) case["titles"].asJsonArray.map { title -> if (title.isJsonNull) "" else title.asString } else emptyList(),
+        case["language"]?.asString.orEmpty(),
       )
     }
   }
@@ -35,17 +42,17 @@ class YaddaGrammarTest : TestCase() {
   }
 
   fun `test every input fails or parses as it does in Yadda, with the same message and line`() {
-    agree(cases, YaddaGrammar::analyze)
+    agree(cases) { YaddaGrammar.analyze(it.input) }
   }
 
   fun `test every Markdown input fails or parses as it does in Yadda, with the same message and line`() {
     assertTrue(markdownCases.size > 60)
-    agree(markdownCases, YaddaGrammar::analyzeMarkdown)
+    agree(markdownCases) { YaddaGrammar.analyzeMarkdown(it.input) }
   }
 
-  private fun agree(cases: List<Case>, analyze: (String) -> YaddaGrammar.Result) {
+  private fun agree(cases: List<Case>, analyze: (Case) -> YaddaGrammar.Result) {
     for (case in cases) {
-      val result = analyze(case.input)
+      val result = analyze(case)
       val issue = result.issue
       if (case.ok) {
         assertNull("${case.name}: Yadda parses it, the port says ${issue?.message}", issue)
@@ -58,12 +65,39 @@ class YaddaGrammarTest : TestCase() {
     }
   }
 
+  fun `test every localised input fails or parses as it does in Yadda, in the language it is written in`() {
+    assertTrue(localisedCases.size > 20)
+    assertEquals(setOf("French", "Spanish", "Russian", "Chinese", "German"), localisedCases.map { it.language }.toSet())
+    assertTrue(localisedCases.any { it.ok } && localisedCases.any { !it.ok })
+    agree(localisedCases) { YaddaGrammar.analyze(it.input, vocabularyOf(it)) }
+  }
+
+  fun `test every localised Markdown input fails or parses as it does in Yadda`() {
+    assertTrue(localisedMarkdownCases.size >= 7)
+    agree(localisedMarkdownCases) { YaddaGrammar.analyzeMarkdown(it.input, vocabularyOf(it)) }
+  }
+
+  fun `test the steps and scenario titles of localised inputs are what Yadda makes of them`() {
+    for (case in localisedCases.filter { it.ok } + localisedMarkdownCases.filter { it.ok }) {
+      val markdown = case in localisedMarkdownCases
+      val result = if (markdown) YaddaGrammar.analyzeMarkdown(case.input, vocabularyOf(case)) else YaddaGrammar.analyze(case.input, vocabularyOf(case))
+      val plain = case.steps.size == 1 && case.rules == 0 && result.examples.isEmpty() &&
+        result.markers.none { it.kind == YaddaGrammar.MarkerKind.BACKGROUND || it.kind == YaddaGrammar.MarkerKind.EXAMPLES }
+      if (plain) assertEquals("${case.language}: ${case.name}", case.steps.single(), result.steps.values.map { it.text })
+      // Yadda's German word lists give no scenario a title, so the titles are only compared where it makes one.
+      if (case.titles.none { it.isEmpty() } && case.rules == 0 && result.examples.isEmpty()) {
+        val titles = result.markers.filter { it.kind == YaddaGrammar.MarkerKind.SCENARIO }.map { it.title }
+        assertEquals("${case.language}: ${case.name}", case.titles, titles)
+      }
+    }
+  }
+
   fun `test the text of each step, fenced blocks included, is what Yadda makes of it`() {
-    assertTrue(compareSteps(cases, YaddaGrammar::analyze) > 15)
+    assertTrue(compareSteps(cases) { YaddaGrammar.analyze(it) } > 15)
   }
 
   fun `test the text of each Markdown step, tables and fences included, is what Yadda makes of it`() {
-    assertTrue(compareSteps(markdownCases, YaddaGrammar::analyzeMarkdown) > 30)
+    assertTrue(compareSteps(markdownCases) { YaddaGrammar.analyzeMarkdown(it) } > 30)
   }
 
   /** Cases of one scenario, which have their steps in the order of the Result's map. Returns how many were compared. */

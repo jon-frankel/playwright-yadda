@@ -80,6 +80,24 @@ class YaddaFeatureFilesTest : BasePlatformTestCase() {
     assertEquals(listOf("store.yadda.feature"), myFixture.findUsages(myFixture.elementAtCaret).map { it.file!!.name })
   }
 
+  fun `test usages of a regex definition include steps in a Yadda feature`() {
+    myFixture.addFileToProject(
+      "storefront.ts",
+      "export const storefrontSteps = createStepLibrary();\nstorefrontSteps.when(/^they remove the (\\w+)\$/, function (item: string) {});",
+    )
+    yadda("@Libraries=storefront\nFeature: Storefront\n  Scenario: Remove\n    When they remove the item")
+    myFixture.addFileToProject(
+      "features/plain.feature",
+      "@Libraries=storefront\nFeature: Plain\n  Scenario: Remove\n    When they remove the item",
+    )
+    myFixture.configureFromExistingVirtualFile(myFixture.findFileInTempDir("storefront.ts")!!)
+    myFixture.editor.caretModel.moveToOffset(myFixture.file.text.indexOf("they remove") + 2)
+    assertEquals(
+      listOf("plain.feature", "store.yadda.feature"),
+      myFixture.findUsages(myFixture.elementAtCaret).map { it.file!!.name }.sorted(),
+    )
+  }
+
   fun `test Cmd+B on a library name goes to its registry property`() {
     project()
     open(yadda(), "storefront", 2)

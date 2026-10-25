@@ -8,18 +8,24 @@ import type {
 } from "./types.js";
 
 /**
- * Creates an English Gherkin-localised step library that natively supports
+ * Creates a Gherkin-localised step library that natively supports
  * Given, When, Then, And, But prefixes with context-binding support.
+ *
+ * The prefixes are English unless `language` is another of Yadda's
+ * localisations (`Yadda.localisation.French`, and so on). A feature suite has to
+ * be told the same language (`defineFeatureSuite({ language })`) to read the
+ * feature files' headings in it.
  */
 export function createStepLibrary(
   dictionary?: Yadda.Dictionary,
   mode: "bound" | "param" = "bound",
+  language: Yadda.Language = Yadda.localisation.English,
 ): Yadda.Library {
   const base =
     mode === "param"
       ? new Yadda.ContextParamLibrary(dictionary)
       : new Yadda.ContextBoundLibrary(dictionary);
-  return Yadda.localisation.English.localise(base as any) as Yadda.Library;
+  return language.localise(base as any) as Yadda.Library;
 }
 
 /**

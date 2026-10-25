@@ -15,12 +15,15 @@ import type {
 } from "./types.js";
 
 /**
- * Parse feature content using Gherkin or Markdown parser
+ * Parse feature content using Gherkin or Markdown parser.
+ *
+ * `language` is the Yadda localisation the feature is written in, English unless given.
  */
 export function parseFeature(
   content: string,
   parserType: "auto" | "gherkin" | "markdown" = "auto",
   filepath?: string,
+  language?: Yadda.Language,
 ): ParsedFeature {
   let resolvedType = parserType;
 
@@ -29,15 +32,18 @@ export function parseFeature(
       const ext = path.extname(filepath).toLowerCase();
       resolvedType = ext === ".md" || ext === ".markdown" ? "markdown" : "gherkin";
     } else {
-      // Auto-detect based on markdown heading syntax
-      resolvedType = /^\s*#\s+Feature:/im.test(content) ? "markdown" : "gherkin";
+      // Auto-detect based on markdown heading syntax, with the language's word for Feature
+      const feature = (language ?? Yadda.localisation.English).translate("feature");
+      resolvedType = new RegExp(`^\\s*#\\s+${feature}:`, "im").test(content)
+        ? "markdown"
+        : "gherkin";
     }
   }
 
   const parser =
     resolvedType === "markdown"
-      ? new Yadda.parsers.MarkdownFeatureParser()
-      : new Yadda.parsers.FeatureParser();
+      ? new Yadda.parsers.MarkdownFeatureParser(language)
+      : new Yadda.parsers.FeatureParser(language);
 
   return parser.parse(content) as ParsedFeature;
 }
@@ -48,9 +54,10 @@ export function parseFeature(
 export function loadFeatureFile(
   filepath: string,
   parserType: "auto" | "gherkin" | "markdown" = "auto",
+  language?: Yadda.Language,
 ): ParsedFeature {
   const content = fs.readFileSync(filepath, "utf8");
-  return parseFeature(content, parserType, filepath);
+  return parseFeature(content, parserType, filepath, language);
 }
 
 /**
@@ -171,7 +178,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends string = string>(
   options: FeatureSuiteOptions<any, any, TCtx, K>,
 ): void {
-  const { features: inputFeatures, parserType = "auto" } = options;
+  const { features: inputFeatures, parserType = "auto", language } = options;
 
   const parsedFeatures: ParsedFeature[] = [];
 
@@ -189,7 +196,7 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
       }
 
       for (const file of files) {
-        parsedFeatures.push(loadFeatureFile(file, parserType));
+        parsedFeatures.push(loadFeatureFile(file, parserType, language));
       }
     }
   }

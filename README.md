@@ -120,11 +120,12 @@ Creates a typed registry manager.
 - `defaultLibraries`: Library keys always included for every scenario (defaults to `['common']`).
 - `inheritance`: `'merge'` (default) or `'override'` (scenario annotations replace feature annotations).
 
-### `createStepLibrary(dictionary?, mode?)`
+### `createStepLibrary(dictionary?, mode?, language?)`
 
-Creates an English Gherkin-localised step library supporting `given`, `when`, `then`, and `define`.
+Creates a Gherkin-localised step library supporting `given`, `when`, `then`, and `define`.
 
 - `mode`: `'bound'` (default, binds context to `this`) or `'param'` (passes context as 1st argument).
+- `language`: One of Yadda's localisations, such as `Yadda.localisation.French` (default `Yadda.localisation.English`). It sets the keywords a step may start with (`Soit`, `Quand`, `Alors`, …); `given`, `when` and `then` stay the method names.
 
 ### `defineFeatureSuite(options)`
 
@@ -134,6 +135,23 @@ Discovers feature files and registers them with Playwright's `test` runner.
 - `registry`: The `LibraryRegistry` or `LibraryRegistryManager`.
 - `features`: Directory path, file path, glob pattern, or pre-parsed feature array.
 - `createContext`: Optional custom factory function to initialize scenario context.
+- `language`: The Yadda localisation the feature files are written in (default `Yadda.localisation.English`). It sets the words read as `Feature:`, `Scenario:`, `Examples:` and so on. Use the same language for the step libraries.
+
+```ts
+import Yadda from "yadda";
+
+export const steps = createStepLibrary(undefined, "bound", Yadda.localisation.French);
+steps.given(/^un panier vide$/, async function () {});
+
+defineFeatureSuite({
+  test,
+  registry,
+  features: path.resolve(__dirname, "../features"),
+  language: Yadda.localisation.French,
+});
+```
+
+The test names stay `Feature: …` and `Scenario: …`. Yadda 3.2 can't build a parser for Dutch (its scenario word is not a valid regular expression), and its German word list gives scenarios no title.
 
 ---
 

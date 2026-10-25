@@ -129,6 +129,15 @@ export interface FeatureSuiteOptions<
   parserType?: "auto" | "gherkin" | "markdown";
 
   /**
+   * Yadda localisation the feature files are written in, for example `Yadda.localisation.French`.
+   * It sets the words the parser reads as `Feature:`, `Scenario:`, `Examples:` and so on, and applies to
+   * the files this suite loads from a path; pre-parsed features are used as they are. The step
+   * libraries need the same language (`createStepLibrary(dictionary, mode, language)`).
+   * @default Yadda.localisation.English
+   */
+  language?: Yadda.Language;
+
+  /**
    * Library keys to include for every scenario by default
    * @default ['common']
    */

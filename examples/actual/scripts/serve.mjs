@@ -21,7 +21,15 @@ const installedMarker = path.join(appDir, ".example-installed");
 
 // Actual pins Yarn 4 through its packageManager field; corepack runs exactly that without installing
 // anything globally.
-const yarnEnv = { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: "0" };
+//
+// Vite 8 warns, once per package, that `__dirname` in Actual's vite.config.mts files would break under
+// `configLoader: 'native'`. Nothing here uses that loader; the warning is about Actual's code at this commit, so it
+// is silenced with the switch Vite documents for it.
+const yarnEnv = {
+  ...process.env,
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: "0",
+  VITE_CONFIG_NATIVE_IGNORE_WARNING: "true",
+};
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: "inherit", env: yarnEnv, ...options });

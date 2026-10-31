@@ -13,6 +13,7 @@ class YaddaSemanticsTest : BasePlatformTestCase() {
   private fun all() = myFixture.enableInspections(
     YaddaParseInspection::class.java,
     YaddaRuleInspection::class.java,
+    YaddaBareRowInspection::class.java,
     YaddaUnusedColumnInspection::class.java,
     CucumberStepInspection::class.java,
     CucumberTableInspection::class.java,
@@ -35,6 +36,22 @@ class YaddaSemanticsTest : BasePlatformTestCase() {
     "${info.severity.name} ${info.description} :: ${myFixture.file.text.substring(info.startOffset, info.endOffset).replace("\n", "\\n")}"
 
   private fun yadda(text: String) = problems("a.yadda.feature", text)
+
+  fun `test a bare table row is a step of its own to Yadda, so it is flagged`() {
+    assertEquals(
+      listOf(
+        "WARNING Yadda reads a row without --- lines around its table as a step of its own :: | 1 | 2 |",
+        "WARNING Yadda reads a row without --- lines around its table as a step of its own :: | a | b |",
+      ),
+      yadda("Feature: F\n  Scenario: S\n    Given a table\n    | a | b |\n    | 1 | 2 |\n").filter { "without --- lines" in it },
+    )
+  }
+
+  fun `test rows between fences, and Examples rows, are not flagged`() {
+    val text = "Feature: F\n  Scenario: S [n]\n    Given a table\n      ---\n      | a | b |\n      | 1 | 2 |\n      ---\n" +
+      "  Where:\n    | n |\n    | 1 |\n"
+    assertEquals(emptyList<String>(), yadda(text).filter { "without --- lines" in it })
+  }
 
   fun `test a feature Yadda accepts has no problems`() {
     assertEquals(emptyList<String>(), yadda("Feature: F\n  Scenario: S\n    Given a\n"))

@@ -158,11 +158,13 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     if (own || delegate.tokenType == null) return
     val type = delegate.tokenType
     val start = delegate.tokenStart
-    // Under Examples a line is a row, even one that starts with a word Gherkin reads as a step keyword.
-    if (examples && type == GherkinTokenTypes.STEP_KEYWORD && onlyBlankBefore(start)) {
+    // Under Examples a line is a row, even one that starts with a word Gherkin reads as a step keyword. A line
+    // that starts with one of Gherkin's headings that Yadda's word list lacks (`Example:`, `Scenarios:`,
+    // `Business Need:`) is a step, or a row under Examples, to Yadda.
+    if (onlyBlankBefore(start) && (examples && type == GherkinTokenTypes.STEP_KEYWORD || isGherkinOnlyHeading(type, start))) {
       var rowEnd = lineEnd(start)
       while (rowEnd > start && buf[rowEnd - 1].isWhitespace()) rowEnd--
-      pieces = cells(start, rowEnd)
+      pieces = if (examples) cells(start, rowEnd) else listOf(Piece(GherkinTokenTypes.TEXT, start, rowEnd))
       pieceIndex = 0
       resumeAt = rowEnd
       return
@@ -193,6 +195,10 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     ownEnd = openEnd
     stage = STAGE_OPEN
   }
+
+  /** Whether [type] at [start] is a heading Gherkin reads and the vocabulary's word list does not have. */
+  private fun isGherkinOnlyHeading(type: IElementType?, start: Int): Boolean =
+    type in HEADING_TOKENS && vocabulary.keywordAt(buf.subSequence(start, lineEnd(start))) == null
 
   /** Whether the rows of an Examples block are what follows [type], which is a token of the delegate's. */
   private fun track(type: IElementType?) {
@@ -409,6 +415,16 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     private val FENCE = Pattern.compile(FENCE_SOURCE)
     private val FENCE_LINES = Pattern.compile("^$FENCE_SOURCE$", Pattern.MULTILINE)
     private val FENCE_LINE = Pattern.compile("""[|┆]?-{3,}.*""")
+
+    // The tokens Gherkin makes of a heading word.
+    private val HEADING_TOKENS = setOf(
+      GherkinTokenTypes.FEATURE_KEYWORD,
+      GherkinTokenTypes.RULE_KEYWORD,
+      GherkinTokenTypes.BACKGROUND_KEYWORD,
+      GherkinTokenTypes.SCENARIO_KEYWORD,
+      GherkinTokenTypes.SCENARIO_OUTLINE_KEYWORD,
+      GherkinTokenTypes.EXAMPLES_KEYWORD,
+    )
 
     // What a tag line can be followed by that ends a table: Gherkin's English headings as well as Yadda's.
     private const val GHERKIN_HEADINGS = "(?:feature|rule|scenario outline|scenario template|scenarios?|background|examples?|where)"

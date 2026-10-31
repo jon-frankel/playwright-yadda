@@ -1,0 +1,8 @@
+<html>
+  <body>
+    Reports a table row (<code>| a | b |</code>) under a step with no <code>---</code> lines around
+    the table. Gherkin attaches such rows to the step above, but Yadda reads each one as a step of
+    its own, so no definition matches it and the scenario fails with an undefined step. Put the rows
+    between two lines of dashes to make them the step's table.
+  </body>
+</html>

@@ -88,6 +88,9 @@
     <localInspection language="Gherkin" shortName="YaddaRule" groupName="Playwright Yadda"
         displayName="Rule whose scenarios are not run" enabledByDefault="true" level="WARNING"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaRuleInspection"/>
+    <localInspection language="Gherkin" shortName="YaddaBareRow" groupName="Playwright Yadda"
+        displayName="Table rows without fences" enabledByDefault="true" level="WARNING"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaBareRowInspection"/>
     <localInspection language="Gherkin" shortName="YaddaUnusedColumn" groupName="Playwright Yadda"
         displayName="Unused examples column" enabledByDefault="true" level="WARNING"
         editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"

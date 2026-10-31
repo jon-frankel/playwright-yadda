@@ -30,6 +30,7 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
       YaddaMarkdownUnusedColumnInspection::class.java,
       YaddaMarkdownUndefinedStepInspection::class.java,
       YaddaExampleRowInspection::class.java,
+      YaddaBareRowInspection::class.java,
     )
     myFixture.configureByText(name, File(example, "ide-playground/$name").readText())
   }
@@ -65,6 +66,17 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
   fun `test rule warns on its line`() {
     open("rule.feature")
     assertEquals(listOf("playwright-yadda doesn't run the scenarios under a Rule :: Rule: Large carts get a discount"), problems().filter { "Rule" in it })
+  }
+
+  fun `test rows with no fences warn, and the same rows between fences do not`() {
+    open("bare-rows.feature")
+    assertEquals(
+      listOf(
+        "Yadda reads a row without --- lines around its table as a step of its own :: | KB-1 | 1   |",
+        "Yadda reads a row without --- lines around its table as a step of its own :: | sku  | qty |",
+      ),
+      problems().filter { "without --- lines" in it },
+    )
   }
 
   fun `test empty scenario is an error on its heading`() {

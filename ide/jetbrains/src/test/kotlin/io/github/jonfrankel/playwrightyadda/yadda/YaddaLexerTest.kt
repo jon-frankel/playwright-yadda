@@ -208,4 +208,56 @@ class YaddaLexerTest : BasePlatformTestCase() {
     val last = all.first { it.start == examples.indexOf("the last step") }
     assertEquals("the lexer is out of the table by the last scenario", 0, last.state and 0xFF000000.toInt())
   }
+
+  /** Headings Gherkin has and Yadda's word list does not, then a row under Where that starts with one. */
+  private val gherkinOnly = """
+    Feature: F
+      Scenario: S
+        Given a step
+        Example: Yadda reads this as a step
+        Scenarios: and this
+        Business Need: and this
+        Then done
+      Where:
+        a | b
+        Example: x | y
+        1 | 2
+      Scenario: T
+        Given more
+        Then more
+  """.trimIndent()
+
+  fun `test a heading only Gherkin has is text, as a step or as a row under Where`() {
+    val all = tokens(gherkinOnly)
+    val headings = all.filter { it.type.endsWith("_KEYWORD") && it.type != GherkinTokenTypes.STEP_KEYWORD.toString() }
+    assertEquals(
+      listOf("Feature", "Scenario", "Where", "Scenario"),
+      headings.map { text(it, gherkinOnly) },
+    )
+    assertEquals(
+      listOf("Example: Yadda reads this as a step", "Scenarios: and this", "Business Need: and this"),
+      typesOf(gherkinOnly, GherkinTokenTypes.TEXT.toString()).filter { it.contains(":") },
+    )
+    assertEquals(
+      listOf("a", "b", "Example: x", "y", "1", "2"),
+      typesOf(gherkinOnly, GherkinTokenTypes.TABLE_CELL.toString()),
+    )
+  }
+
+  fun `test the lines of a Gherkin-only heading are covered and the lexer restarts after them`() {
+    val all = tokens(gherkinOnly)
+    assertEquals(0, all.first().start)
+    assertEquals(gherkinOnly.length, all.last().end)
+    all.zipWithNext { a, b -> assertEquals("gap after '${text(a, gherkinOnly)}'", a.end, b.start) }
+    assertRestartsAt(gherkinOnly, all) { it.state == 0 }
+  }
+
+  fun `test the steps of a scenario include the lines of a Gherkin-only heading`() {
+    val file = myFixture.configureByText("a.yadda.feature", gherkinOnly)
+    val steps = com.intellij.psi.util.PsiTreeUtil.findChildrenOfType(file, org.jetbrains.plugins.cucumber.psi.GherkinStep::class.java)
+    assertEquals(
+      listOf("a step", "Example: Yadda reads this as a step", "Scenarios: and this", "Business Need: and this", "done", "more", "more"),
+      steps.map { it.name },
+    )
+  }
 }

@@ -1,6 +1,6 @@
 # IDE playground
 
-Feature files to open in WebStorm with the Playwright Yadda plugin (0.10.2 or later) installed.
+Feature files to open in WebStorm with the Playwright Yadda plugin (0.15.0 or later) installed.
 
 **Nothing here runs.** The spec reads `../features` only, and several of these files are wrong on purpose.
 Each file says at the top what to expect. A file that should be clean has no markers; a file with a mistake has
@@ -19,6 +19,7 @@ one mistake, since Yadda stops at its first error.
 | `markdown-style.md`      | A Markdown feature: steps as bullets, plain lines and headings, a table, a fenced block, `Where:`, a quote and a comment. Nothing is marked; the run icon is next to `Feature:` and each `Scenario:`, and Cmd+B on a step goes to `steps/orders.ts`. |
 | `markdown-warnings.md`   | Three warnings: a column nothing uses, an undefined step, and a `Rule:`.                                                                                                                                                                             |
 | `markdown-error.md`      | Yadda's error on a short example row, in a Markdown table.                                                                                                                                                                                           |
+| `bare-rows.feature`      | Two warnings on the rows of the first scenario's table, which has no `---` lines: Yadda reads each row as a step of its own. The second scenario has the same rows between fences and no warning.                                                    |
 | `yadda-style.feature`    | Steps with no keyword, `Where:` rows without pipes, an annotated row, a row over two lines. Nothing is marked; Reformat Code changes nothing.                                                                                                        |
 
 In `features/orders.feature`, which does run, the definitions in `steps/orders.ts` insist on their block and use

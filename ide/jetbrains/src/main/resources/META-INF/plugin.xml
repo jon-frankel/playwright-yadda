@@ -40,6 +40,8 @@
         <code>defineFeatureSuite({ language })</code>) in Settings | Tools | Playwright Yadda, and
         <code>Fonctionnalité:</code>, <code>Scénario:</code>, <code>Soit</code> and their kin in Yadda's
         localisations are read as headings and step keywords.</li>
+      <li><b>Rename a step:</b> Shift+F6 on a step renames its definition and every step that runs it,
+        in <code>.feature</code> and Markdown files, keeping the groups of the pattern and what they matched.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
     </ul>
@@ -157,8 +159,11 @@
       <category>Playwright Yadda</category>
       <descriptionDirectoryName>YaddaCreateAllStepsIntention</descriptionDirectoryName>
     </intentionAction>
-    <!-- Rename throws on a step with no keyword; say why it can't be done instead. -->
-    <renameHandler implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaKeywordlessRenameHandler"/>
+    <!-- Shift+F6 on a step renames its definition and every step that runs it. -->
+    <renameHandler implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepRenameHandler"/>
+    <!-- ...and is the only rename handler offered for such a step, so the IDE doesn't ask which to use. -->
+    <applicationService serviceInterface="com.intellij.refactoring.rename.RenameHandlerRegistry"
+        serviceImplementation="io.github.jonfrankel.playwrightyadda.steps.YaddaRenameHandlerRegistry" overrides="true"/>
     <elementDescriptionProvider
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaStepDescriptionProvider"/>
   </extensions>

@@ -1,17 +1,12 @@
 package io.github.jonfrankel.playwrightyadda.yadda
 
-import com.intellij.openapi.actionSystem.CommonDataKeys
-import com.intellij.openapi.actionSystem.impl.SimpleDataContext
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiFile
 import com.intellij.psi.util.PsiTreeUtil
-import com.intellij.refactoring.rename.RenameHandlerRegistry
-import com.intellij.refactoring.util.CommonRefactoringUtil
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import io.github.jonfrankel.playwrightyadda.steps.YaddaCreateAllStepsIntention
 import io.github.jonfrankel.playwrightyadda.steps.YaddaCreateStepIntention
-import io.github.jonfrankel.playwrightyadda.steps.YaddaKeywordlessRenameHandler
 import io.github.jonfrankel.playwrightyadda.steps.YaddaStepCreator
 import org.jetbrains.plugins.cucumber.inspections.CucumberStepInspection
 import org.jetbrains.plugins.cucumber.psi.GherkinStep
@@ -243,35 +238,5 @@ class YaddaCreateStepTest : BasePlatformTestCase() {
   fun `test the intentions have a description`() {
     assertEquals("Create Yadda step definition", YaddaCreateStepIntention().familyName)
     assertEquals("Create Yadda step definition", YaddaCreateAllStepsIntention().familyName)
-  }
-}
-
-/** Rename of a step with no keyword, which the Cucumber plugin fails on. */
-class YaddaKeywordlessRenameTest : BasePlatformTestCase() {
-  private fun stepIn(text: String): GherkinStep {
-    myFixture.addFileToProject("package.json", """{ "devDependencies": { "playwright-yadda": "1" } }""")
-    val file = myFixture.configureByText("a.feature", text)
-    return PsiTreeUtil.findChildOfType(file, GherkinStep::class.java)!!
-  }
-
-  private fun context(step: GherkinStep) = SimpleDataContext.builder().add(CommonDataKeys.PSI_ELEMENT, step).add(CommonDataKeys.PROJECT, project).build()
-
-  fun `test a step with no keyword is explained instead of renamed`() {
-    val step = stepIn("Feature: F\n  Scenario: S\n    the moon is full\n")
-    val handler = RenameHandlerRegistry.getInstance().getRenameHandler(context(step))!!
-    assertTrue(handler.toString(), handler is YaddaKeywordlessRenameHandler)
-    val message = try {
-      handler.invoke(project, null, null, context(step))
-      null
-    } catch (hint: CommonRefactoringUtil.RefactoringErrorHintException) {
-      hint.message
-    }
-    assertEquals(YaddaKeywordlessRenameHandler.MESSAGE, message)
-  }
-
-  fun `test a step with a keyword keeps the Cucumber plugin's rename`() {
-    val step = stepIn("Feature: F\n  Scenario: S\n    Given the moon is full\n")
-    val handler = RenameHandlerRegistry.getInstance().getRenameHandler(context(step))
-    assertFalse(handler.toString(), handler is YaddaKeywordlessRenameHandler)
   }
 }

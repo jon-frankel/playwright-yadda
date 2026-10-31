@@ -79,6 +79,11 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
     )
   }
 
+  fun `test a comment block hides its steps, and triple quotes are a step nobody wrote`() {
+    open("comments-and-quotes.feature")
+    assertEquals(listOf("Undefined step reference: \"\"\" :: \"\"\""), problems())
+  }
+
   fun `test empty scenario is an error on its heading`() {
     open("empty-scenario.feature")
     assertEquals(listOf("Yadda can't parse this: Scenario requires one or more steps :: Scenario: Nothing yet"), problems().filter { "Yadda" in it })

@@ -260,4 +260,133 @@ class YaddaLexerTest : BasePlatformTestCase() {
       steps.map { it.name },
     )
   }
+
+  /** A comment between lines of `#`s, with everything Yadda would otherwise read in it, then a step. */
+  private val commentBlock = """
+    Feature: F
+      Scenario: S
+        Given a step
+        ###
+        Given hidden
+        Scenario: Hidden
+        ---
+        ###
+        # a single line
+        Then done
+        ### a note that opens a block
+        Then hidden too
+        And so is this
+  """.trimIndent() + "\n"
+
+  fun `test lines between lines of hashes are one comment, whatever they say`() {
+    val all = tokens(commentBlock)
+    assertEquals(
+      listOf(
+        "###\n    Given hidden\n    Scenario: Hidden\n    ---\n    ###",
+        "# a single line",
+        // The last block is never closed, so it runs to the end of the text.
+        "### a note that opens a block\n    Then hidden too\n    And so is this\n",
+      ),
+      typesOf(commentBlock, GherkinTokenTypes.COMMENT.toString()),
+    )
+    assertEquals(
+      listOf("Feature", "Scenario"),
+      all.filter { it.type == GherkinTokenTypes.FEATURE_KEYWORD.toString() || it.type == GherkinTokenTypes.SCENARIO_KEYWORD.toString() }.map { text(it, commentBlock) },
+    )
+    assertEquals(listOf("Given", "Then"), typesOf(commentBlock, GherkinTokenTypes.STEP_KEYWORD.toString()))
+    assertEquals(0, all.first().start)
+    assertEquals(commentBlock.length, all.last().end)
+    all.zipWithNext { a, b -> assertEquals("gap after '${text(a, commentBlock)}'", a.end, b.start) }
+  }
+
+  fun `test lexing restarts at every token in the initial state, with comment blocks in the text`() {
+    assertRestartsAt(commentBlock, tokens(commentBlock)) { it.state == 0 }
+  }
+
+  fun `test a line of dashes in a comment does not close the block above it`() {
+    val source = """
+      Feature: F
+        Scenario: S
+          Given a payload
+          ---
+          [1]
+          ###
+          ---
+          ###
+          ---
+          Then done
+    """.trimIndent() + "\n"
+    val all = tokens(source)
+    val fences = all.filter { it.type == GherkinTokenTypes.PYSTRING.toString() }
+    // The fences that count are the first and the last; the dashes in the comment are not one.
+    assertEquals(listOf(source.indexOf("---"), source.lastIndexOf("---")), fences.map { it.start })
+    val content = all.single { it.type == GherkinTokenTypes.PYSTRING_TEXT.toString() }
+    assertTrue(text(content, source), "###" in text(content, source))
+  }
+
+  /** A line of triple quotes is a doc string to Gherkin, and a line of text to Yadda. */
+  private val quotes = """
+    Feature: F
+      Scenario: S
+        Given a step
+        ${'"'}${'"'}${'"'}
+        Then the line above is a step
+        ${'"'}${'"'}${'"'}
+        And so is this one
+  """.trimIndent() + "\n"
+
+  fun `test triple quotes are text, and the lexer carries on after them as if they were any line`() {
+    val all = tokens(quotes)
+    assertTrue(all.none { it.type == GherkinTokenTypes.PYSTRING.toString() || it.type == GherkinTokenTypes.PYSTRING_TEXT.toString() })
+    assertEquals(
+      // After the titles of the feature and the scenario.
+      listOf("a step", "\"\"\"", "the line above is a step", "\"\"\"", "so is this one"),
+      typesOf(quotes, GherkinTokenTypes.TEXT.toString()).drop(2),
+    )
+    assertEquals(listOf("Given", "Then", "And"), typesOf(quotes, GherkinTokenTypes.STEP_KEYWORD.toString()))
+    assertEquals(quotes.length, all.last().end)
+    all.zipWithNext { a, b -> assertEquals("gap after '${text(a, quotes)}'", a.end, b.start) }
+    assertRestartsAt(quotes, all) { it.state == 0 }
+  }
+
+  /**
+   * The editor re-lexes from the last token in the initial state before a change. What a block's opening fence is
+   * depends on what follows it, so no token after the opening fence, up to the closing one, may be in the initial
+   * state: a change anywhere in the block then re-lexes the fence that opens it too.
+   */
+  fun `test only the opening fence of a block is in the initial state, so editing the closing fence re-lexes the opening one`() {
+    val source = """
+      Feature: F
+        Scenario: S
+          Given a table
+          ---
+          | a |
+          ---
+          Given a payload
+          ---
+          [1]
+          ---
+          Given an unclosed block
+          ---
+          text
+    """.trimIndent() + "\n"
+    val all = tokens(source)
+    fun check(open: Int, close: Int?) {
+      val first = all.indexOfFirst { it.start == open }
+      assertEquals("the opening fence at $open is in the initial state", 0, all[first].state)
+      val stop = if (close == null) all.size else all.indexOfFirst { it.start > close }
+      val inside = all.subList(first + 1, stop)
+      assertTrue("tokens inside the block at $open", inside.isNotEmpty())
+      assertEquals(
+        "tokens inside the block at $open that are in the initial state",
+        emptyList<String>(),
+        inside.filter { it.state == 0 }.map { text(it, source) },
+      )
+    }
+    val table = source.indexOf("---")
+    check(table, source.indexOf("---", table + 3))
+    val payload = source.indexOf("---", source.indexOf("a payload"))
+    check(payload, source.indexOf("---", payload + 3))
+    check(source.lastIndexOf("---"), null)
+  }
 }

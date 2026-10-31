@@ -16,7 +16,7 @@ class YaddaFuzzTest : BasePlatformTestCase() {
     "Examples:", "Where:", "where: old", "  Examples: with a title", "Given a step", "when something | pipe", "then it", "And more", "a step with no keyword",
     "| a | b |", "|", "||", "| a ||", "a | b", "a | b |", "1 | 2", "x", "a ┆ b", "┆", "a|b|c", "Given | When", "When | Who",
     "---", "--- json", "-----", "|---|", "┆---", "{\"a\": 1}", "id,name", "@tag", "@a=b", "@Libraries=x, y", "@a @b",
-    "# a comment", "###", "<param>", "Scenario: <x>", "", "", "  ", "\ttabbed | cell",
+    "# a comment", "###", "### a note", "\"\"\"", "\"\"\" json", "<param>", "Scenario: <x>", "", "", "  ", "\ttabbed | cell",
   )
 
   private fun fuzz(seed: Long): String {

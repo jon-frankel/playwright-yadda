@@ -158,10 +158,22 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     if (own || delegate.tokenType == null) return
     val type = delegate.tokenType
     val start = delegate.tokenStart
+    // A line of three or more `#` opens a comment that runs to the next such line, however much is in between.
+    if (type == GherkinTokenTypes.COMMENT && onlyBlankBefore(start) && MULTI_LINE_COMMENT.matcher(buf.subSequence(start, lineEnd(start))).lookingAt()) {
+      val blockEnd = commentBlockEnd(start)
+      pieces = listOf(Piece(GherkinTokenTypes.COMMENT, start, blockEnd))
+      pieceIndex = 0
+      resumeAt = blockEnd
+      return
+    }
     // Under Examples a line is a row, even one that starts with a word Gherkin reads as a step keyword. A line
     // that starts with one of Gherkin's headings that Yadda's word list lacks (`Example:`, `Scenarios:`,
-    // `Business Need:`) is a step, or a row under Examples, to Yadda.
-    if (onlyBlankBefore(start) && (examples && type == GherkinTokenTypes.STEP_KEYWORD || isGherkinOnlyHeading(type, start))) {
+    // `Business Need:`) is a step, or a row under Examples, to Yadda. So is a line of `"""`, which is Gherkin's
+    // doc string and nothing to Yadda; left to the delegate it would read the lines up to the next one as text of
+    // a string, and it restarts badly.
+    if (onlyBlankBefore(start) &&
+      (examples && type == GherkinTokenTypes.STEP_KEYWORD || type == GherkinTokenTypes.PYSTRING || isGherkinOnlyHeading(type, start))
+    ) {
       var rowEnd = lineEnd(start)
       while (rowEnd > start && buf[rowEnd - 1].isWhitespace()) rowEnd--
       pieces = if (examples) cells(start, rowEnd) else listOf(Piece(GherkinTokenTypes.TEXT, start, rowEnd))
@@ -220,13 +232,30 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
    */
   private fun tagsLeaveExamples(tagStart: Int): Boolean {
     var from = lineStart(tagStart)
+    var comment = false
     while (from < end) {
       val to = lineEnd(from)
       val line = buf.subSequence(from, to).trim()
-      if (line.isNotEmpty() && line[0] != '@' && line[0] != '#') return headingLine.matcher(line).find()
       from = to + 1
+      if (MULTI_LINE_COMMENT.matcher(line).lookingAt()) {
+        comment = !comment
+        continue
+      }
+      if (comment || line.isEmpty() || line[0] == '@' || line[0] == '#') continue
+      return headingLine.matcher(line).find()
     }
     return true
+  }
+
+  /** The end of the comment that the line of `#`s at [start] opens: the end of the next such line, or of the text. */
+  private fun commentBlockEnd(start: Int): Int {
+    var from = lineEnd(start) + 1
+    while (from < end) {
+      val to = lineEnd(from)
+      if (MULTI_LINE_COMMENT.matcher(buf.subSequence(from, to)).lookingAt()) return to
+      from = to + 1
+    }
+    return end
   }
 
   /** Cuts the line of text the delegate found at [start] into the tokens Gherkin would have made of it. */
@@ -354,13 +383,24 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     return FENCE.matcher(buf.subSequence(lineStart, lineEnd(tokenStart))).matches()
   }
 
-  /** The first fence line at or after [from] (a line start): its start and end offsets. */
+  /**
+   * The first fence line at or after [from] (a line start): its start and end offsets. Yadda skips a comment
+   * before it looks at what a line is, so a line of dashes inside a comment is not a fence.
+   */
   private fun findFence(from: Int): Pair<Int, Int>? {
-    if (from >= end) return null
-    val matcher = FENCE_LINES.matcher(buf)
-    matcher.region(from, end)
-    matcher.useAnchoringBounds(false)
-    return if (matcher.find()) matcher.start() to matcher.end() else null
+    var at = from
+    var comment = false
+    while (at < end) {
+      val to = lineEnd(at)
+      val line = buf.subSequence(at, to).trimEnd('\r')
+      when {
+        MULTI_LINE_COMMENT.matcher(line).lookingAt() -> comment = !comment
+        comment || SINGLE_LINE_COMMENT.matcher(line).lookingAt() -> {}
+        FENCE.matcher(line).matches() -> return at to to
+      }
+      at = to + 1
+    }
+    return null
   }
 
   /**
@@ -374,8 +414,18 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     return findFence(if (onFenceLine) lineStart else minOf(lineEnd(offset) + 1, end))
   }
 
-  private fun isTable(from: Int, to: Int): Boolean =
-    buf.subSequence(from, to).lineSequence().filter { it.isNotBlank() }.all { it.trimStart().startsWith("|") }
+  /** Whether the lines between [from] and [to], not counting blanks and comments, are all rows. */
+  private fun isTable(from: Int, to: Int): Boolean {
+    var comment = false
+    for (line in buf.subSequence(from, to).lineSequence()) {
+      when {
+        MULTI_LINE_COMMENT.matcher(line).lookingAt() -> comment = !comment
+        comment || line.isBlank() || SINGLE_LINE_COMMENT.matcher(line).lookingAt() -> {}
+        !line.trimStart().startsWith("|") -> return false
+      }
+    }
+    return true
+  }
 
   private fun lineStart(offset: Int): Int {
     var i = offset
@@ -413,7 +463,9 @@ class YaddaLexer(private val delegate: Lexer, private val vocabulary: Vocabulary
     // Yadda's own pattern is /^\s*[|┆]?-{3,}/, which also takes a trailing remark such as `--- json`.
     private const val FENCE_SOURCE = """[ \t]*[|┆]?-{3,}.*"""
     private val FENCE = Pattern.compile(FENCE_SOURCE)
-    private val FENCE_LINES = Pattern.compile("^$FENCE_SOURCE$", Pattern.MULTILINE)
+    // Yadda's own, /^\s*#{3,}/ and /^\s*#/: a line of three `#`s opens or closes a comment, and any other `#` line is one.
+    private val MULTI_LINE_COMMENT = Pattern.compile("\\s*#{3,}")
+    private val SINGLE_LINE_COMMENT = Pattern.compile("\\s*#")
     private val FENCE_LINE = Pattern.compile("""[|┆]?-{3,}.*""")
 
     // The tokens Gherkin makes of a heading word.

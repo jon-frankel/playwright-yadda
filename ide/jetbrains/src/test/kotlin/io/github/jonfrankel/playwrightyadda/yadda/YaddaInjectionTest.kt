@@ -82,9 +82,10 @@ class YaddaInjectionTest : BasePlatformTestCase() {
     assertEquals(emptyList<String>(), injected())
   }
 
-  fun `test a Gherkin doc string in a Yadda file is left to Gherkin`() {
+  // Triple quotes mean nothing to Yadda: their lines are steps, so there is no block to inject into.
+  fun `test a Gherkin doc string in a Yadda file is text, so nothing is injected`() {
     yadda("      \"\"\"\n      [1]\n      \"\"\"")
-    assertEquals(emptyList<String>(), injected())
+    assertEquals(emptyList<GherkinPystring>(), PsiTreeUtil.findChildrenOfType(myFixture.file, GherkinPystring::class.java).toList())
   }
 
   fun `test a mistake in the injected JSON is reported in the feature`() {

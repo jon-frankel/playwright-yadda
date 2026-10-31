@@ -64,6 +64,8 @@
     <!-- Gherkin's formatting, with the rows of an Examples table that start with a cell. -->
     <lang.formatter language="Yadda"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaFormattingModelBuilder"/>
+    <!-- Moves a JSON, CSV or text block with its step, which the formatter leaves alone. -->
+    <postFormatProcessor implementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaFenceIndentProcessor"/>
     <!-- The language of the project's features, which sets the words the lexer and Yadda's parser read as headings. -->
     <projectService serviceImplementation="io.github.jonfrankel.playwrightyadda.yadda.YaddaSettings"/>
     <projectConfigurable parentId="tools" instance="io.github.jonfrankel.playwrightyadda.yadda.YaddaSettingsConfigurable"

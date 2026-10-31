@@ -1,0 +1,48 @@
+name: Validate Main
+
+# After a merge into main: static analysis and every test suite, all in parallel. Each is a reusable
+# workflow, so pr-check.yml runs the same ones for a pull request.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Every merge gets its own run, so a newer push doesn't cancel the one still validating the previous merge.
+concurrency:
+  group: validate-main
+  cancel-in-progress: false
+
+jobs:
+  static-analysis:
+    uses: ./.github/workflows/static-analysis.yml
+
+  unit-tests:
+    uses: ./.github/workflows/unit-tests.yml
+
+  example-basic:
+    uses: ./.github/workflows/example-tests.yml
+    with:
+      example: basic
+
+  example-wordpress:
+    uses: ./.github/workflows/example-tests.yml
+    with:
+      example: wordpress
+      browsers: chromium
+      timeout-minutes: 20
+
+  example-actual:
+    uses: ./.github/workflows/example-tests.yml
+    with:
+      example: actual
+      browsers: chromium
+      # The first run fetches and installs Actual (a few minutes, several hundred MB); later runs restore it.
+      cache-path: .cache
+      cache-key-file: scripts/serve.mjs
+      timeout-minutes: 40
+
+  jetbrains-plugin:
+    uses: ./.github/workflows/jetbrains-plugin-tests.yml

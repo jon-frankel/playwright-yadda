@@ -30,11 +30,24 @@ object YaddaGrammar {
 
     /** [name] with the placeholders of the scenario's first examples row filled in, as Yadda does for each row. */
     fun expanded(name: String): String = scope.first?.let { substitute(it, name) } ?: name
+
+    /**
+     * [text] with the placeholders filled in for each examples row, in row order; just [text] for a step with no
+     * examples. Capped at [MAX_ROWS], so a table of thousands of rows doesn't cost a match per row.
+     */
+    fun expandedRows(text: String): List<String> =
+      if (scope.rows.isEmpty()) listOf(text) else scope.rows.take(MAX_ROWS).map { substitute(it, text) }
   }
+
+  /** The most examples rows a step is expanded for. */
+  const val MAX_ROWS = 200
 
   /** The examples of the scenario a step belongs to, shared by its steps. */
   class Scope(val title: String = "") {
     var first: Map<String, List<String>>? = null
+
+    /** Every row of the scenario's examples, in the order read. */
+    val rows = mutableListOf<Map<String, List<String>>>()
     val steps = mutableListOf<Step>()
   }
 
@@ -518,6 +531,7 @@ object YaddaGrammar {
 
     private fun addMetaFields(line: Int) {
       val fields = rows.last()
+      scope.rows.add(fields)
       if (scope.first == null) scope.first = fields
       for (heading in headings) {
         fields["${heading.text}.index"] = mutableListOf(rows.size.toString())

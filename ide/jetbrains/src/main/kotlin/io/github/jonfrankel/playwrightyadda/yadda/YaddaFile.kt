@@ -32,6 +32,12 @@ class YaddaFile(viewProvider: FileViewProvider) : PsiFileBase(viewProvider, Yadd
       CachedValueProvider.Result.create(YaddaGrammar.analyze(text, settings.vocabulary), this, settings.tracker)
     }
 
+  /** What Yadda makes of [step], a step of this file. */
+  fun yaddaStep(step: PsiElement): YaddaGrammar.Step? {
+    val line = viewProvider.document?.getLineNumber(step.textOffset)?.plus(1) ?: return null
+    return grammar.steps[line]
+  }
+
   /** The text of the 1-based [line], without its indentation and trailing space. */
   fun lineRange(line: Int): TextRange = FeatureLines.range(this, line)
 

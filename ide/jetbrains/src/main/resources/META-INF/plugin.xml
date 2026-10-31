@@ -90,6 +90,9 @@
         displayName="Unused examples column" enabledByDefault="true" level="WARNING"
         editorAttributes="NOT_USED_ELEMENT_ATTRIBUTES"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaUnusedColumnInspection"/>
+    <localInspection language="Gherkin" shortName="YaddaExampleRow" groupName="Playwright Yadda"
+        displayName="Outline step with no definition for an examples row" enabledByDefault="true" level="WARNING"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaExampleRowInspection"/>
     <!-- The same checks for a Markdown feature (a .md file in a playwright-yadda project with a Feature: heading). -->
     <localInspection language="Markdown" shortName="YaddaMarkdownParse" groupName="Playwright Yadda"
         displayName="Markdown feature Yadda can't parse" enabledByDefault="true" level="ERROR"
@@ -103,6 +106,9 @@
     <localInspection language="Markdown" shortName="YaddaMarkdownUndefinedStep" groupName="Playwright Yadda"
         displayName="Undefined step in a Markdown feature" enabledByDefault="true" level="WARNING"
         implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdownUndefinedStepInspection"/>
+    <localInspection language="Markdown" shortName="YaddaMarkdownExampleRow" groupName="Playwright Yadda"
+        displayName="Outline step in a Markdown feature with no definition for an examples row" enabledByDefault="true" level="WARNING"
+        implementationClass="io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdownExampleRowInspection"/>
     <!-- Cmd+B on a step of a Markdown feature, and the steps that run a definition. -->
     <gotoDeclarationHandler
         implementation="io.github.jonfrankel.playwrightyadda.steps.YaddaMarkdownStepGotoDeclarationHandler"/>

@@ -5,6 +5,7 @@ import com.intellij.openapi.module.Module
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
+import io.github.jonfrankel.playwrightyadda.steps.YaddaStepRows
 import org.jetbrains.plugins.cucumber.BDDFrameworkType
 import org.jetbrains.plugins.cucumber.OptionalStepDefinitionExtensionPoint
 import org.jetbrains.plugins.cucumber.StepDefinitionCreator
@@ -23,8 +24,10 @@ import org.jetbrains.plugins.cucumber.steps.AbstractStepDefinition
  * the definitions come from the Cucumber.js plugin as before: this one has none of its own, and
  * takes no part in creating step definitions.
  *
- * An outline step is read for the first row of its examples. Yadda reads it for every row, so a
- * definition that only some rows match still resolves.
+ * An outline step is offered for one row of its examples, since the Cucumber plugin takes one text per
+ * step: the first row that a definition matches, else the first row (see [YaddaStepRows.representative]).
+ * Yadda matches every row, so a definition that only some rows match still resolves, and a step that no row
+ * matches is undefined. Cmd+B sees the definitions of every row, and the row inspection the rows that miss.
  */
 class YaddaCucumberExtension : AbstractCucumberExtension(), OptionalStepDefinitionExtensionPoint {
   override fun participateInStepDefinitionCreation(file: PsiElement): Boolean = false
@@ -53,12 +56,8 @@ class YaddaCucumberExtension : AbstractCucumberExtension(), OptionalStepDefiniti
   override fun getStepName(step: PsiElement): String? {
     if (step !is GherkinStep) return null
     val file = step.containingFile as? YaddaFile ?: return null
-    val line = file.viewProvider.document?.getLineNumber(step.textOffset)?.plus(1) ?: return null
-    val yadda = file.grammar.steps[line] ?: return null
-    // A word like `With` or `Soit` that Gherkin doesn't know starts a step it reads as having no keyword, so it is part of the name.
-    val expanded = yadda.expanded(step.name)
-    val name = if (step.keyword == null) YaddaSettings.vocabularyOf(step.project).withoutStepKeyword(expanded) else expanded
-    val text = yadda.block?.let { "$name\n$it" } ?: name
+    val yadda = file.yaddaStep(step) ?: return null
+    val text = YaddaStepRows.representative(yadda, YaddaSettings.vocabularyOf(step.project)) { YaddaStepRows.loadDefinitions(step) }
     return text.takeIf { it != step.substitutedName }
   }
 }

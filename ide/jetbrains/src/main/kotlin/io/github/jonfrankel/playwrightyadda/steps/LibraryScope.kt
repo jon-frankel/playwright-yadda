@@ -12,6 +12,7 @@ import com.intellij.psi.util.CachedValuesManager
 import io.github.jonfrankel.playwrightyadda.libraries.FeatureTags
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
 import io.github.jonfrankel.playwrightyadda.libraries.enabledLibraries
+import io.github.jonfrankel.playwrightyadda.yadda.YaddaFile
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaMarkdown
 import io.github.jonfrankel.playwrightyadda.yadda.YaddaSettings
 import org.jetbrains.plugins.cucumber.psi.GherkinStep
@@ -68,13 +69,28 @@ object LibraryScope {
 
   class Candidates(val definitions: List<PsiElement>, val narrowed: Boolean)
 
-  private fun definitionsOf(step: GherkinStep): List<PsiElement> =
-    step.references
-      .filterIsInstance<CucumberStepReference>()
-      .firstOrNull()
-      ?.multiResolve(false)
-      ?.mapNotNull { it.element }
-      .orEmpty()
+  /**
+   * What the Cucumber plugin resolves [step] to, and for an outline step the definitions of the other examples
+   * rows too: the plugin takes one text per step, and Yadda runs every row.
+   */
+  private fun definitionsOf(step: GherkinStep): List<PsiElement> {
+    val resolved =
+      step.references
+        .filterIsInstance<CucumberStepReference>()
+        .firstOrNull()
+        ?.multiResolve(false)
+        ?.mapNotNull { it.element }
+        .orEmpty()
+    return (resolved + otherRowDefinitions(step)).distinct()
+  }
+
+  private fun otherRowDefinitions(step: GherkinStep): List<PsiElement> {
+    val file = step.containingFile as? YaddaFile ?: return emptyList()
+    val yadda = file.yaddaStep(step) ?: return emptyList()
+    if (yadda.expandedRows(yadda.text).size < 2) return emptyList()
+    val loaded = YaddaStepRows.loadDefinitions(step)
+    return YaddaStepRows.definitions(loaded, yadda, YaddaSettings.vocabularyOf(step.project)).mapNotNull { it.element }
+  }
 
   private fun narrowed(step: PsiElement, definitions: List<PsiElement>): List<PsiElement>? {
     if (definitions.size < 2) return null

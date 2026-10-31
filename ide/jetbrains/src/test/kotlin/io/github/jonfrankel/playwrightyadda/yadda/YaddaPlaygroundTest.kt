@@ -29,6 +29,7 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
       YaddaMarkdownRuleInspection::class.java,
       YaddaMarkdownUnusedColumnInspection::class.java,
       YaddaMarkdownUndefinedStepInspection::class.java,
+      YaddaExampleRowInspection::class.java,
     )
     myFixture.configureByText(name, File(example, "ide-playground/$name").readText())
   }
@@ -51,6 +52,14 @@ class YaddaPlaygroundTest : BasePlatformTestCase() {
   fun `test unused-column greys price and only price`() {
     open("unused-column.feature")
     assertEquals(listOf("Nothing in the scenario uses this column :: price"), problems().filter { "column" in it })
+  }
+
+  fun `test an examples row no definition fits is a warning on the step, not an undefined step`() {
+    open("outline-rows.feature")
+    assertEquals(
+      listOf("No step definition matches \"the order total is many\", which Yadda runs for example row 2 :: Then the order total is [total]"),
+      problems(),
+    )
   }
 
   fun `test rule warns on its line`() {

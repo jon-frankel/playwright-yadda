@@ -27,9 +27,13 @@ Feature: Rules
     And the user saves the rule
     And the user opens the "Capital One Checking" account
     And the user adds a debit of "100.00" paid to "Ikea"
-    Then the first transaction shows payee "Ikea", notes "food / entertainment", category "Split" and debit "100.00"
-    And the second transaction shows payee "Ikea", category "Entertainment" and debit "90.00"
-    And the third transaction shows payee "Ikea", category "Food" and debit "10.00"
+    Then the transaction list starts with:
+      ---
+      | payee | notes                | category      | debit  |
+      | Ikea  | food / entertainment | Split         | 100.00 |
+      | Ikea  |                      | Entertainment | 90.00  |
+      | Ikea  |                      | Food          | 10.00  |
+      ---
 
   Scenario: A rule has a context menu
     Given the demo budget is open

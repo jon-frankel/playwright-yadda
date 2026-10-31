@@ -1,6 +1,7 @@
 import { expect, type Locator } from "@playwright/test";
 import { createStepLibrary } from "playwright-yadda";
 import type { ActualContext } from "./context.js";
+import { parseTable, requireBlock } from "./support/blocks.js";
 import { indexOfOrdinal } from "./support/ordinal.js";
 
 export const transactionSteps = createStepLibrary();
@@ -40,6 +41,29 @@ transactionSteps.then(
       .nth(indexOfOrdinal(ordinal));
     for (const [, column, expected] of checks.matchAll(/(\w+) "([^"]*)"/g)) {
       await expect(row.getByTestId(column!)).toHaveText(expected!);
+    }
+  },
+);
+
+/**
+ * The same check for several rows at once, as a table under the step. Each row of the table is checked against that
+ * row of the list, top first, and a blank cell isn't checked:
+ *
+ *     Then the transaction list starts with:
+ *       ---
+ *       | payee | category |
+ *       | Ikea  | Split    |
+ *       ---
+ */
+transactionSteps.then(
+  /^the transaction list starts with:(?:\n([\s\S]+))?$/,
+  async function (this: ActualContext, block = "") {
+    const expected = parseTable(requireBlock(block, "the transaction list starts with:"));
+    const rows = this.page.getByTestId("transaction-table").getByTestId("row");
+    for (const [index, cells] of expected.entries()) {
+      for (const [column, text] of Object.entries(cells)) {
+        if (text) await expect(rows.nth(index).getByTestId(column)).toHaveText(text);
+      }
     }
   },
 );

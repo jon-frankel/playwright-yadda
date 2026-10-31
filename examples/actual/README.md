@@ -47,17 +47,17 @@ Lines, pilot areas only. These are not a like-for-like comparison yet: the origi
 |                                      | Original | Here |
 | ------------------------------------ | -------- | ---- |
 | tests / scenarios                    | 7        | 7    |
-| spec and feature lines               | 218      | 66   |
+| spec and feature lines               | 218      | 70   |
 | page-object lines (3 files)          | 245      | n/a  |
-| step and support lines               | n/a      | 287  |
-| step definitions                     | n/a      | 16   |
-| distinct step texts used by 47 steps | n/a      | 31   |
+| step and support lines               | n/a      | 334  |
+| step definitions                     | n/a      | 17   |
+| distinct step texts used by 45 steps | n/a      | 29   |
 
 ## Findings
 
 Found while porting, about playwright-yadda 0.0.10 and the Yadda parser under it. Yadda's feature syntax is close to Gherkin but not the same, and the differences fail quietly:
 
-1. **Tables need `---` fences, and WebStorm rejects them.** Yadda joins a block into one step only between two `---` lines. Gherkin's bare `| … |` rows are not recognised: each becomes its own step, so no step can receive a table, and the failure is just `Undefined Step`. With the fences a step does receive the whole table at run time, but WebStorm's Gherkin parser underlines every fence as "Unexpected element" and reports the step as an "Undefined step reference". So this example asserts one line at a time (`the first transaction shows payee "Ikea" and debit "100.00"`), and how to support tables properly is still open.
+1. **Tables need `---` fences.** Yadda joins a block into one step only between two `---` lines. Gherkin's bare `| … |` rows are not recognised: each becomes its own step, so no step can receive a table, and the failure is just `Undefined Step`. With the fences a step receives the whole table at run time as one string, which the step parses itself (`steps/support/blocks.ts`). WebStorm's own Gherkin parser underlines every fence as "Unexpected element", so the `ide/jetbrains` plugin parses these files as Yadda instead. `rules.feature` uses a table for the three transaction rows of the split rule, and the one-line `the first transaction shows …` step for the single-row case.
 2. **Scenario Outline placeholders are `[name]`, not `<name>`.** Yadda expands `Examples:` itself, at parse time, but only for `[name]`. With Gherkin's `<name>` it still produces one scenario per row, with the placeholder left in the steps and identical titles, and nothing says so. Not used in this example yet.
 3. **`given`, `when` and `then` are keyword-sensitive.** A step registered with `given` isn't found when a scenario writes it as `When` (`And` and `But` do match). Cucumber ignores the keyword. `define` isn't keyword-sensitive, but WebStorm's Cucumber support doesn't index it, so the IDE navigation in `ide/jetbrains` doesn't see it either.
 4. **`Background:` works.** Yadda copies its steps into the start of every scenario before playwright-yadda sees them. Not used in this example yet.

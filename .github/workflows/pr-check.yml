@@ -73,6 +73,7 @@ jobs:
     uses: ./.github/workflows/example-tests.yml
     with:
       example: basic
+      browsers: chromium
 
   example-wordpress:
     needs: changes

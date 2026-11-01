@@ -163,6 +163,21 @@ class YaddaCreateStepTest : BasePlatformTestCase() {
     )
   }
 
+  fun `test the fix is offered with the caret at the end of the step's line`() {
+    project()
+    open("features/a.feature", feature, "the moon is full")
+    myFixture.editor.caretModel.moveToOffset(myFixture.editor.document.getLineEndOffset(3))
+    create("Create Yadda step definition")
+    assertTrue(text("storefront.ts"), text("storefront.ts").contains("storefrontSteps.given(\"the moon is full\""))
+  }
+
+  fun `test the fix is not offered on the line after a step`() {
+    project()
+    open("features/a.feature", "@Libraries=storefront\nFeature: F\n  Scenario: S\n    Given the moon is full\n\n    When they remove the item\n", "the moon")
+    myFixture.editor.caretModel.moveToOffset(myFixture.editor.document.getLineStartOffset(4))
+    assertFalse(intentions().toString(), "Create Yadda step definition" in intentions())
+  }
+
   fun `test several candidates are offered the scenario's own library first`() {
     project()
     var offered: List<String> = emptyList()

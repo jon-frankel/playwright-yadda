@@ -69,8 +69,14 @@ object YaddaStepCreator {
     if (editor != null) popup.showInBestPositionFor(editor) else popup.showCenteredInCurrentWindow(project)
   }
 
-  /** The step at [offset] of [file] if it has no definition and a skeleton can be written for it. */
-  fun undefinedAt(file: PsiFile, offset: Int): Undefined? {
+  /**
+   * The step at [offset] of [file] if it has no definition and a skeleton can be written for it. A caret at the
+   * end of the step's line is on the line break, not on the step, so the character before it is tried too.
+   */
+  fun undefinedAt(file: PsiFile, offset: Int): Undefined? =
+    undefinedExactlyAt(file, offset) ?: if (offset > 0) undefinedExactlyAt(file, offset - 1) else null
+
+  private fun undefinedExactlyAt(file: PsiFile, offset: Int): Undefined? {
     if (file is YaddaFile) {
       val step = file.findElementAt(offset)?.let { PsiTreeUtil.getParentOfType(it, GherkinStep::class.java, false) } ?: return null
       return undefinedOf(file, step)

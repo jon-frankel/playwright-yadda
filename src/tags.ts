@@ -42,8 +42,13 @@ function tagsOf(annotations: AnnotationRecord | undefined): Map<string, string |
   const tags = new Map<string, string | true>();
   if (!annotations || typeof annotations !== "object") return tags;
   for (const [rawKey, rawValue] of Object.entries(annotations)) {
-    if (rawValue === false || rawValue === undefined) continue;
+    if (rawValue === undefined) continue;
     const key = rawKey.trim().toLowerCase();
+    // `false` is kept, so a scenario can switch off what its feature switched on
+    if (rawValue === false) {
+      if (key) tags.set(key, "false");
+      continue;
+    }
     const colon = key.indexOf(":");
     if (rawValue === true && colon > 0) {
       tags.set(key.slice(0, colon), key.slice(colon + 1).trim() || true);
@@ -64,7 +69,7 @@ function toPlaywrightTags(tags: Map<string, string | true>): string[] {
 }
 
 const isSet = (value: string | true | undefined): value is string | true =>
-  value !== undefined && value !== "false";
+  value !== undefined && !(typeof value === "string" && value.toLowerCase() === "false");
 
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
@@ -82,7 +87,7 @@ function readNumber(
   report: Report,
 ): number | undefined {
   const value = tags.get(name);
-  if (value === undefined) return undefined;
+  if (!isSet(value)) return undefined;
   const number = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
   if (!Number.isInteger(number)) {
     report(`ignoring @${name}, which needs a whole number, e.g. @${name}:2 (got ${String(value)})`);
@@ -93,7 +98,7 @@ function readNumber(
 
 function readMode(tags: Map<string, string | true>, report: Report): TestMode | undefined {
   const value = tags.get("mode");
-  if (value === undefined) return undefined;
+  if (!isSet(value)) return undefined;
   const mode = typeof value === "string" ? value.toLowerCase() : "";
   if (!(TEST_MODES as readonly string[]).includes(mode)) {
     report(`ignoring @mode, which needs one of ${TEST_MODES.join(", ")} (got ${String(value)})`);
@@ -137,8 +142,11 @@ export function resolveTags(
     report("ignoring @mode on a scenario: it applies to a whole feature, so put it on the feature");
     delete own.mode;
   }
-  // ignored, so it is not passed to Playwright as a tag either: it would replace the feature's
-  scenarioTags.delete("mode");
+  // A scenario tag that is ignored is not passed to Playwright either: it would replace the
+  // feature's, which still applies
+  for (const name of ["timeout", "retries", "mode"] as const) {
+    if (own[name] === undefined) scenarioTags.delete(name);
+  }
   const merged = new Map([...featureTags, ...scenarioTags]);
 
   // `@skip`, `@pending` and `@fixme` all skip a scenario; `@fixme` only differs in how Playwright reports it
@@ -157,4 +165,9 @@ export function resolveTags(
   if (skip) scenario.skip = skip;
 
   return { scenario, feature, own };
+}
+
+/** For tests: forget the problems already warned about, so each test sees its own warnings */
+export function resetWarningsForTests(): void {
+  warned.clear();
 }

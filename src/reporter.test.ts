@@ -125,6 +125,28 @@ describe("YaddaReporter", () => {
     expect(stdout()).toContain("2 failed, 1 flaky, 1 passed");
   });
 
+  it("treats a scenario expected to fail as ok when it fails, and as failed when it passes", () => {
+    const reporter = new YaddaReporter();
+    const expectedFail = Object.assign(makeTest("Fails as expected"), { expectedStatus: "failed" });
+    const unexpectedPass = Object.assign(makeTest("Passes unexpectedly"), {
+      expectedStatus: "failed",
+    });
+
+    reporter.onTestEnd(
+      expectedFail,
+      makeResult("failed", 0, [makeStep("Given a bad step", boom)], [boom]),
+    );
+    reporter.onTestEnd(unexpectedPass, makeResult("passed", 0, [makeStep("Given a good step")]));
+    const printed = stdout();
+    expect(printed).toMatch(/✓.*Fails as expected/);
+    expect(printed).not.toContain("Error: boom\n    at step");
+    expect(printed).toMatch(/✗.*Passes unexpectedly/);
+
+    out = [];
+    reporter.onEnd({ status: "failed" } as any);
+    expect(stdout()).toContain("1 failed, 1 passed");
+  });
+
   it("marks the step that was running when the test timed out with ✗", () => {
     const reporter = new YaddaReporter();
     const timeout: TestError = { message: "Test timeout of 1000ms exceeded." };

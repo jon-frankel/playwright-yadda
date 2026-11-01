@@ -111,18 +111,18 @@ pnpm playwright test
 
 ### 5. Special tags
 
-Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest, so `@skip=false` on a scenario runs it although its feature is `@skip`. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`. For the tags in this table, the last two mean the same.
+Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest, so `@skip=false` on a scenario runs it although its feature is `@skip`. `@timeout`, `@retries` and `@mode` take no `=false`: use `@timeout:0` or `@retries:0` to override a feature's value. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`. For the tags in this table, the last two mean the same.
 
-| Tag                                               | What it does                                                                                                                                         |
-| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@only`                                           | `test.only`                                                                                                                                          |
-| `@skip`, `@pending`                               | `test.skip`. The two are aliases. They win over `@fixme` and `@only`.                                                                                |
-| `@fixme`                                          | `test.fixme`: skipped, and reported as a fixme. Wins over `@only`.                                                                                   |
-| `@fail`                                           | `test.fail()`: the scenario is expected to fail                                                                                                      |
-| `@slow`                                           | `test.slow()`: triples the timeout, including the scenario's `@timeout`                                                                              |
-| `@timeout:N`                                      | `N` milliseconds for the scenario and its fixtures and hooks: `test.setTimeout(N)`. On a feature: `test.describe.configure({ timeout: N })`.         |
-| `@retries:N`                                      | `test.describe.configure({ retries: N })`, on the feature or on the scenario                                                                         |
-| `@mode:parallel`, `@mode:serial`, `@mode:default` | `test.describe.configure({ mode })`. On a feature only: a mode is a setting of a group of tests, and a scenario's `@mode` is ignored with a warning. |
+| Tag                                               | What it does                                                                                                                                                                                   |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@only`                                           | `test.only`                                                                                                                                                                                    |
+| `@skip`, `@pending`                               | `test.skip`. The two are aliases. They win over `@fixme` and `@only`.                                                                                                                          |
+| `@fixme`                                          | `test.fixme`: skipped, and reported as a fixme. Wins over `@only`.                                                                                                                             |
+| `@fail`                                           | `test.fail()`: the scenario is expected to fail                                                                                                                                                |
+| `@slow`                                           | `test.slow()`: triples the timeout, including the scenario's `@timeout`                                                                                                                        |
+| `@timeout:N`                                      | `N` milliseconds for the scenario and its fixtures and hooks, the same as `test.setTimeout(N)`: `test.describe.configure({ timeout: N })`, on the scenario's own describe or on the feature's. |
+| `@retries:N`                                      | `test.describe.configure({ retries: N })`, on the feature or on the scenario                                                                                                                   |
+| `@mode:parallel`, `@mode:serial`, `@mode:default` | `test.describe.configure({ mode })`. On a feature only: a mode is a setting of a group of tests, and a scenario's `@mode` is ignored with a warning.                                           |
 
 ```gherkin
 @retries:2

@@ -99,6 +99,18 @@ describe("annotations", () => {
   });
 
   describe("isScenarioPending", () => {
+    it("should count @fixme and the @name:reason spelling", () => {
+      expect(isScenarioPending({}, { fixme: true })).toBe(true);
+      expect(isScenarioPending({ "skip:reason": true }, {})).toBe(true);
+    });
+
+    it("should let a scenario's =false override the feature's tag", () => {
+      expect(isScenarioPending({ skip: true }, { skip: "false" })).toBe(false);
+      expect(isScenarioPending({ skip: true }, { skip: false })).toBe(false);
+      expect(isScenarioOnly({ only: true }, { only: "false" })).toBe(false);
+      expect(isScenarioOnly({ "only:x": true }, {})).toBe(true);
+    });
+
     it("should detect @pending or @skip on feature or scenario", () => {
       expect(isScenarioPending({ pending: true }, {})).toBe(true);
       expect(isScenarioPending({}, { skip: true })).toBe(true);

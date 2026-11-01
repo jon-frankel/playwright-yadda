@@ -121,8 +121,9 @@ export default class YaddaReporter implements Reporter {
     this.finalResults.set(test, result);
 
     const status = result.status;
-    const ok = status === "passed";
     const skipped = status === "skipped";
+    // What the test was expected to do: a `@fail` scenario is expected to fail, and passes when it does
+    const ok = !skipped && status === (test.expectedStatus ?? "passed");
 
     const lines: string[] = [];
     const retry = result.retry > 0 ? dim(` (retry #${result.retry})`) : "";
@@ -192,12 +193,12 @@ export default class YaddaReporter implements Reporter {
     let failed = 0;
     let skipped = 0;
     let flaky = 0;
-    for (const final of this.finalResults.values()) {
-      if (final.status === "passed") {
+    for (const [test, final] of this.finalResults) {
+      if (final.status === "skipped") skipped++;
+      else if (final.status === (test.expectedStatus ?? "passed")) {
         if (final.retry > 0) flaky++;
         else passed++;
-      } else if (final.status === "skipped") skipped++;
-      else failed++;
+      } else failed++;
     }
 
     const parts: string[] = [];

@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineFeature, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
-import { resolveTags } from "./tags.js";
+import { resetWarningsForTests, resolveTags } from "./tags.js";
 
 afterEach(() => vi.restoreAllMocks());
+beforeEach(() => resetWarningsForTests());
 
 describe("resolveTags", () => {
   it("reads @name:value and @name=value as the same tag", () => {
@@ -74,6 +75,23 @@ describe("resolveTags", () => {
     isScenarioPending({ "timeout:soon": true }, { "mode:serial": true });
     isScenarioOnly({ "timeout:soon": true }, { "mode:serial": true });
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("switches a tag off with =false in any case, or a boolean false", () => {
+    expect(resolveTags({ skip: true }, { skip: "False" }).scenario.skip).toBeUndefined();
+    expect(resolveTags({ only: true }, { only: "FALSE" }).scenario.only).toBe(false);
+    expect(resolveTags({ skip: true }, { skip: false }).scenario.skip).toBeUndefined();
+  });
+
+  it("keeps the feature's @retries, @timeout and tag when the scenario's is false or invalid", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const off = resolveTags({ "retries:1": true }, { retries: "false" }).scenario;
+    expect(off.retries).toBe(1);
+    expect(off.playwrightTags).toEqual(["@retries:1"]);
+    expect(warn).not.toHaveBeenCalled();
+    const invalid = resolveTags({ "timeout:500": true }, { "timeout:soon": true }).scenario;
+    expect(invalid.timeout).toBe(500);
+    expect(invalid.playwrightTags).toEqual(["@timeout:500"]);
   });
 
   it("does not pass a tag switched off with =false to Playwright", () => {

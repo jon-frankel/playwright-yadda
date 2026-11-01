@@ -304,7 +304,10 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       // `test.slow()` in the running test would be too late for its fixtures and `beforeEach`
       // hooks, which Playwright has set up by then, and a describe's settings cover them. A
       // feature's `@timeout` and `@retries` are on the feature's describe, which this one inherits.
-      if (tags.fail || tags.slow || own.timeout !== undefined || own.retries !== undefined) {
+      if (
+        !tags.skip &&
+        (tags.fail || tags.slow || own.timeout !== undefined || own.retries !== undefined)
+      ) {
         test.describe(() => {
           configureDescribe(test, { timeout: own.timeout, retries: own.retries });
           if (tags.fail) test.fail();

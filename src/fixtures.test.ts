@@ -215,9 +215,14 @@ describe("fixtures mode step libraries", () => {
 
   it("does not remember lookups between collectors, so steps defined later are seen", () => {
     const steps = createStepLibrary(undefined, "fixtures");
-    expect(createFixtureCollector()([steps], ["Given a late step"])).toEqual([]);
+    // a recorded definition, so the first collector really looks "a late step" up (and finds nothing)
+    steps.given("an early step", async ({ page }) => page);
+    const first = createFixtureCollector();
+    expect(first([steps], ["Given a late step"])).toEqual([]);
     steps.given("a late step", async ({ account }) => account);
     expect(createFixtureCollector()([steps], ["Given a late step"])).toEqual(["account"]);
+    // the first collector still has its earlier answer, which is why one is made per suite
+    expect(first([steps], ["Given a late step"])).toEqual([]);
   });
 
   it("takes no fixtures for a step nothing defines", () => {

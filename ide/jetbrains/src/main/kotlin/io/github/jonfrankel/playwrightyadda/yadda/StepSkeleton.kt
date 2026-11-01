@@ -18,11 +18,16 @@ class StepSkeleton private constructor(
   val parameters: List<String>,
   val isPlain: Boolean,
 ) {
-  /** The statement that defines the step on [receiver]; [typed] adds `: string` to the parameters, for TypeScript. */
-  fun render(receiver: String, typed: Boolean): String {
+  /**
+   * The statement that defines the step on [receiver]; [typed] adds `: string` to the parameters, for TypeScript.
+   * A [fixtures] library passes the scenario's fixtures as the first argument and wants them destructured, so
+   * its step takes an empty pattern ahead of the captures, for the author to fill in with what the step uses.
+   */
+  fun render(receiver: String, typed: Boolean, fixtures: Boolean = false): String {
     val signature = if (isPlain) "\"$pattern\"" else "/^$pattern$/"
-    val parameters = parameters.joinToString(", ") { if (typed) "$it: string" else it }
-    return "$receiver.$method($signature, async function ($parameters) {\n  \n});"
+    val captured = parameters.map { if (typed) "$it: string" else it }
+    if (fixtures) return "$receiver.$method($signature, async (${(listOf("{}") + captured).joinToString(", ")}) => {\n  \n});"
+    return "$receiver.$method($signature, async function (${captured.joinToString(", ")}) {\n  \n});"
   }
 
   companion object {

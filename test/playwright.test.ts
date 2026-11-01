@@ -156,10 +156,10 @@ describe("special tags with the real Playwright", () => {
     });
 
     it("lets @slow triple the timeout for a slow hook, @timeout's included", () => {
-      expect(hook("Slow, in a slow hook")).toMatchObject({ status: "expected", timeout: 1200 });
+      expect(hook("Slow, in a slow hook")).toMatchObject({ status: "expected", timeout: 1500 });
       expect(hook("Slow with its own timeout, in a slow hook")).toMatchObject({
         status: "expected",
-        timeout: 1500,
+        timeout: 1800,
       });
     });
 

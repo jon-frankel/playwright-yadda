@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineFeature, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
+import { isScenarioOnly, isScenarioPending } from "./annotations.js";
 import { resolveTags } from "./tags.js";
 
 afterEach(() => vi.restoreAllMocks());
@@ -36,6 +37,7 @@ describe("resolveTags", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const { scenario, own } = resolveTags({ "mode:serial": true }, { "mode:parallel": true });
       expect(scenario.mode).toBe("serial");
+      expect(scenario.playwrightTags).toEqual(["@mode:serial"]);
       expect(own.mode).toBeUndefined();
       expect(warn).toHaveBeenCalledOnce();
     });
@@ -65,6 +67,13 @@ describe("resolveTags", () => {
         "@libraries",
       ]);
     });
+  });
+
+  it("does not warn when only asked whether a scenario is skipped or focused", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    isScenarioPending({ "timeout:soon": true }, { "mode:serial": true });
+    isScenarioOnly({ "timeout:soon": true }, { "mode:serial": true });
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("does not pass a tag switched off with =false to Playwright", () => {

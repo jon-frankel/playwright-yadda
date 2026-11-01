@@ -87,7 +87,10 @@ export function isScenarioPending(
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
 ): boolean {
-  return resolveTags(featureAnnotations, scenarioAnnotations).scenario.skip !== undefined;
+  return (
+    resolveTags(featureAnnotations, scenarioAnnotations, { quiet: true }).scenario.skip !==
+    undefined
+  );
 }
 
 /**
@@ -98,5 +101,5 @@ export function isScenarioOnly(
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
 ): boolean {
-  return resolveTags(featureAnnotations, scenarioAnnotations).scenario.only;
+  return resolveTags(featureAnnotations, scenarioAnnotations, { quiet: true }).scenario.only;
 }

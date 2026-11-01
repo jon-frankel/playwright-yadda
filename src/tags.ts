@@ -74,35 +74,39 @@ function warnOnce(message: string) {
   console.warn(`playwright-yadda: ${message}`);
 }
 
-function readNumber(tags: Map<string, string | true>, name: string): number | undefined {
+type Report = (message: string) => void;
+
+function readNumber(
+  tags: Map<string, string | true>,
+  name: string,
+  report: Report,
+): number | undefined {
   const value = tags.get(name);
   if (value === undefined) return undefined;
   const number = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
   if (!Number.isInteger(number)) {
-    warnOnce(
-      `ignoring @${name}, which needs a whole number, e.g. @${name}:2 (got ${String(value)})`,
-    );
+    report(`ignoring @${name}, which needs a whole number, e.g. @${name}:2 (got ${String(value)})`);
     return undefined;
   }
   return number;
 }
 
-function readMode(tags: Map<string, string | true>): TestMode | undefined {
+function readMode(tags: Map<string, string | true>, report: Report): TestMode | undefined {
   const value = tags.get("mode");
   if (value === undefined) return undefined;
   const mode = typeof value === "string" ? value.toLowerCase() : "";
   if (!(TEST_MODES as readonly string[]).includes(mode)) {
-    warnOnce(`ignoring @mode, which needs one of ${TEST_MODES.join(", ")} (got ${String(value)})`);
+    report(`ignoring @mode, which needs one of ${TEST_MODES.join(", ")} (got ${String(value)})`);
     return undefined;
   }
   return mode as TestMode;
 }
 
-function settingsOf(tags: Map<string, string | true>) {
+function settingsOf(tags: Map<string, string | true>, report: Report) {
   const settings: ResolvedTags["own"] = {};
-  const timeout = readNumber(tags, "timeout");
-  const retries = readNumber(tags, "retries");
-  const mode = readMode(tags);
+  const timeout = readNumber(tags, "timeout", report);
+  const retries = readNumber(tags, "retries", report);
+  const mode = readMode(tags, report);
   if (timeout !== undefined) settings.timeout = timeout;
   if (retries !== undefined) settings.retries = retries;
   if (mode !== undefined) settings.mode = mode;
@@ -117,27 +121,30 @@ function settingsOf(tags: Map<string, string | true>) {
 export function resolveTags(
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
+  /** `quiet` for a caller that only asks a question of the tags, and has no business warning */
+  { quiet = false }: { quiet?: boolean } = {},
 ): ResolvedTags {
+  const report: Report = quiet ? () => {} : warnOnce;
   const featureTags = tagsOf(featureAnnotations);
   const scenarioTags = tagsOf(scenarioAnnotations);
+
+  const feature = settingsOf(featureTags, report);
+  const own = settingsOf(scenarioTags, report);
+  // A mode is a setting of a group of tests. Playwright refuses a `parallel` describe inside a
+  // `serial` one, and a describe of one scenario has nothing to run in serial with, so a scenario
+  // cannot set it.
+  if (own.mode !== undefined) {
+    report("ignoring @mode on a scenario: it applies to a whole feature, so put it on the feature");
+    delete own.mode;
+  }
+  // ignored, so it is not passed to Playwright as a tag either: it would replace the feature's
+  scenarioTags.delete("mode");
   const merged = new Map([...featureTags, ...scenarioTags]);
 
   // `@skip`, `@pending` and `@fixme` all skip a scenario; `@fixme` only differs in how Playwright reports it
   const skipped = (name: string) => isSet(merged.get(name));
   const skip: ScenarioTags["skip"] =
     skipped("skip") || skipped("pending") ? "skip" : skipped("fixme") ? "fixme" : undefined;
-
-  const feature = settingsOf(featureTags);
-  const own = settingsOf(scenarioTags);
-  // A mode is a setting of a group of tests. Playwright refuses a `parallel` describe inside a
-  // `serial` one, and a describe of one scenario has nothing to run in serial with, so a scenario
-  // cannot set it.
-  if (own.mode !== undefined) {
-    warnOnce(
-      "ignoring @mode on a scenario: it applies to a whole feature, so put it on the feature",
-    );
-    delete own.mode;
-  }
   const effective = { ...feature, ...own };
 
   const scenario: ScenarioTags = {

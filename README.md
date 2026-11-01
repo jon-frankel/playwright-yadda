@@ -139,7 +139,7 @@ Feature: Checkout
     ...
 ```
 
-A scenario with `@fail`, `@slow`, `@timeout` or `@retries` is declared in a describe of its own, which has no title, so Playwright's settings for it cover its fixtures and `beforeEach` hooks too ([microsoft/playwright#10825](https://github.com/microsoft/playwright/issues/10825)). Test titles and reports do not change.
+A scenario with `@fail`, `@slow`, `@timeout` or `@retries` is declared in a describe of its own, which has no title, so Playwright's settings for it cover its fixtures and `beforeEach` hooks too ([microsoft/playwright#10825](https://github.com/microsoft/playwright/issues/10825)). Test titles, test ids and output paths do not change; reporters that walk the suite tree, such as the JSON one, see an untitled group around each such scenario.
 
 Every tag is also passed to Playwright as the test's `tag` (Playwright 1.42 or later), so `--grep` and `--grep-invert` select by them: `playwright test --grep @smoke`, `playwright test --grep-invert @slow`. A tag with a value is passed as `@name:value` (`@timeout=5000` becomes `@timeout:5000`); one whose value has spaces, such as `@Libraries=auth, catalog`, is passed as `@name`. A tag switched off with `=false` is not passed. Where a scenario overrides a feature's tag, the scenario's value is the one passed. Yadda lowercases the names of tags, and for the `@name:value` spelling the value too, so `@Smoke` is `@smoke` to `--grep` and `@Area:Cart` is `@area:cart`. Only the tags in the table treat the two spellings alike: `@Libraries:auth` does not load a library.
 

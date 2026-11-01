@@ -18,7 +18,7 @@ const test = base.extend({
 // oxlint-disable-next-line no-empty-pattern
 test.beforeEach(async ({}, info) => {
   if (info.title.includes("failing hook")) throw new Error("the hook fails");
-  if (info.title.includes("slow hook")) await new Promise((resolve) => setTimeout(resolve, 700));
+  if (info.title.includes("slow hook")) await new Promise((resolve) => setTimeout(resolve, 900));
 });
 
 const steps = createStepLibrary();
@@ -28,7 +28,7 @@ const registry = createLibraryRegistry({ common: steps });
 // Driven by test/playwright.test.ts, which checks how each scenario ends
 defineFeature(
   parseFeature(`
-@timeout:400
+@timeout:500
 Feature: Hooks
   @fail
   Scenario: Expected to fail, in a failing hook
@@ -39,7 +39,7 @@ Feature: Hooks
     Given a step that passes
 
   @slow
-  @timeout:500
+  @timeout:600
   Scenario: Slow with its own timeout, in a slow hook
     Given a step that passes
 

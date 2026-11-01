@@ -10,7 +10,10 @@ import type {
 } from "@playwright/test/reporter";
 import type { YaddaReporterOptions } from "./types.js";
 
-const useColor = !process.env.NO_COLOR && (process.stdout.isTTY || !!process.env.FORCE_COLOR);
+// Same rules as Playwright's own reporters: FORCE_COLOR=0/false disables, any other value forces
+const forceColor = process.env.FORCE_COLOR;
+const colorDisabled = !!process.env.NO_COLOR || forceColor === "0" || forceColor === "false";
+const useColor = !colorDisabled && (!!process.stdout.isTTY || !!forceColor);
 const paint = (code: number, text: string) => (useColor ? `\x1b[${code}m${text}\x1b[0m` : text);
 const green = (t: string) => paint(32, t);
 const red = (t: string) => paint(31, t);
@@ -139,13 +142,12 @@ export default class YaddaReporter implements Reporter {
     lines.push(`${mark} ${bold(heading[heading.length - 1] ?? test.title)}${retry}${duration}`);
 
     const steps = result.steps.filter((s) => s.category === "test.step");
-    // Playwright sets no error on the step still running when the test times out or is
-    // interrupted; such a step has not ended, which it reports as a negative duration
-    const cutShort = status === "timedOut" || status === "interrupted";
+    // Playwright sets no error on a step still running when the test times out, is interrupted
+    // or its worker dies; such a step has not ended, which it reports as a negative duration
     // How many errors per message are already shown under steps; each covers one result error
     const shown = new Map<string, number>();
     for (const step of steps) {
-      const failedStep = !!step.error || (cutShort && step.duration < 0);
+      const failedStep = !!step.error || step.duration < 0;
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
       if (step.error) {
         const key = stripAnsi(step.error.message ?? "");

@@ -5,6 +5,7 @@ import Yadda from "yadda";
 import { defineFeature, parseFeature } from "./feature.js";
 import {
   collectScenarioFixtures,
+  createFixtureCollector,
   createFixtureTestBody,
   FixtureDeclarationError,
   parseFixtureNames,
@@ -82,10 +83,25 @@ describe("parseFixtureNames", () => {
     expect(() => parseFixtureNames(Math.max)).toThrow(FixtureDeclarationError);
   });
 
-  it("rejects a parameter list it cannot find the end of, instead of reading no fixtures", () => {
-    // the scanner does not know regex literals, so this "(" never closes
-    const fn = ({ a = /\(/, b }: any) => [a, b];
-    expect(() => parseFixtureNames(fn)).toThrow(FixtureDeclarationError);
+  it("reads past regex literals in default values, including ones with brackets and quotes", () => {
+    expect(parseFixtureNames(({ a = /\(/, b }: any) => [a, b])).toEqual(["a", "b"]);
+    expect(parseFixtureNames(({ a = /\//, b }: any) => [a, b])).toEqual(["a", "b"]);
+    expect(parseFixtureNames(({ a = /{/, b }: any) => [a, b])).toEqual(["a", "b"]);
+    expect(parseFixtureNames(({ a = /[/)]/, b }: any) => [a, b])).toEqual(["a", "b"]);
+    expect(parseFixtureNames(({ a = /'"`/, b }: any) => [a, b])).toEqual(["a", "b"]);
+    expect(parseFixtureNames(({ a = 6 / 2, b }: any) => [a, b])).toEqual(["a", "b"]);
+    expect(parseFixtureNames(({ a = /\//, b }: any) => [a, b])).toEqual(["a", "b"]);
+  });
+
+  it("does not take [native code] in a step's body for a native function", () => {
+    expect(
+      parseFixtureNames(async ({ page }: any) => String(page).includes("[native code]")),
+    ).toEqual(["page"]);
+  });
+
+  it("reads fixture names with non-ASCII letters, and explains a non-destructured one", () => {
+    expect(parseFixtureNames(({ ñandú }: any) => ñandú)).toEqual(["ñandú"]);
+    expect(() => parseFixtureNames((ñ: any) => ñ)).toThrow(/destructure/);
   });
 
   it("rejects rest properties", () => {
@@ -159,16 +175,49 @@ describe("fixtures mode step libraries", () => {
     ).toEqual(["one", "fromFirst"]);
   });
 
-  it("takes every candidate's fixtures when Yadda could not choose between them", () => {
+  it("takes no fixtures from a step Yadda cannot choose a definition for", () => {
+    // Yadda refuses to run an ambiguous step, so none of its candidates would use their fixtures
     const first = createStepLibrary(undefined, "fixtures");
     first.given("a shared step", async ({ fromFirst }) => fromFirst);
     const second = createStepLibrary(undefined, "fixtures");
     second.given("a shared step", async ({ fromSecond }) => fromSecond);
 
-    expect(collectScenarioFixtures([first, second], ["Given a shared step"])).toEqual([
-      "fromFirst",
-      "fromSecond",
-    ]);
+    expect(collectScenarioFixtures([first, second], ["Given a shared step"])).toEqual([]);
+  });
+
+  it("does no work for libraries that do not use fixtures mode", () => {
+    const interpreter = vi.spyOn(Yadda, "Interpreter");
+    const bound = createStepLibrary();
+    bound.given("a bound step", function () {});
+    const param = createStepLibrary(undefined, "param");
+    param.given("a param step", () => {});
+
+    expect(collectScenarioFixtures([bound, param], ["Given a bound step"])).toEqual([]);
+    expect(interpreter).not.toHaveBeenCalled();
+    interpreter.mockRestore();
+  });
+
+  it("looks a step line up once per library however many scenarios repeat it", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a repeated step", async ({ account }) => account);
+    steps.given("another step", async ({ page }) => page);
+    const lookups = vi.spyOn(steps, "find_compatible_macros");
+
+    const collect = createFixtureCollector();
+    for (let i = 0; i < 50; i++) {
+      expect(collect([steps], ["Given a repeated step", "Given another step"])).toEqual([
+        "account",
+        "page",
+      ]);
+    }
+    expect(lookups).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not remember lookups between collectors, so steps defined later are seen", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    expect(createFixtureCollector()([steps], ["Given a late step"])).toEqual([]);
+    steps.given("a late step", async ({ account }) => account);
+    expect(createFixtureCollector()([steps], ["Given a late step"])).toEqual(["account"]);
   });
 
   it("takes no fixtures for a step nothing defines", () => {
@@ -392,6 +441,21 @@ describe("defineFeature with fixtures", () => {
     });
 
     expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "account"]);
+  });
+
+  it("keeps an ambiguous step's candidates' fixtures out of the test callback", () => {
+    const one = createStepLibrary(undefined, "fixtures");
+    one.given("a shared step", async ({ known }) => known);
+    const two = createStepLibrary(undefined, "fixtures");
+    two.given("a shared step", async ({ onlyAnotherSuiteHasThis }) => onlyAnotherSuiteHasThis);
+
+    const { test, declared } = fakeTest();
+    defineFeature(feature("one, two", ["Given a shared step"]), {
+      test,
+      registry: createLibraryRegistry({ one, two }, { defaultLibraries: [] }),
+    });
+
+    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
   });
 
   it("does not collect fixtures from libraries the scenario does not use", () => {

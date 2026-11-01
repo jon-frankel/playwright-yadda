@@ -5,7 +5,7 @@ import Yadda from "yadda";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
 import {
   BASE_FIXTURE_NAMES,
-  collectScenarioFixtures,
+  createFixtureCollector,
   createFixtureTestBody,
   TEST_INFO_KEY,
   withScenarioFixtures,
@@ -158,6 +158,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
    * Fixtures to set up for a scenario: `page` and `context`, which the default scenario context is
    * made of, plus whatever the steps of the libraries it resolves destructure.
    */
+  const collectFixtures = createFixtureCollector();
   const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
     const names = new Set<string>(BASE_FIXTURE_NAMES);
     try {
@@ -166,7 +167,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         scenario.annotations,
         resolveOpts,
       );
-      for (const name of collectScenarioFixtures(libraries, scenario.steps)) names.add(name);
+      for (const name of collectFixtures(libraries, scenario.steps)) names.add(name);
     } catch (error) {
       // The scenario fails with this same error when it runs; this says why its fixtures are only
       // the base ones, which would otherwise show up as a confusing "fixture not found" first

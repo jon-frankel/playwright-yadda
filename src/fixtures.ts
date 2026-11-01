@@ -54,99 +54,146 @@ export class FixtureDeclarationError extends Error {
 // This is not a JavaScript parser. Playwright decides what to set up by reading the text of the
 // test function's first parameter (`fixtureParameterNames`, which is not exported), and a step
 // has to be read the same way, since its destructuring is what names the fixtures. The helpers
-// below do just enough for that: cut out comments, find the parameter list, and split it and the
-// `{ a, b: c, d = 1 }` pattern on commas, skipping commas inside nested brackets and strings.
-// They never evaluate or interpret the code. Anything they cannot read (a rest property, a
-// parameter that is not destructured) is an error rather than a guess.
+// below do just enough for that. `mask` makes a copy of the source in which comments, strings,
+// templates and regex literals cannot be mistaken for structure; the parameter list and the
+// `{ a, b: c, d = 1 }` pattern are then found and split on commas in the masked copy, skipping
+// commas inside nested brackets, and the names are cut from the same positions of the real text.
+// Nothing is evaluated. Anything that cannot be read (a rest property, a parameter that is not
+// destructured) is an error rather than a guess.
 
-const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
+const IDENTIFIER = /^[\p{ID_Start}$_][\p{ID_Continue}$‌‍]*$/u;
 
-/** Source text with comments blanked out, string and template contents left alone */
-function stripComments(source: string): string {
-  let out = "";
-  let quote: string | null = null;
-  for (let i = 0; i < source.length; i++) {
-    const ch = source[i]!;
-    const next = source[i + 1];
-    if (quote) {
-      out += ch;
-      if (ch === "\\") out += source[++i] ?? "";
-      else if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'" || ch === "`") {
-      quote = ch;
-      out += ch;
-    } else if (ch === "/" && next === "/") {
-      while (i < source.length && source[i] !== "\n") i++;
-      out += "\n";
-    } else if (ch === "/" && next === "*") {
-      i += 2;
-      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i++;
-      i++;
-      out += " ";
-    } else {
-      out += ch;
-    }
-  }
-  return out;
+/** A function's source twice over, the same length each time, so a position in one is in the other */
+interface Masked {
+  /** Comments blanked out, everything else as written */
+  text: string;
+  /** As `text`, with the inside of strings, templates and regex literals filled with `_` */
+  code: string;
 }
 
-/** Split on commas that are not inside brackets, braces, parentheses or strings */
-function splitTopLevel(text: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let quote: string | null = null;
-  let current = "";
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i]!;
-    if (quote) {
-      current += ch;
-      if (ch === "\\") current += text[++i] ?? "";
-      else if (ch === quote) quote = null;
+/** Characters after which a `/` starts a regex literal, not a division */
+const BEFORE_REGEX = "(,=:[!&|?{;+-*%<>~^";
+
+/** End (exclusive) of the string or template starting at `start`, or the end of the source */
+function quotedEnd(source: string, start: number): number {
+  const quote = source[start]!;
+  for (let i = start + 1; i < source.length; i++) {
+    if (source[i] === "\\") i++;
+    else if (source[i] === quote) return i + 1;
+  }
+  return source.length;
+}
+
+/** End (exclusive) of the regex literal starting at `start`, or -1 if it is not one */
+function regexEnd(source: string, start: number): number {
+  let inClass = false;
+  for (let i = start + 1; i < source.length; i++) {
+    const ch = source[i]!;
+    if (ch === "\n") return -1;
+    if (ch === "\\") i++;
+    else if (ch === "[") inClass = true;
+    else if (ch === "]") inClass = false;
+    else if (ch === "/" && !inClass) return i + 1;
+  }
+  return -1;
+}
+
+function mask(source: string): Masked {
+  let text = "";
+  let code = "";
+  let previous = ""; // last character of `code` that is not whitespace
+  for (let i = 0; i < source.length;) {
+    const ch = source[i]!;
+    const next = source[i + 1];
+    let end = -1;
+    if (ch === "/" && next === "/") {
+      end = source.indexOf("\n", i);
+      end = end === -1 ? source.length : end;
+      text += " ".repeat(end - i);
+      code += " ".repeat(end - i);
+      i = end;
       continue;
     }
-    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
-    else if (ch === "(" || ch === "[" || ch === "{") depth++;
+    if (ch === "/" && next === "*") {
+      end = source.indexOf("*/", i + 2);
+      end = end === -1 ? source.length : end + 2;
+      text += " ".repeat(end - i);
+      code += " ".repeat(end - i);
+      i = end;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") end = quotedEnd(source, i);
+    else if (ch === "/" && (previous === "" || BEFORE_REGEX.includes(previous))) {
+      end = regexEnd(source, i);
+    }
+    if (end !== -1) {
+      text += source.slice(i, end);
+      code += ch + "_".repeat(Math.max(0, end - i - 2)) + (end - i > 1 ? source[end - 1] : "");
+      previous = ch === "/" ? ")" : ch; // a literal is an operand: a `/` after it divides
+      i = end;
+      continue;
+    }
+    text += ch;
+    code += ch;
+    if (!/\s/.test(ch)) previous = ch;
+    i++;
+  }
+  return { text, code };
+}
+
+const slice = (masked: Masked, start: number, end?: number): Masked => ({
+  text: masked.text.slice(start, end),
+  code: masked.code.slice(start, end),
+});
+
+/** Split on commas that are not inside brackets, braces or parentheses */
+function splitTopLevel(masked: Masked): Masked[] {
+  const parts: Masked[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < masked.code.length; i++) {
+    const ch = masked.code[i]!;
+    if (ch === "(" || ch === "[" || ch === "{") depth++;
     else if (ch === ")" || ch === "]" || ch === "}") depth--;
     else if (ch === "," && depth === 0) {
-      parts.push(current);
-      current = "";
-      continue;
+      parts.push(slice(masked, start, i));
+      start = i + 1;
     }
-    current += ch;
   }
-  parts.push(current);
-  return parts.map((part) => part.trim()).filter((part) => part !== "");
+  parts.push(slice(masked, start));
+  return parts
+    .map((part) => {
+      const lead = part.code.length - part.code.trimStart().length;
+      return slice(part, lead, lead + part.code.trim().length);
+    })
+    .filter((part) => part.code !== "");
 }
 
 /**
- * Text between the first `(` of a function's source and its matching `)`.
+ * The function's parameter list: between the first `(` and its matching `)`.
  *
- * @throws {FixtureDeclarationError} when there is no parameter list or it never closes. The last
- * happens when a default value holds something this scanner reads wrongly, such as a regex literal
- * with an unbalanced bracket; reading no fixtures there would hide the mistake.
+ * @throws {FixtureDeclarationError} when there is no parameter list or it never closes
  */
-function parameterList(source: string): string {
+function parameterList(masked: Masked): Masked {
   // `x => ...` and `async x => ...`: one bare parameter, which cannot be a destructuring pattern
-  const bare = source.match(/^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/);
-  if (bare) return bare[1]!;
+  const bare = masked.code.match(/^\s*(?:async\s+)?([\p{ID_Start}$_][\p{ID_Continue}$]*)\s*=>/u);
+  if (bare)
+    return slice(
+      masked,
+      masked.code.indexOf(bare[1]!),
+      masked.code.indexOf(bare[1]!) + bare[1]!.length,
+    );
 
-  const open = source.indexOf("(");
+  const open = masked.code.indexOf("(");
   if (open !== -1) {
     let depth = 0;
-    let quote: string | null = null;
-    for (let i = open; i < source.length; i++) {
-      const ch = source[i]!;
-      if (quote) {
-        if (ch === "\\") i++;
-        else if (ch === quote) quote = null;
-      } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
-      else if (ch === "(") depth++;
-      else if (ch === ")" && --depth === 0) return source.slice(open + 1, i);
+    for (let i = open; i < masked.code.length; i++) {
+      if (masked.code[i] === "(") depth++;
+      else if (masked.code[i] === ")" && --depth === 0) return slice(masked, open + 1, i);
     }
   }
   throw new FixtureDeclarationError(
-    `Cannot find the end of the step's parameter list, so its fixtures cannot be read. ` +
-      `Simplify its parameters (no regex literals in default values, for one).`,
+    "Cannot find the end of the step's parameter list, so its fixtures cannot be read.",
   );
 }
 
@@ -157,36 +204,38 @@ function parameterList(source: string): string {
  * `$testInfo` is not a fixture and is left out.
  *
  * @throws {FixtureDeclarationError} when the first parameter is not an object destructuring
- * pattern, or uses a rest property or a name that is not a plain identifier
+ * pattern, or uses a rest property or a name that is not a plain identifier, or when the function
+ * is bound or native, so has no parameters to read
  */
 export function parseFixtureNames(fn: (...args: any[]) => unknown): string[] {
-  const source = stripComments(Function.prototype.toString.call(fn));
-  if (source.includes("[native code]")) {
+  const masked = mask(Function.prototype.toString.call(fn));
+  if (/\{\s*\[native code\]\s*\}\s*$/.test(masked.code)) {
     throw new FixtureDeclarationError(
       "Cannot read the fixtures of a bound or native function; its parameters are not in its " +
         "source. Pass the function itself, or wrap it in one that destructures them.",
     );
   }
-  const params = parameterList(source);
 
-  const first = splitTopLevel(params)[0];
+  const first = splitTopLevel(parameterList(masked))[0];
   if (first === undefined) return [];
 
-  if (!first.startsWith("{") || !first.endsWith("}")) {
+  if (!first.text.startsWith("{") || !first.text.endsWith("}")) {
     throw new FixtureDeclarationError(
       `The first parameter of a step in "fixtures" mode must destructure the fixtures it uses, ` +
-        `for example "async ({ page }) => ..." or "({}) => ..." for none; found "${first}".`,
+        `for example "async ({ page }) => ..." or "({}) => ..." for none; found "${first.text}".`,
     );
   }
 
   const names: string[] = [];
-  for (const prop of splitTopLevel(first.slice(1, -1))) {
-    if (prop.startsWith("...")) {
+  for (const prop of splitTopLevel(slice(first, 1, first.code.length - 1))) {
+    if (prop.text.startsWith("...")) {
       throw new FixtureDeclarationError(
-        `Rest property "${prop}" is not supported in a step's fixtures. List each fixture it uses.`,
+        `Rest property "${prop.text}" is not supported in a step's fixtures. List each fixture it uses.`,
       );
     }
-    const key = prop.split(/[:=]/, 1)[0]!.trim();
+    // the name is what comes before a `:` (alias) or `=` (default)
+    const end = prop.code.search(/[:=]/);
+    const key = (end === -1 ? prop.text : prop.text.slice(0, end)).trim();
     if (!IDENTIFIER.test(key)) {
       throw new FixtureDeclarationError(
         `Cannot read the fixture name "${key}" from the step's parameters; fixture names must be ` +
@@ -228,39 +277,71 @@ export function recordStepFixtures(
 }
 
 /**
- * The fixtures the steps of a scenario use: those declared by the macro Yadda would run for each of
- * `steps`, in first-seen order. Libraries that do not use fixtures mode contribute nothing.
+ * A function that returns the fixtures the steps of a scenario use: those declared by the macro
+ * Yadda would run for each of `steps`, in first-seen order. Libraries that do not use fixtures
+ * mode contribute nothing, and when none of the libraries given does, nothing is ranked at all.
  *
  * The winner is worked out the way Yadda does when it runs the steps one after another: the
- * closest pattern wins, and a tie goes to the library of the previous step's macro. Where it
- * cannot choose (an ambiguous step), every macro that matches counts, since the scenario then
- * fails when it runs and a superset is the safe side to err on. A step nothing defines adds nothing.
+ * closest pattern wins, and a tie goes to the library of the previous step's macro. A step nothing
+ * defines, or that Yadda cannot choose a definition for (an ambiguous one), adds nothing: the
+ * scenario fails when it runs, before any definition could use its fixtures.
+ *
+ * Matching a step line against a library's patterns is the costly part, and suites repeat step
+ * lines across scenarios, so each (library, step line) is matched once per collector. Make one
+ * collector per suite, once its libraries are defined: it does not see steps defined afterwards.
  */
-export function collectScenarioFixtures(libraries: StepLibrary[], steps: string[]): string[] {
-  const names = new Set<string>();
-  // `rank_macros` is not in Yadda's typings; it is what the interpreter itself ranks steps with
-  const interpreter = new Yadda.Interpreter(libraries as any) as any;
+export function createFixtureCollector(): (libraries: StepLibrary[], steps: string[]) => string[] {
+  const matches = new WeakMap<object, Map<string, unknown[]>>();
+  const cached = (library: StepLibrary, step: string): unknown[] => {
+    let byStep = matches.get(library);
+    if (!byStep) matches.set(library, (byStep = new Map()));
+    let macros = byStep.get(step);
+    if (!macros) byStep.set(step, (macros = library.find_compatible_macros(step) as unknown[]));
+    return macros;
+  };
 
-  for (const step of steps) {
-    const report = interpreter.rank_macros(step).validate();
-    // Moves the interpreter on, as running the step would, so the next step's tie goes the same way
-    try {
-      interpreter.validate([step]);
-    } catch {
-      // undefined or ambiguous; reported when the scenario runs
-    }
+  return (libraries, steps) => {
+    if (!libraries.some((library) => declaredFixtures.has(library))) return [];
 
-    const macros: Macro[] = report.valid
-      ? [report.winner]
-      : libraries.flatMap((library) => library.find_compatible_macros(step) as Macro[]);
+    const names = new Set<string>();
+    // Yadda only asks a library for the macros compatible with a step, so the cache can stand in
+    const lookups = libraries.map((library) => ({
+      find_compatible_macros: (step: string) => cached(library, step),
+    }));
+    // `rank_macros` is not in Yadda's typings; it is what the interpreter itself ranks steps with
+    const interpreter = new Yadda.Interpreter(lookups as any) as any;
 
-    for (const macro of macros) {
+    // Validating a step is what moves the interpreter on to the next one, so the ranking it does
+    // is also the answer; keep it rather than ranking the step a second time
+    let report: { valid?: boolean; winner?: Macro } = {};
+    const rank = interpreter.rank_macros.bind(interpreter);
+    interpreter.rank_macros = (step: string) => {
+      const competition = rank(step);
+      const validate = competition.validate.bind(competition);
+      competition.validate = () => (report = validate());
+      return competition;
+    };
+
+    for (const step of steps) {
+      report = {};
+      try {
+        interpreter.validate([step]);
+      } catch {
+        // undefined or ambiguous; reported when the scenario runs
+      }
+      const macro = report.valid ? report.winner : undefined;
+      if (!macro) continue;
       for (const name of declaredFixtures.get(macro.library)?.get(macro.toString()) ?? []) {
         names.add(name);
       }
     }
-  }
-  return [...names];
+    return [...names];
+  };
+}
+
+/** The fixtures a single scenario's steps use; see {@link createFixtureCollector} */
+export function collectScenarioFixtures(libraries: StepLibrary[], steps: string[]): string[] {
+  return createFixtureCollector()(libraries, steps);
 }
 
 /** The parts of a Yadda macro used here */

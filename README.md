@@ -160,6 +160,7 @@ features/
     └── import.feature
 ```
 
+- Where `:` is not allowed in file names (Windows), write `@timeout=5000/` and `@mode=serial/`: `=` means the same.
 - Path tags are added to the feature's tags, so they reach Playwright's `tag` list (`--grep @smoke`).
 - A path tag that names a registered library (case-insensitive) selects it, as if the feature said `@Libraries=storefront`. It counts as the feature's own, so a scenario's `@Libraries` merges with it, or replaces it with `libraryInheritance: "override"`.
 - A tag written in the file wins over a path tag of the same name: `@mode:parallel` in the file beats an `@mode:serial/` directory.

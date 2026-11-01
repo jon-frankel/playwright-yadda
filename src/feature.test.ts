@@ -253,6 +253,16 @@ Feature: Pending Feature
       ]);
     });
 
+    it("counts only the file name for a file outside the root", () => {
+      const other = path.join(path.sep, "elsewhere");
+      expect(pathTagsOf(path.join(path.sep, "a", "@x", "y.feature"), other)).toEqual([]);
+      expect(pathTagsOf(path.join(path.sep, "a", "@x", "@y.feature"), other)).toEqual(["y"]);
+    });
+
+    it("keeps dots in the name of an @ file", () => {
+      expect(pathTagsOf(at("@v1.2.feature"), root)).toEqual(["v1.2"]);
+    });
+
     it("takes an @name.feature file name, without its extensions", () => {
       expect(pathTagsOf(at("@storefront.feature"), root)).toEqual(["storefront"]);
       expect(pathTagsOf(at("a", "@smoke.yadda.feature"), root)).toEqual(["smoke"]);
@@ -292,6 +302,16 @@ Feature: Pending Feature
           dir,
         );
         expect(feature.annotations).toEqual({ "mode:parallel": true });
+      });
+
+      it("reads name=value path tags, for systems without ':' in file names", () => {
+        const feature = loadFeatureFile(
+          write("@timeout=5000/@mode=serial/v.feature", "@mode=parallel\n"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.annotations).toEqual({ timeout: "5000", mode: "parallel" });
       });
 
       it("adds nothing without a root or an @ name", () => {
@@ -358,6 +378,28 @@ Feature: Pending Feature
 
       it("loads a library named by an @name.feature file", () => {
         expect(run(at("@storefront.feature"))).toEqual(["common", "storefront"]);
+      });
+
+      it("honours a custom annotationKey of the registry", () => {
+        const feature = parseFeature("Feature: F\n  Scenario: S\n    Given a step\n", "gherkin");
+        feature.pathTags = ["storefront"];
+        const registry = createLibraryRegistry(
+          { common: new Yadda.Library(), storefront: new Yadda.Library() },
+          { annotationKey: "Steps" },
+        );
+        const resolve = vi.spyOn(registry, "resolve");
+        const mockTest: any = Object.assign(vi.fn<() => void>(), {
+          describe: (_: string, fn: any) => fn(),
+          step: vi.fn<() => void>(),
+        });
+        defineFeature(feature, { test: mockTest, registry });
+        const [featureAnnotations, scenarioAnnotations, options] = resolve.mock.calls[0]!;
+        expect(
+          resolveLibraryNames(featureAnnotations, scenarioAnnotations, {
+            ...registry.options,
+            ...options,
+          }),
+        ).toEqual(["common", "storefront"]);
       });
 
       it("ignores path tags that name no library", () => {

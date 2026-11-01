@@ -69,12 +69,17 @@ export function parseFeature(
  */
 export function pathTagsOf(filepath: string, root?: string): string[] {
   const absolute = path.resolve(filepath);
-  const relative = root ? path.relative(path.resolve(root), absolute) : path.basename(absolute);
-  const segments = relative.split(path.sep).filter((segment) => segment && segment !== "..");
+  let relative = root ? path.relative(path.resolve(root), absolute) : path.basename(absolute);
+  // A file that is not under the root (or is on another drive) has no directories of the root's to count
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    relative = path.basename(absolute);
+  }
+  const segments = relative.split(path.sep).filter(Boolean);
   const file = segments.pop();
   const names = segments.filter((segment) => segment.startsWith("@"));
-  if (file?.startsWith("@"))
-    names.push(file.slice(0, file.indexOf(".") < 0 ? undefined : file.indexOf(".")));
+  if (file?.startsWith("@")) {
+    names.push(file.replace(/(\.yadda)?\.(feature|md|markdown)$/i, ""));
+  }
   const tags: string[] = [];
   for (const name of names) {
     const tag = name.slice(1).trim().toLowerCase();
@@ -83,8 +88,8 @@ export function pathTagsOf(filepath: string, root?: string): string[] {
   return tags;
 }
 
-/** The part of a tag before a `:`, which is what an explicit tag of the same name overrides */
-const tagName = (tag: string) => tag.split(":")[0]!.trim().toLowerCase();
+/** The part of a tag before a `:` or `=`, which is what an explicit tag of the same name overrides */
+const tagName = (tag: string) => tag.split(/[:=]/)[0]!.trim().toLowerCase();
 
 /**
  * Add path tags to a feature. A tag written in the file wins over a path tag of the same name
@@ -96,7 +101,11 @@ function applyPathTags(feature: ParsedFeature, tags: string[]): void {
   const annotations: Record<string, string | boolean | undefined> = { ...feature.annotations };
   const explicit = new Set(Object.keys(annotations).map(tagName));
   for (const tag of tags) {
-    if (!explicit.has(tagName(tag))) annotations[tag] = true;
+    if (explicit.has(tagName(tag))) continue;
+    // `@timeout=5000/` is the spelling for systems that do not allow `:` in a file name
+    const equals = tag.indexOf("=");
+    if (equals > 0) annotations[tag.slice(0, equals).trim()] = tag.slice(equals + 1).trim() || true;
+    else annotations[tag] = true;
   }
   feature.annotations = annotations;
 }
@@ -215,6 +224,10 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
   const detailsSupported = supportsTestDetails();
 
+  const resolveOpts: ResolveLibrariesOptions<K> = {};
+  if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
+  if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
+
   /**
    * The feature's annotations, with the path tags that name a registered library added to its
    * `@Libraries`. They count as the feature's own, so a scenario's `@Libraries` merges with them or,
@@ -223,7 +236,12 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   const annotationsOf = (parsedFeature: ParsedFeature) => {
     const named = (parsedFeature.pathTags ?? []).filter((tag) => registry.has(tag));
     if (named.length === 0) return parsedFeature.annotations;
-    const key = resolveOpts.annotationKey ?? "libraries";
+    // The key `registry.resolve` reads: its own option, unless the suite overrides it
+    const key = String(
+      resolveOpts.annotationKey ?? (registry as any).options?.annotationKey ?? "libraries",
+    )
+      .trim()
+      .toLowerCase();
     const annotations = { ...parsedFeature.annotations };
     const existing = extractLibraryNames(annotations, key);
     for (const name of named) if (!existing.includes(name)) existing.push(name);
@@ -232,10 +250,6 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     annotations[key] = existing.join(", ");
     return annotations;
   };
-
-  const resolveOpts: ResolveLibrariesOptions<K> = {};
-  if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
-  if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
 
   const featureAnnotations = annotationsOf(feature);
 

@@ -124,7 +124,7 @@ Creates a typed registry manager.
 
 Creates a Gherkin-localised step library supporting `given`, `when`, `then`, and `define`.
 
-- `mode`: `'bound'` (default, binds context to `this`) or `'param'` (passes context as 1st argument).
+- `mode`: `'bound'` (default, binds context to `this`), `'param'` (passes context as 1st argument), or `'fixtures'` (passes the scenario's Playwright fixtures as 1st argument; see [Playwright fixtures in steps](#playwright-fixtures-in-steps)).
 - `language`: One of Yadda's localisations, such as `Yadda.localisation.French` (default `Yadda.localisation.English`). It sets the keywords a step may start with (`Soit`, `Quand`, `Alors`, …); `given`, `when` and `then` stay the method names.
 
 ### `defineFeatureSuite(options)`
@@ -134,7 +134,7 @@ Discovers feature files and registers them with Playwright's `test` runner.
 - `test`: The Playwright `test` instance.
 - `registry`: The `LibraryRegistry` or `LibraryRegistryManager`.
 - `features`: Directory path, file path, glob pattern, or pre-parsed feature array.
-- `createContext`: Optional custom factory function to initialize scenario context.
+- `createContext`: Optional custom factory function to initialize scenario context. It receives the fixtures set up for the scenario (`page`, `context`, any the steps use) and `testInfo`.
 - `language`: The Yadda localisation the feature files are written in (default `Yadda.localisation.English`). It sets the words read as `Feature:`, `Scenario:`, `Examples:` and so on. Use the same language for the step libraries.
 
 ```ts
@@ -152,6 +152,69 @@ defineFeatureSuite({
 ```
 
 The test names stay `Feature: …` and `Scenario: …`. Yadda 3.2 can't build a parser for Dutch (its scenario word is not a valid regular expression), and its German word list gives scenarios no title.
+
+### `createBdd(test)`
+
+Binds step libraries to your extended `test`, so the fixtures a step destructures are typed. See below.
+
+---
+
+## Playwright fixtures in steps
+
+Steps can use the fixtures of your `test.extend({...})`, and Playwright's own (`request`, `browserName`, `baseURL`, …), the way a Playwright test does:
+
+```ts
+// steps/test.ts
+import { test as base } from "@playwright/test";
+
+export const test = base.extend<{ account: Account }>({
+  account: async ({}, use) => {
+    const account = await createAccount();
+    await use(account);
+    await account.delete();
+  },
+});
+
+// steps/accounts.ts
+import { createBdd } from "playwright-yadda";
+import { test } from "./test.js";
+
+const { createStepLibrary } = createBdd(test);
+export const accountSteps = createStepLibrary();
+
+accountSteps.given("a signed-in user", async ({ page, account }) => {
+  await page.goto(account.loginUrl);
+});
+
+accountSteps.then(/^the balance is (\d+)$/, async ({ account, $testInfo }, balance: string) => {
+  // ...
+});
+
+// e2e/features.spec.ts
+defineFeatureSuite({ test, registry, features });
+```
+
+- The first argument holds the scenario's fixtures and `$testInfo` (its `TestInfo`); captured step arguments follow. Without `createBdd`, `createStepLibrary(dictionary, "fixtures", language)` does the same with untyped fixtures.
+- Pass the same extended `test` to `defineFeatureSuite`. `createBdd(test)` only reads its type.
+- `'bound'`, `'param'` and `'fixtures'` libraries can be mixed in one registry, and `createContext` keeps working.
+
+### Which fixtures a scenario sets up
+
+Playwright decides what to set up from the destructuring pattern of the test function's first argument. There is no generated spec file here, so for each scenario the test function is built when the suite is declared, with a pattern naming:
+
+1. `page` and `context`, always. The default scenario context (`{ page, context, testInfo }`) is made of them, so `'bound'` and `'param'` steps keep working.
+2. the fixtures destructured by every step definition in the scenario's libraries that matches one of its steps.
+
+A fixture no matching step destructures is not set up, so an expensive fixture costs only the scenarios whose steps use it.
+
+Limits of reading the pattern from the step definition:
+
+- **Destructure in the first parameter.** `async ({ page }) => ...` works. `async (fixtures) => ...` and a rest property (`{ page, ...rest }`) throw when the step is defined, as they would in a Playwright test. Use `({})` for a step that needs none.
+- **Every matching definition counts.** If the step text matches several definitions (say a regex and a more specific one), the fixtures of all of them are set up, because Yadda picks between them only when the step runs.
+- **Pass the function you wrote.** The names are read from `fn.toString()`. A wrapped or `.bind()`-ed function hides its parameters, and so would a bundler that rewrites destructuring (a minifier keeps the property names, which is all that is read).
+- **Plain identifiers.** Fixture names like `"my-fixture"` cannot be destructured this way; Playwright reads them the same way.
+- **Promise-style steps only.** A step in `'fixtures'` mode returns a promise (or nothing); Yadda's `next` callback is not passed.
+- **Unknown libraries** are still reported when the scenario runs, not when the suite is declared.
 
 ---
 

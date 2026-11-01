@@ -3,6 +3,13 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
+import {
+  BASE_FIXTURE_NAMES,
+  collectScenarioFixtures,
+  createFixtureTestBody,
+  TEST_INFO_KEY,
+  withScenarioFixtures,
+} from "./fixtures.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import type {
@@ -143,6 +150,29 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
   const detailsSupported = supportsTestDetails();
 
+  const resolveOpts: ResolveLibrariesOptions<K> = {};
+  if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
+  if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
+
+  /**
+   * Fixtures to set up for a scenario: `page` and `context`, which the default scenario context is
+   * made of, plus whatever the steps of the libraries it resolves destructure.
+   */
+  const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
+    const names = new Set<string>(BASE_FIXTURE_NAMES);
+    try {
+      const libraries = registry.resolve(
+        parsedFeature.annotations,
+        scenario.annotations,
+        resolveOpts,
+      );
+      for (const name of collectScenarioFixtures(libraries, scenario.steps)) names.add(name);
+    } catch {
+      // An unknown library is reported when the scenario runs, as it always has been
+    }
+    return [...names];
+  };
+
   test.describe(`Feature: ${feature.title}`, () => {
     for (const scenario of feature.scenarios) {
       const isPending = isScenarioPending(feature.annotations, scenario.annotations);
@@ -160,8 +190,13 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         ? (title: string, body: unknown) => declare(title, details, body)
         : declare;
 
-      testFn(`Scenario: ${scenario.title}`, async ({ page, context }: any, testInfo: any) => {
-        const fixtures = { page, context, testInfo };
+      // Playwright sets up the fixtures the test callback destructures, so the callback has to name
+      // the ones this scenario's steps use. They are read from the steps' own parameters.
+      const fixtureNames = scenarioFixtureNames(feature, scenario);
+
+      const runScenario = async (stepFixtures: Record<string, any>, testInfo: any) => {
+        const { page, context } = stepFixtures;
+        const fixtures = { ...stepFixtures, testInfo };
 
         // Older Playwright cannot take it at declaration; this is the best it can do
         if (feature.filepath && !attachUpFront) {
@@ -172,10 +207,6 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 1. Resolve step libraries dynamically for this specific scenario
-        const resolveOpts: ResolveLibrariesOptions<K> = {};
-        if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
-        if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
-
         const libraries = registry.resolve(feature.annotations, scenario.annotations, resolveOpts);
 
         // 2. Build isolated Yadda runner instance
@@ -196,13 +227,20 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 5. Execute steps wrapped in test.step()
-        await runScenarioSteps(yadda, scenario.steps, ctx, test.step);
+        await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
+          runScenarioSteps(yadda, scenario.steps, ctx, test.step),
+        );
 
         // 6. Lifecycle after hook
         if (onAfterScenario) {
           await onAfterScenario(scenario, ctx);
         }
-      });
+      };
+
+      testFn(
+        `Scenario: ${scenario.title}`,
+        createFixtureTestBody(fixtureNames, runScenario) as unknown,
+      );
     }
   });
 }

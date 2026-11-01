@@ -27,8 +27,19 @@ export {
   resolveLibraryNames,
 } from "./annotations.js";
 
+// Playwright fixtures in steps
+export {
+  FixtureDeclarationError,
+  parseFixtureNames,
+  type FixtureStepFunction,
+  type FixtureStepLibrary,
+  type FixturesOf,
+  type StepFixtures,
+} from "./fixtures.js";
+
 // Library Registry
 export {
+  createBdd,
   createLibraryRegistry,
   createStepLibrary,
   LibraryRegistryManager,

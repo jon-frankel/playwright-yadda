@@ -1,5 +1,13 @@
+import type { TestType } from "@playwright/test";
 import Yadda from "yadda";
 import { resolveLibraryNames } from "./annotations.js";
+import {
+  bindFixtureStep,
+  parseFixtureNames,
+  recordStepFixtures,
+  type FixtureStepLibrary,
+  type FixturesOf,
+} from "./fixtures.js";
 import type {
   AnnotationRecord,
   LibraryRegistry,
@@ -11,6 +19,13 @@ import type {
  * Creates a Gherkin-localised step library that natively supports
  * Given, When, Then, And, But prefixes with context-binding support.
  *
+ * `mode` decides what a step receives:
+ * - `'bound'` (default): the scenario context as `this`.
+ * - `'param'`: the scenario context as the first argument.
+ * - `'fixtures'`: the scenario's Playwright fixtures as the first argument, which the step
+ *   destructures (`async ({ page, myFixture }, arg) => ...`). Only the fixtures that the steps a
+ *   scenario uses destructure are set up for it. See `createBdd` for typed fixtures.
+ *
  * The prefixes are English unless `language` is another of Yadda's
  * localisations (`Yadda.localisation.French`, and so on). A feature suite has to
  * be told the same language (`defineFeatureSuite({ language })`) to read the
@@ -18,14 +33,67 @@ import type {
  */
 export function createStepLibrary(
   dictionary?: Yadda.Dictionary,
-  mode: "bound" | "param" = "bound",
+  mode?: "bound" | "param",
+  language?: Yadda.Language,
+): Yadda.Library;
+export function createStepLibrary(
+  dictionary: Yadda.Dictionary | undefined,
+  mode: "fixtures",
+  language?: Yadda.Language,
+): FixtureStepLibrary<Record<string, any>>;
+export function createStepLibrary(
+  dictionary?: Yadda.Dictionary,
+  mode: "bound" | "param" | "fixtures" = "bound",
   language: Yadda.Language = Yadda.localisation.English,
-): Yadda.Library {
+): Yadda.Library | FixtureStepLibrary<Record<string, any>> {
   const base =
-    mode === "param"
-      ? new Yadda.ContextParamLibrary(dictionary)
-      : new Yadda.ContextBoundLibrary(dictionary);
-  return language.localise(base as any) as Yadda.Library;
+    mode === "bound"
+      ? new Yadda.ContextBoundLibrary(dictionary)
+      : new Yadda.ContextParamLibrary(dictionary);
+
+  if (mode === "fixtures") {
+    const define = base.define.bind(base);
+    base.define = (signatures, fn, macroContext, options) => {
+      if (!fn) return define(signatures, fn, macroContext, options);
+      try {
+        recordStepFixtures(base, signatures, parseFixtureNames(fn));
+      } catch (error) {
+        if (error instanceof Error) error.message += ` (step: ${String(signatures)})`;
+        throw error;
+      }
+      return define(signatures, bindFixtureStep(fn), macroContext, options);
+    };
+  }
+
+  return language.localise(base as any) as any;
+}
+
+/**
+ * Bind step libraries to a Playwright `test` (usually one built with `test.extend({...})`), so
+ * the fixtures a step destructures are typed from it:
+ *
+ * ```ts
+ * const { createStepLibrary } = createBdd(test);
+ * export const steps = createStepLibrary();
+ * steps.given("a signed-in user", async ({ page, account }) => { ... });
+ * ```
+ *
+ * `test` is used for its type only; the suite still needs the same `test` in `defineFeatureSuite`.
+ */
+export function createBdd<T extends TestType<any, any>>(
+  _test: T,
+): {
+  createStepLibrary: (
+    dictionary?: Yadda.Dictionary,
+    language?: Yadda.Language,
+  ) => FixtureStepLibrary<FixturesOf<T>>;
+} {
+  return {
+    createStepLibrary: (dictionary, language) =>
+      createStepLibrary(dictionary, "fixtures", language) as unknown as FixtureStepLibrary<
+        FixturesOf<T>
+      >,
+  };
 }
 
 /**

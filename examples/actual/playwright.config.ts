@@ -7,7 +7,7 @@ export default defineConfig({
   timeout: 60_000,
   // Each scenario gets its own browser context, and so its own demo budget.
   fullyParallel: true,
-  reporter: [["list"]],
+  reporter: [["playwright-yadda/reporter"]],
   expect: { timeout: 10_000 },
   use: {
     browserName: "chromium",

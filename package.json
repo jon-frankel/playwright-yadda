@@ -22,6 +22,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./reporter": {
+      "import": {
+        "types": "./dist/reporter.d.mts",
+        "default": "./dist/reporter.mjs"
+      },
+      "require": {
+        "types": "./dist/reporter.d.cts",
+        "default": "./dist/reporter.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -34,6 +44,16 @@
         "require": {
           "types": "./dist/index.d.cts",
           "default": "./dist/index.cjs"
+        }
+      },
+      "./reporter": {
+        "import": {
+          "types": "./dist/reporter.d.mts",
+          "default": "./dist/reporter.mjs"
+        },
+        "require": {
+          "types": "./dist/reporter.d.cts",
+          "default": "./dist/reporter.cjs"
         }
       },
       "./package.json": "./package.json"

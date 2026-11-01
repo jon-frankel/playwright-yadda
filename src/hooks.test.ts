@@ -18,18 +18,26 @@ Feature: Hooked
 
   Scenario: Plain
     Given boom
+
+  Scenario: Late
+    Given a late step
+    And a step
 `;
 
 function setup(hooks: ReturnType<typeof createHooks>, extra: Record<string, unknown> = {}) {
   const log: string[] = [];
   const lib = new Yadda.Library();
   lib.define("a step", () => log.push("step"));
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  lib.define("a late step", () => gate);
   lib.define("boom", () => {
     throw new Error("boom");
   });
   const tests: Record<string, any> = {};
   const befores: any[] = [];
   const afters: any[] = [];
+  const afterEaches: any[] = [];
   const test: any = Object.assign(
     (title: string, ...rest: any[]) => {
       tests[title] = rest.at(-1);
@@ -38,6 +46,7 @@ function setup(hooks: ReturnType<typeof createHooks>, extra: Record<string, unkn
       describe: (a: any, b: any) => (typeof a === "function" ? a() : b()),
       beforeAll: (fn: any) => befores.push(fn),
       afterAll: (fn: any) => afters.push(fn),
+      afterEach: (fn: any) => afterEaches.push(fn),
       step: async (_t: string, body: () => Promise<void>) => body(),
       skip: vi.fn<() => void>(),
       only: vi.fn<() => void>(),
@@ -51,7 +60,7 @@ function setup(hooks: ReturnType<typeof createHooks>, extra: Record<string, unkn
     hooks,
     ...extra,
   });
-  return { log, tests, befores, afters };
+  return { log, tests, befores, afters, afterEaches, release };
 }
 
 describe("hooks", () => {
@@ -199,6 +208,58 @@ describe("hooks", () => {
       throw new Error("x");
     });
     expect(hooks.select("AfterScenario", [])[0]?.name).toBe("AfterScenario #1");
+  });
+
+  describe("when the test times out", () => {
+    const info = { testId: "t1", annotations: [], error: new Error("Test timeout") };
+    const sut = () => {
+      const hooks = createHooks();
+      const made = setup(hooks);
+      hooks.BeforeStep(({ step }) => void made.log.push(`beforeStep ${step}`));
+      hooks.AfterStep(
+        ({ step, error }) => void made.log.push(`afterStep ${step} ${String(error)}`),
+      );
+      hooks.AfterScenario(() => void made.log.push("afterScenario"));
+      return made;
+    };
+
+    it("runs AfterStep and AfterScenario once, from afterEach, even if the body resumes", async () => {
+      const { log, tests, afterEaches, release } = sut();
+      const body = tests["Scenario: Late"]({ page: {}, context: {} }, info);
+      const settled = body.catch((error: Error) => error);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await afterEaches[0]({}, info); // Playwright's timeout: the body is abandoned, not stopped
+      release(); // ... and later it resumes
+      await settled;
+      expect(log).toEqual([
+        "beforeStep Given a late step",
+        "afterStep Given a late step Error: Test timeout",
+        "afterScenario",
+      ]);
+    });
+
+    it("leaves the hooks to a body that reached them first", async () => {
+      const { log, tests, afterEaches, release } = sut();
+      release();
+      await tests["Scenario: Late"]({ page: {}, context: {} }, info);
+      await afterEaches[0]({}, info);
+      expect(log.filter((entry) => entry === "afterScenario")).toHaveLength(1);
+    });
+
+    it("only warns when a hook fails there", async () => {
+      const hooks = createHooks();
+      const { tests, afterEaches } = setup(hooks);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      hooks.AfterScenario(() => {
+        throw new Error("cleanup broke");
+      });
+      const settled = tests["Scenario: Late"]({ page: {}, context: {} }, info).catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await expect(afterEaches[0]({}, info)).resolves.toBeUndefined();
+      expect(warn).toHaveBeenCalled();
+      warn.mockRestore();
+      void settled;
+    });
   });
 
   it("copes with an error whose message is read-only", async () => {

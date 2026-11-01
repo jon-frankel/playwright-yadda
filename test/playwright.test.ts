@@ -240,8 +240,9 @@ describe("hooks with the real Playwright", () => {
     const results = specs.map((spec) => [spec.title, spec.tests[0]?.status]);
     expect(results.filter(([, outcome]) => outcome === "unexpected")).toEqual([
       ["Scenario: Times out", "unexpected"],
+      ["Scenario: Hangs until teardown", "unexpected"],
     ]);
-    expect(specs).toHaveLength(3);
+    expect(specs).toHaveLength(4);
   });
 
   it("runs Before hooks in order, filtered by tag, and After hooks in reverse", () => {
@@ -261,6 +262,16 @@ describe("hooks with the real Playwright", () => {
       "BeforeScenario 1",
       "BeforeStep Given a step that hangs",
       "AfterStep Given a step that hangs failed",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+
+  it("runs each After hook once when the abandoned body resumes after the timeout", () => {
+    expect(ran("Hangs until teardown")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
+      "BeforeScenario 1",
+      "BeforeStep Given a step that hangs until teardown",
+      "AfterStep Given a step that hangs until teardown failed",
       "AfterScenario 2",
       "AfterScenario 1",
     ]);

@@ -8,7 +8,18 @@ import {
 } from "../../src/index.ts";
 
 // no browser: the suite always asks for these two, so they are replaced
-const test = base.extend({
+let hangs: (() => void)[] = [];
+const test = base.extend<{ settleHangs: void }>({
+  // Settles the hung step after `afterEach`, as a closing page does a pending `locator.click()`
+  settleHangs: [
+    // oxlint-disable-next-line no-empty-pattern
+    async ({}, use) => {
+      await use();
+      for (const settle of hangs) settle();
+      hangs = [];
+    },
+    { auto: true },
+  ],
   // oxlint-disable-next-line no-empty-pattern
   page: async ({}, use) => use({} as never),
   // oxlint-disable-next-line no-empty-pattern
@@ -20,6 +31,10 @@ steps.given("a step that passes", async () => {});
 steps.given("a step that hangs", async () => {
   await new Promise(() => {});
 });
+steps.given("a step that hangs until teardown", async () => {
+  await new Promise<void>((resolve) => hangs.push(resolve));
+});
+steps.given("a step after the hang", async () => {});
 steps.given("a step that fails", async () => {
   throw new Error("step failed");
 });
@@ -52,6 +67,11 @@ Feature: Hooks
   @timeout:1500
   Scenario: Times out
     Given a step that hangs
+
+  @timeout:1500
+  Scenario: Hangs until teardown
+    Given a step that hangs until teardown
+    And a step after the hang
 
   @fail
   Scenario: Fails

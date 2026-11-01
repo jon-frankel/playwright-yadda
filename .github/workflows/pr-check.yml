@@ -1,0 +1,107 @@
+name: PR Check
+
+# Static analysis always runs. A test suite runs only when something it depends on changed in the pull
+# request; Validate Main runs all of them after the merge.
+#
+# What each suite depends on:
+#   unit tests       the library: src/, test/, package.json, the lockfile, and the root build and test config
+#   examples/<name>  that example, plus the library, which the example is run against
+#   JetBrains plugin ide/jetbrains/, plus examples/, whose feature files its tests open
+# A change under .github/, or a pull request too large to list its files, runs everything, so a workflow change is exercised by the pull request that makes it.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      unit-tests: ${{ steps.filter.outputs.unit-tests }}
+      example-basic: ${{ steps.filter.outputs.example-basic }}
+      example-wordpress: ${{ steps.filter.outputs.example-wordpress }}
+      example-actual: ${{ steps.filter.outputs.example-actual }}
+      jetbrains-plugin: ${{ steps.filter.outputs.jetbrains-plugin }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          # The files endpoint stops listing at 3000 files, so a PR that large can't be filtered reliably.
+          # Run everything for it rather than risk skipping a suite.
+          count=$(gh api "repos/$REPOSITORY/pulls/$PULL_REQUEST" --jq .changed_files)
+          echo "Changed files: $count"
+          everything=false
+          if [ "$count" -ge 3000 ]; then everything=true; fi
+
+          # The new path of every changed file, and the old path of a renamed one.
+          files=$(gh api "repos/$REPOSITORY/pulls/$PULL_REQUEST/files" --paginate \
+            --jq '.[] | .filename, (.previous_filename // empty)')
+          printf '%s\n' "$files"
+
+          changed() { printf '%s\n' "$files" | grep -Eq "$1"; }
+          output() {
+            if $everything || changed "^\.github/" || changed "$2"; then value=true; else value=false; fi
+            echo "$1=$value" | tee -a "$GITHUB_OUTPUT"
+          }
+
+          library='^(src/|test/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.npmrc$|tsconfig\.json$|tsdown\.config\.ts$|vitest\.config\.ts$)'
+
+          output unit-tests "$library"
+          output example-basic "$library|^examples/basic/"
+          output example-wordpress "$library|^examples/wordpress/"
+          output example-actual "$library|^examples/actual/"
+          output jetbrains-plugin '^(ide/jetbrains/|examples/|scripts/ide-jetbrains-test\.sh$)'
+
+  static-analysis:
+    uses: ./.github/workflows/static-analysis.yml
+
+  unit-tests:
+    needs: changes
+    if: needs.changes.outputs.unit-tests == 'true'
+    uses: ./.github/workflows/unit-tests.yml
+
+  example-basic:
+    needs: changes
+    if: needs.changes.outputs.example-basic == 'true'
+    uses: ./.github/workflows/example-tests.yml
+    with:
+      example: basic
+      browsers: chromium
+
+  example-wordpress:
+    needs: changes
+    if: needs.changes.outputs.example-wordpress == 'true'
+    uses: ./.github/workflows/example-tests.yml
+    with:
+      example: wordpress
+      browsers: chromium
+      timeout-minutes: 20
+
+  example-actual:
+    needs: changes
+    if: needs.changes.outputs.example-actual == 'true'
+    uses: ./.github/workflows/example-tests.yml
+    with:
+      example: actual
+      browsers: chromium
+      cache-path: .cache
+      cache-key-file: scripts/serve.mjs
+      timeout-minutes: 40
+
+  jetbrains-plugin:
+    needs: changes
+    if: needs.changes.outputs.jetbrains-plugin == 'true'
+    uses: ./.github/workflows/jetbrains-plugin-tests.yml

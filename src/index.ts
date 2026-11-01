@@ -15,10 +15,8 @@ export type {
   ParsedScenario,
   ResolveLibrariesOptions,
   StepLibrary,
+  YaddaReporterOptions,
 } from "./types.js";
-
-// Reporter options (the reporter itself is `playwright-yadda/reporter`)
-export type { YaddaReporterOptions } from "./reporter.js";
 
 // Annotation parsing utilities
 export {

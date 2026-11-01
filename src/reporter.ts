@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   FullResult,
   Reporter,
@@ -8,6 +9,7 @@ import type {
   TestResult,
   TestStep,
 } from "@playwright/test/reporter";
+import type { YaddaReporterOptions } from "./types.js";
 
 const useColor = !process.env.NO_COLOR && (process.stdout.isTTY || !!process.env.FORCE_COLOR);
 const paint = (code: number, text: string) => (useColor ? `\x1b[${code}m${text}\x1b[0m` : text);
@@ -28,30 +30,29 @@ function indent(text: string, pad: string): string {
     .join("\n");
 }
 
-export interface YaddaReporterOptions {
-  /** Keep yadda and playwright-yadda frames in stack traces. Default: false. */
-  fullStackTrace?: boolean;
-}
-
 const NODE_MODULES_FRAME = /node_modules[\\/](playwright-)?yadda[\\/]/;
 const STACK_FRAME = /^\s+at /;
 
-/** Real directories of the yadda and playwright-yadda packages, as seen from the user's project. */
-function packageDirs(): string[] {
-  const require = createRequire(path.join(process.cwd(), "noop.js"));
-  const dirs: string[] = [];
-  for (const name of ["playwright-yadda", "yadda"]) {
-    try {
-      dirs.push(path.dirname(require.resolve(`${name}/package.json`)) + path.sep);
-    } catch {
-      // Not resolvable from here; the node_modules pattern still applies
-    }
+/**
+ * Directories whose frames are internal: this package's own `dist/` (or `src/` in a checkout),
+ * located from this file rather than the cwd, and yadda's `lib/`, resolved from here too.
+ * Each is listed as a path and as a file:// URL, since ESM frames can use either.
+ */
+function internalDirs(): string[] {
+  // Built files live in dist/, but source-mapped frames point at the sibling src/
+  const own = path.dirname(fileURLToPath(import.meta.url));
+  const dirs = [own, path.join(own, "..", "src")].map((d) => path.normalize(d));
+  try {
+    const yaddaRoot = path.dirname(createRequire(import.meta.url).resolve("yadda/package.json"));
+    dirs.push(path.join(yaddaRoot, "lib"));
+  } catch {
+    // yadda not resolvable from here; the node_modules pattern still applies
   }
-  return dirs;
+  return dirs.flatMap((d) => [d + path.sep, pathToFileURL(d).href + "/"]);
 }
 
 function makeInternalFrameTest(): (line: string) => boolean {
-  const dirs = packageDirs();
+  const dirs = internalDirs();
   return (line) =>
     STACK_FRAME.test(line) && (NODE_MODULES_FRAME.test(line) || dirs.some((d) => line.includes(d)));
 }

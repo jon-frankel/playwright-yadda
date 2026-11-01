@@ -166,3 +166,11 @@ export interface FeatureSuiteOptions<
    */
   onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
 }
+
+/**
+ * Options for the `playwright-yadda/reporter` Playwright reporter
+ */
+export interface YaddaReporterOptions {
+  /** Keep yadda and playwright-yadda frames in stack traces. Default: false. */
+  fullStackTrace?: boolean;
+}

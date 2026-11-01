@@ -15,6 +15,7 @@ import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.ui.popup.PopupStep
 import com.intellij.openapi.ui.popup.util.BaseListPopupStep
 import io.github.jonfrankel.playwrightyadda.libraries.FeatureTags
+import io.github.jonfrankel.playwrightyadda.libraries.LibraryModes
 import io.github.jonfrankel.playwrightyadda.libraries.LibraryRegistries
 import io.github.jonfrankel.playwrightyadda.libraries.enabledLibraries
 import io.github.jonfrankel.playwrightyadda.yadda.StepSkeleton
@@ -38,6 +39,9 @@ object YaddaStepCreator {
   /** A `createStepLibrary()` variable a definition can be added to. */
   class Target(val variable: JSVariable) {
     val receiver: String get() = variable.name.orEmpty()
+
+    /** Whether its steps take the scenario's fixtures as their first parameter. */
+    val fixtures: Boolean get() = LibraryModes.isFixtures(variable)
     val label: String
       get() {
         val file = variable.containingFile
@@ -65,8 +69,14 @@ object YaddaStepCreator {
     if (editor != null) popup.showInBestPositionFor(editor) else popup.showCenteredInCurrentWindow(project)
   }
 
-  /** The step at [offset] of [file] if it has no definition and a skeleton can be written for it. */
-  fun undefinedAt(file: PsiFile, offset: Int): Undefined? {
+  /**
+   * The step at [offset] of [file] if it has no definition and a skeleton can be written for it. A caret at the
+   * end of the step's line is on the line break, not on the step, so the character before it is tried too.
+   */
+  fun undefinedAt(file: PsiFile, offset: Int): Undefined? =
+    undefinedExactlyAt(file, offset) ?: if (offset > 0) undefinedExactlyAt(file, offset - 1) else null
+
+  private fun undefinedExactlyAt(file: PsiFile, offset: Int): Undefined? {
     if (file is YaddaFile) {
       val step = file.findElementAt(offset)?.let { PsiTreeUtil.getParentOfType(it, GherkinStep::class.java, false) } ?: return null
       return undefinedOf(file, step)
@@ -159,7 +169,7 @@ object YaddaStepCreator {
         val file = target.variable.containingFile
         val document = documents.getDocument(file) ?: continue
         val typed = file.name.substringAfterLast('.').lowercase().let { it == "ts" || it == "tsx" || it == "mts" || it == "cts" }
-        val text = undefined.skeleton.render(target.receiver, typed)
+        val text = undefined.skeleton.render(target.receiver, typed, target.fixtures)
         val separator = when {
           document.textLength == 0 -> ""
           document.text.endsWith("\n\n") -> ""

@@ -73,6 +73,32 @@ class StepSkeletonTest : junit.framework.TestCase() {
     assertTrue(skeleton(text, typed = true)!!.contains("(valueClass: string)"))
   }
 
+  fun `test a fixtures library's step destructures the fixtures before the captures`() {
+    val text = "Feature: F\n  Scenario: S [qty]\n    Given a cart of [qty] keyboards\n  Examples:\n    | qty |\n    | 1 |\n"
+    val steps = YaddaGrammar.analyze(text).steps.values.sortedBy { it.line }
+    val skeleton = StepSkeleton.of(steps.last())!!
+    assertEquals(
+      "lib.given(/^a cart of (.+) keyboards$/, async ({}, qty: string) => {\n  \n});",
+      skeleton.render("lib", typed = true, fixtures = true),
+    )
+    assertEquals(
+      "lib.given(/^a cart of (.+) keyboards$/, async ({}, qty) => {\n  \n});",
+      skeleton.render("lib", typed = false, fixtures = true),
+    )
+    assertEquals(
+      "lib.given(/^a cart of (.+) keyboards$/, async function (qty: string) {\n  \n});",
+      skeleton.render("lib", typed = true),
+    )
+  }
+
+  fun `test a fixtures library's step with no captures still takes the fixtures`() {
+    val steps = YaddaGrammar.analyze(scenario("When they leave")).steps.values.sortedBy { it.line }
+    assertEquals(
+      "lib.when(\"they leave\", async ({}) => {\n  \n});",
+      StepSkeleton.of(steps.last())!!.render("lib", typed = true, fixtures = true),
+    )
+  }
+
   fun `test a step with no keyword has no skeleton`() {
     assertNull(skeleton(scenario("the moon is full")))
     assertNull(skeleton(scenario("Given")))
@@ -81,12 +107,12 @@ class StepSkeletonTest : junit.framework.TestCase() {
 
 /** "Create Yadda step definition", in place of the Cucumber.js plugin's. */
 class YaddaCreateStepTest : BasePlatformTestCase() {
-  private fun project(depends: Boolean = true) {
+  private fun project(depends: Boolean = true, storefront: String = "export const storefrontSteps = createStepLibrary();\n") {
     if (depends) myFixture.addFileToProject("package.json", """{ "devDependencies": { "playwright-yadda": "1" } }""")
     myFixture.addFileToProject("common.ts", "export const commonSteps = createStepLibrary();\n")
     myFixture.addFileToProject(
       "storefront.ts",
-      "export const storefrontSteps = createStepLibrary();\nstorefrontSteps.when(\"they remove the item\", function () {});\n",
+      storefront + "storefrontSteps.when(\"they remove the item\", function () {});\n",
     )
     myFixture.addFileToProject(
       "registry.ts",
@@ -135,6 +161,21 @@ class YaddaCreateStepTest : BasePlatformTestCase() {
         "storefrontSteps.given(\"the moon is full\", async function () {\n\n});\n",
       text("storefront.ts"),
     )
+  }
+
+  fun `test the fix is offered with the caret at the end of the step's line`() {
+    project()
+    open("features/a.feature", feature, "the moon is full")
+    myFixture.editor.caretModel.moveToOffset(myFixture.editor.document.getLineEndOffset(3))
+    create("Create Yadda step definition")
+    assertTrue(text("storefront.ts"), text("storefront.ts").contains("storefrontSteps.given(\"the moon is full\""))
+  }
+
+  fun `test the fix is not offered on the line after a step`() {
+    project()
+    open("features/a.feature", "@Libraries=storefront\nFeature: F\n  Scenario: S\n    Given the moon is full\n\n    When they remove the item\n", "the moon")
+    myFixture.editor.caretModel.moveToOffset(myFixture.editor.document.getLineStartOffset(4))
+    assertFalse(intentions().toString(), "Create Yadda step definition" in intentions())
   }
 
   fun `test several candidates are offered the scenario's own library first`() {
@@ -211,6 +252,93 @@ class YaddaCreateStepTest : BasePlatformTestCase() {
       text("storefront.ts"),
       text("storefront.ts").contains("storefrontSteps.given(/^the cart holds (.+):\\n([\\s\\S]+)\$/, async function (qty: string, block: string) {"),
     )
+  }
+
+  private val outline =
+    "@Libraries=storefront\nFeature: F\n  Scenario: S [qty]\n    Given a cart of [qty] keyboards\n  Examples:\n    | qty |\n    | 1 |\n"
+
+  private fun created(storefront: String): String {
+    project(storefront = storefront)
+    open("features/a.feature", outline, "a cart")
+    create("Create Yadda step definition")
+    return text("storefront.ts")
+  }
+
+  private fun assertFixturesStub(written: String) =
+    assertTrue(written, written.contains("storefrontSteps.given(/^a cart of (.+) keyboards\$/, async ({}, qty: string) => {"))
+
+  private fun assertPlainStub(written: String) =
+    assertTrue(written, written.contains("storefrontSteps.given(/^a cart of (.+) keyboards\$/, async function (qty: string) {"))
+
+  fun `test a library made with the fixtures mode gets the fixtures first`() {
+    assertFixturesStub(created("export const storefrontSteps = createStepLibrary(undefined, \"fixtures\");\n"))
+  }
+
+  fun `test the fixtures mode is found with a dictionary and a language`() {
+    assertFixturesStub(created("export const storefrontSteps = createStepLibrary({}, \"fixtures\", Yadda.localisation.English);\n"))
+  }
+
+  fun `test the fixtures mode is found through a constant`() {
+    assertFixturesStub(created("const mode = \"fixtures\";\nexport const storefrontSteps = createStepLibrary(undefined, mode);\n"))
+  }
+
+  fun `test a library made with createBdd gets the fixtures first`() {
+    assertFixturesStub(created("export const storefrontSteps = createBdd(test).createStepLibrary();\n"))
+  }
+
+  fun `test a createStepLibrary destructured from createBdd gets the fixtures first`() {
+    assertFixturesStub(
+      created("const { createStepLibrary } = createBdd(test);\nexport const storefrontSteps = createStepLibrary();\n"),
+    )
+  }
+
+  fun `test a createStepLibrary read off a createBdd variable gets the fixtures first`() {
+    assertFixturesStub(created("const bdd = createBdd(test);\nexport const storefrontSteps = bdd.createStepLibrary();\n"))
+  }
+
+  fun `test a namespaced createStepLibrary with the fixtures mode gets the fixtures first`() {
+    assertFixturesStub(
+      created("import * as yadda from \"playwright-yadda\";\nexport const storefrontSteps = yadda.createStepLibrary(undefined, \"fixtures\");\n"),
+    )
+  }
+
+  fun `test a namespaced createStepLibrary with no mode keeps the function`() {
+    assertPlainStub(created("import * as yadda from \"playwright-yadda\";\nexport const storefrontSteps = yadda.createStepLibrary();\n"))
+  }
+
+  fun `test a createStepLibrary that another module takes from createBdd gets the fixtures first`() {
+    myFixture.addFileToProject("bdd.ts", "export const { createStepLibrary } = createBdd(test);\n")
+    assertFixturesStub(
+      created("import { createStepLibrary } from \"./bdd.js\";\nexport const storefrontSteps = createStepLibrary();\n"),
+    )
+  }
+
+  fun `test a createStepLibrary that another module takes from a plain import keeps the function`() {
+    myFixture.addFileToProject("bdd.ts", "export { createStepLibrary } from \"playwright-yadda\";\n")
+    assertPlainStub(
+      created("import { createStepLibrary } from \"./bdd.js\";\nexport const storefrontSteps = createStepLibrary();\n"),
+    )
+  }
+
+  fun `test create all writes the fixtures stub for each step of a fixtures library`() {
+    project(storefront = "export const storefrontSteps = createStepLibrary(undefined, \"fixtures\");\n")
+    open("features/a.feature", feature, "the moon")
+    create("Create all Yadda step definitions")
+    val written = text("storefront.ts")
+    assertTrue(written, written.contains("storefrontSteps.given(\"the moon is full\", async ({}) => {"))
+    assertTrue(written, written.contains("storefrontSteps.given(\"the sun is out\", async ({}) => {"))
+  }
+
+  fun `test a library made with the default mode keeps the function`() {
+    assertPlainStub(created("export const storefrontSteps = createStepLibrary();\n"))
+  }
+
+  fun `test a library made with the bound mode keeps the function`() {
+    assertPlainStub(created("export const storefrontSteps = createStepLibrary(undefined, \"bound\");\n"))
+  }
+
+  fun `test a library made with the param mode keeps the function`() {
+    assertPlainStub(created("export const storefrontSteps = createStepLibrary(undefined, \"param\");\n"))
   }
 
   fun `test after it is created the step resolves`() {

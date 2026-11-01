@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
-import { isScenarioOnly, isScenarioPending } from "./annotations.js";
+import { extractLibraryNames, isScenarioOnly, isScenarioPending } from "./annotations.js";
 import {
   BASE_FIXTURE_NAMES,
   createFixtureCollector,
@@ -12,9 +12,11 @@ import {
   usesFixturesMode,
   withScenarioFixtures,
 } from "./fixtures.js";
+import { pathTagAnnotations, tagsFromPath } from "./path-tags.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import type {
+  AnnotationRecord,
   DefaultScenarioContext,
   FeatureSuiteOptions,
   ILibraryRegistryManager,
@@ -61,15 +63,26 @@ export function parseFeature(
 }
 
 /**
- * Load and parse a feature from a local file
+ * Load and parse a feature from a local file.
+ *
+ * With `root` (the features directory), `@`-prefixed directory names between it and the file, and a
+ * file name that starts with `@`, tag the feature: they are listed in `pathTags` and added to the
+ * annotations as flags. Annotations written in the feature win over a path tag of the same name.
  */
 export function loadFeatureFile(
   filepath: string,
   parserType: "auto" | "gherkin" | "markdown" = "auto",
   language?: Yadda.Language,
+  root?: string,
 ): ParsedFeature {
   const content = fs.readFileSync(filepath, "utf8");
-  return parseFeature(content, parserType, filepath, language);
+  const feature = parseFeature(content, parserType, filepath, language);
+  const pathTags = root === undefined ? [] : tagsFromPath(filepath, root);
+  if (pathTags.length > 0) {
+    feature.pathTags = pathTags;
+    feature.annotations = { ...pathTagAnnotations(pathTags), ...feature.annotations };
+  }
+  return feature;
 }
 
 /**
@@ -112,6 +125,9 @@ function supportsTestDetails(): boolean {
     return false;
   }
 }
+
+/** Annotation naming a feature's step libraries */
+const LIBRARIES_KEY = "libraries";
 
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
@@ -162,6 +178,26 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
   const detailsSupported = supportsTestDetails();
 
+  const pathTags = feature.pathTags ?? [];
+  // A path tag that names a library in the registry loads it, as `@Libraries=name` would. Added
+  // after the feature's own `@Libraries`, so those keep their order, and treated as the feature's
+  // own: with "override", a scenario's `@Libraries` replaces it too.
+  const libraryTags = pathTags.filter((tag) => registry.has(tag));
+  const featureAnnotations: AnnotationRecord | undefined =
+    libraryTags.length > 0
+      ? {
+          ...Object.fromEntries(
+            Object.entries(feature.annotations ?? {}).filter(
+              ([key]) => key.trim().toLowerCase() !== LIBRARIES_KEY,
+            ),
+          ),
+          [LIBRARIES_KEY]: [
+            ...extractLibraryNames(feature.annotations, LIBRARIES_KEY),
+            ...libraryTags,
+          ].join(", "),
+        }
+      : feature.annotations;
+
   const resolveOpts: ResolveLibrariesOptions<K> = {};
   if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
   if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
@@ -179,11 +215,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
     const names = new Set<string>(BASE_FIXTURE_NAMES);
     try {
-      const libraries = registry.resolve(
-        parsedFeature.annotations,
-        scenario.annotations,
-        resolveOpts,
-      );
+      const libraries = registry.resolve(featureAnnotations, scenario.annotations, resolveOpts);
       for (const name of collectFixtures(libraries, scenario.steps)) names.add(name);
     } catch (error) {
       // The scenario fails with this same error when it runs. Say why its fixtures are only the
@@ -207,20 +239,24 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
   test.describe(`Feature: ${feature.title}`, () => {
     for (const scenario of feature.scenarios) {
-      const isPending = isScenarioPending(feature.annotations, scenario.annotations);
-      const isOnly = isScenarioOnly(feature.annotations, scenario.annotations);
+      const isPending = isScenarioPending(featureAnnotations, scenario.annotations);
+      const isOnly = isScenarioOnly(featureAnnotations, scenario.annotations);
 
       const kind = isPending ? "skip" : isOnly ? "only" : undefined;
       const declare = (kind ? test[kind] : test) as (...args: unknown[]) => void;
       // Attached when the test is declared, so reporters still see it if a fixture or hook fails
       // before the body runs, and for skipped scenarios whose body never does
       const attachUpFront = !!feature.filepath && detailsSupported;
-      const details = {
-        annotation: { type: FEATURE_FILE_ANNOTATION, description: feature.filepath },
-      };
-      const testFn = attachUpFront
-        ? (title: string, body: unknown) => declare(title, details, body)
-        : declare;
+      const details: { annotation?: object; tag?: string[] } = {};
+      if (attachUpFront) {
+        details.annotation = { type: FEATURE_FILE_ANNOTATION, description: feature.filepath };
+      }
+      // Tags from the feature's path, so `--grep @name` and `--tag` find them
+      if (pathTags.length > 0 && detailsSupported) details.tag = pathTags.map((tag) => `@${tag}`);
+      const testFn =
+        Object.keys(details).length > 0
+          ? (title: string, body: unknown) => declare(title, details, body)
+          : declare;
 
       // Playwright sets up the fixtures the test callback destructures, so the callback has to name
       // the ones this scenario's steps use. They are read from the steps' own parameters.
@@ -239,7 +275,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 1. Resolve step libraries dynamically for this specific scenario
-        const libraries = registry.resolve(feature.annotations, scenario.annotations, resolveOpts);
+        const libraries = registry.resolve(featureAnnotations, scenario.annotations, resolveOpts);
 
         // 2. Build isolated Yadda runner instance
         const yadda = createScenarioYadda(libraries);
@@ -301,7 +337,11 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
       }
 
       for (const file of files) {
-        parsedFeatures.push(loadFeatureFile(file, parserType, language));
+        // Path tags are relative to the directory given, or to the folder of a single file
+        const root = fs.statSync(target).isDirectory()
+          ? target
+          : path.dirname(path.resolve(target));
+        parsedFeatures.push(loadFeatureFile(file, parserType, language, root));
       }
     }
   }

@@ -111,6 +111,32 @@ pnpm playwright test
 
 ---
 
+## Tags from path
+
+A directory or file name that starts with `@` tags every feature inside it, so a feature can get its libraries from where it lives instead of an `@Libraries` line. `defineFeatureSuite` works the tags out from the path of each feature file relative to the `features` directory you give it, when it finds the files, so there is no generation step.
+
+```
+features/
+├── @storefront/             # tag: storefront
+│   ├── cart.feature
+│   └── @slow/               # tags: storefront, slow
+│       └── bulk-import.feature
+├── @admin.feature           # tag: admin
+└── @skip/
+    └── wip.feature          # tag: skip
+```
+
+- Every tag is added to the feature's annotations as a flag, like a bare `@tag` written in the file, and to each scenario's Playwright tags as `@tag`, so `playwright test --grep @slow` and `--tag` find them. A file name loses its extensions: `@admin.yadda.feature` is `@admin`. Names are not case-sensitive in annotations.
+- A tag that is a key in your registry loads that library, as `@Libraries=storefront` would: `features/@storefront/cart.feature` runs with `common` and `storefront`. Tags that name no library, like `@slow`, are left as tags.
+- Special tags work as directory names too: `@skip/` and `@pending/` skip the scenarios inside, `@only/` runs only them.
+- Only the part of the path below the directory you give counts, so an `@` further up (a checkout under `~/@work/`) tags nothing. A single file path counts only its own name.
+
+**Precedence.** Path libraries come after the feature's own `@Libraries`, and count as the feature's: with `libraryInheritance: "merge"` (the default) a scenario's `@Libraries` adds to them, and with `"override"` it replaces them, just as it replaces the feature's. An annotation written in the file wins over a path tag of the same name, so `@game=custom` in the file keeps its value under `@game/`.
+
+`loadFeatureFile(file, parserType, language, root)` takes the same `root` and sets `pathTags` on the feature; `tagsFromPath(file, root)` is the underlying helper. Features you pass already parsed are used as they are.
+
+---
+
 ## API Reference
 
 ### `createLibraryRegistry(libraries, options?)`
@@ -133,7 +159,7 @@ Discovers feature files and registers them with Playwright's `test` runner.
 
 - `test`: The Playwright `test` instance.
 - `registry`: The `LibraryRegistry` or `LibraryRegistryManager`.
-- `features`: Directory path, file path, glob pattern, or pre-parsed feature array.
+- `features`: Directory path, file path, glob pattern, or pre-parsed feature array. `@` directory and file names under a directory become tags; see [Tags from path](#tags-from-path).
 - `createContext`: Optional custom factory function to initialize scenario context. It receives `page`, `context` and `testInfo`, plus any other fixtures the scenario's steps use. It cannot ask for fixtures itself: Playwright only sets up what a step or this library names.
 - `language`: The Yadda localisation the feature files are written in (default `Yadda.localisation.English`). It sets the words read as `Feature:`, `Scenario:`, `Examples:` and so on. Use the same language for the step libraries.
 

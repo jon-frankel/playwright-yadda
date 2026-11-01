@@ -39,6 +39,9 @@ export {
   type StepFixtures,
 } from "./fixtures.js";
 
+// Tags from `@` directory and file names
+export { pathTagAnnotations, tagsFromPath } from "./path-tags.js";
+
 // Library Registry
 export {
   createBdd,

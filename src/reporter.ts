@@ -1,3 +1,4 @@
+import path from "node:path";
 import type {
   FullResult,
   Reporter,
@@ -57,6 +58,7 @@ export default class YaddaReporter implements Reporter {
   private skipped = 0;
   private flaky = 0;
   private failures: string[] = [];
+  private currentFeature: string | undefined;
 
   printsToStdio(): boolean {
     return true;
@@ -86,7 +88,15 @@ export default class YaddaReporter implements Reporter {
     const retry = result.retry > 0 ? dim(` (retry #${result.retry})`) : "";
     const duration = dim(` (${result.duration}ms)`);
     const mark = ok ? green("✓") : skipped ? yellow("-") : red("✗");
-    if (heading.length > 1) lines.push(dim(heading.slice(0, -1).join(" › ")));
+    // Print the feature (and its file) once, before its first scenario
+    const featureFile = test.annotations.find((a) => a.type === "feature-file")?.description;
+    const featureTitle = heading.length > 1 ? heading.slice(0, -1).join(" › ") : "";
+    const featureKey = featureFile ?? featureTitle;
+    if (featureKey !== this.currentFeature) {
+      this.currentFeature = featureKey;
+      if (featureFile) lines.push(bold(path.relative(process.cwd(), featureFile)));
+      if (featureTitle) lines.push(featureFile ? dim(featureTitle) : bold(featureTitle));
+    }
     lines.push(`${mark} ${bold(heading[heading.length - 1] ?? test.title)}${retry}${duration}`);
 
     const steps = result.steps.filter((s) => s.category === "test.step");

@@ -87,6 +87,8 @@ export interface ParsedScenario {
  */
 export interface ParsedFeature {
   title: string;
+  /** Path of the file the feature was loaded from, when it came from one */
+  filepath?: string;
   annotations?: AnnotationRecord;
   description?: string[];
   scenarios: ParsedScenario[];

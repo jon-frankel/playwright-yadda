@@ -45,7 +45,9 @@ export function parseFeature(
       ? new Yadda.parsers.MarkdownFeatureParser(language)
       : new Yadda.parsers.FeatureParser(language);
 
-  return parser.parse(content) as ParsedFeature;
+  const parsed = parser.parse(content) as ParsedFeature;
+  if (filepath) parsed.filepath = path.resolve(filepath);
+  return parsed;
 }
 
 /**
@@ -86,6 +88,9 @@ export function findFeatureFiles(targetPath: string): string[] {
 
   return files.sort();
 }
+
+/** Test annotation type carrying the path of the feature file a scenario came from */
+export const FEATURE_FILE_ANNOTATION = "feature-file";
 
 /**
  * Define Playwright tests for a parsed feature
@@ -135,6 +140,14 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
       testFn(`Scenario: ${scenario.title}`, async ({ page, context }: any, testInfo: any) => {
         const fixtures = { page, context, testInfo };
+
+        // Lets reporters show which file the scenario came from
+        if (feature.filepath) {
+          testInfo?.annotations?.push({
+            type: FEATURE_FILE_ANNOTATION,
+            description: feature.filepath,
+          });
+        }
 
         // 1. Resolve step libraries dynamically for this specific scenario
         const resolveOpts: ResolveLibrariesOptions<K> = {};

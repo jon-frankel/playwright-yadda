@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
 import {
@@ -14,6 +13,7 @@ import {
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
+import { supportsTestDetails, warnOnce, WARNING_ANNOTATION } from "./warnings.js";
 import type {
   DefaultScenarioContext,
   FeatureSuiteOptions,
@@ -99,20 +99,6 @@ export function findFeatureFiles(targetPath: string): string[] {
   return files.sort();
 }
 
-/**
- * Whether the installed Playwright accepts a details object (`{ annotation }`) in `test(title, details, fn)`,
- * which it has done since 1.42.
- */
-function supportsTestDetails(): boolean {
-  try {
-    const { version } = createRequire(import.meta.url)("@playwright/test/package.json");
-    const [major = 0, minor = 0] = String(version).split(".").map(Number);
-    return major > 1 || (major === 1 && minor >= 42);
-  } catch {
-    return false;
-  }
-}
-
 /** Apply `@retries`, `@mode` and `@timeout` to the describe being declared */
 function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
   const options = Object.fromEntries(
@@ -121,8 +107,8 @@ function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
   if (Object.keys(options).length > 0) test.describe.configure(options);
 }
 
-/** Problems already warned about by this process, so each is reported once */
-const warned = new Set<string>();
+/** The warning for each way a scenario's fixtures could not be worked out, worded for its first scenario */
+const fixtureWarnings = new Map<string, string>();
 
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
@@ -186,6 +172,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     });
   const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
     const names = new Set<string>(BASE_FIXTURE_NAMES);
+    const warnings: string[] = [];
     try {
       const libraries = registry.resolve(
         parsedFeature.annotations,
@@ -196,32 +183,43 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     } catch (error) {
       // The scenario fails with this same error when it runs. Say why its fixtures are only the
       // base ones, which would otherwise show up as a confusing "fixture not found" first. Only
-      // suites that use fixtures mode need telling, and once per problem: every Playwright process
-      // that loads the spec declares every scenario.
+      // suites that use fixtures mode need telling. One text per problem, from its first scenario,
+      // which every scenario with the problem carries.
       if (usesFixtures()) {
         const reason = error instanceof Error ? error.message : String(error);
-        if (!warned.has(reason)) {
-          warned.add(reason);
-          console.warn(
-            `playwright-yadda: could not work out the fixtures for "${parsedFeature.title}" > ` +
-              `"${scenario.title}" (nor any other scenario with this problem), so only ` +
-              `${BASE_FIXTURE_NAMES.join(" and ")} are set up for them: ${reason}`,
-          );
+        let message = fixtureWarnings.get(reason);
+        if (message === undefined) {
+          message =
+            `could not work out the fixtures for "${parsedFeature.title}" > ` +
+            `"${scenario.title}" (nor any other scenario with this problem), so only ` +
+            `${BASE_FIXTURE_NAMES.join(" and ")} are set up for them: ${reason}`;
+          fixtureWarnings.set(reason, message);
         }
+        warnOnce(message);
+        warnings.push(message);
       }
     }
-    return [...names];
+    return { names: [...names], warnings };
   };
 
-  const featureSettings = resolveTags(feature.annotations, undefined, {
+  const featureTags = resolveTags(feature.annotations, undefined, {
     where: `"${feature.title}"`,
-  }).feature;
+  });
+  const featureSettings = featureTags.feature;
+  // The reporter prints a warning from the scenarios that carry it; with none, nothing would
+  if (feature.scenarios.length === 0) {
+    for (const warning of featureTags.warnings) warnOnce(warning, false);
+  }
 
   test.describe(`Feature: ${feature.title}`, () => {
     configureDescribe(test, featureSettings);
 
     for (const scenario of feature.scenarios) {
-      const { scenario: tags, own } = resolveTags(feature.annotations, scenario.annotations, {
+      const {
+        scenario: tags,
+        own,
+        warnings: tagWarnings,
+      } = resolveTags(feature.annotations, scenario.annotations, {
         where: `"${feature.title}" > "${scenario.title}"`,
         featureWarnings: false,
       });
@@ -240,8 +238,21 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       // before the body runs, and for skipped scenarios whose body never does
       const attachFile = !!feature.filepath;
       const details: { annotation?: unknown; tag?: string[] } = {};
-      if (attachFile && detailsSupported) {
-        details.annotation = { type: FEATURE_FILE_ANNOTATION, description: feature.filepath };
+      // Playwright sets up the fixtures the test callback destructures, so the callback has to name
+      // the ones this scenario's steps use. They are read from the steps' own parameters.
+      const { names: fixtureNames, warnings: fixtureProblems } = scenarioFixtureNames(
+        feature,
+        scenario,
+      );
+      // The scenario's warnings go with it, the feature's own on every scenario, so the reporter
+      // can print those of the scenarios in the run, once
+      const warnings = [...featureTags.warnings, ...tagWarnings, ...fixtureProblems];
+      const annotations = [
+        ...(attachFile ? [{ type: FEATURE_FILE_ANNOTATION, description: feature.filepath }] : []),
+        ...warnings.map((description) => ({ type: WARNING_ANNOTATION, description })),
+      ];
+      if (annotations.length > 0 && detailsSupported) {
+        details.annotation = annotations.length === 1 ? annotations[0] : annotations;
       }
       // Every tag goes to Playwright, so `--grep @smoke` and `--grep-invert @slow` select by them
       if (detailsSupported && tags.playwrightTags.length > 0) details.tag = tags.playwrightTags;
@@ -250,10 +261,6 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       const testFn = attachUpFront
         ? (title: string, body: unknown) => declare(title, details, body)
         : declare;
-
-      // Playwright sets up the fixtures the test callback destructures, so the callback has to name
-      // the ones this scenario's steps use. They are read from the steps' own parameters.
-      const fixtureNames = scenarioFixtureNames(feature, scenario);
 
       const runScenario = async (stepFixtures: Record<string, any>, testInfo: any) => {
         const { page, context } = stepFixtures;

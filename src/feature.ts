@@ -335,6 +335,8 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
         files.push(path.resolve(target));
       }
 
+      // A target that is not there defines no tests, as before
+      if (files.length === 0) continue;
       // Path tags are relative to the directory given, or to the folder of a single file
       const root = fs.statSync(target).isDirectory() ? target : path.dirname(path.resolve(target));
       for (const file of files) {

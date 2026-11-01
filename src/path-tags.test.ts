@@ -134,6 +134,15 @@ describe("path tags in a loaded feature", () => {
     expect(ran).toEqual(["storefront"]);
   });
 
+  it("defines no tests, and does not throw, for a target that does not exist", () => {
+    const test = mockTest();
+    const registry = createLibraryRegistry({ common: new Yadda.Library() });
+    expect(() =>
+      defineFeatureSuite({ test, registry, features: [path.join(dir, "does-not-exist")] }),
+    ).not.toThrow();
+    expect(test).not.toHaveBeenCalled();
+  });
+
   describe("defineFeature", () => {
     const steps = (library: Yadda.Library, name: string, ran: string[]) =>
       library.define(`${name} step`, () => {

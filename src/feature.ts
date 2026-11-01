@@ -206,6 +206,10 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     where: `"${feature.title}"`,
   });
   const featureSettings = featureTags.feature;
+  // The reporter prints a warning from the scenarios that carry it; with none, nothing would
+  if (feature.scenarios.length === 0) {
+    for (const warning of featureTags.warnings) warnOnce(warning, false);
+  }
 
   test.describe(`Feature: ${feature.title}`, () => {
     configureDescribe(test, featureSettings);

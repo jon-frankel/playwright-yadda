@@ -13,6 +13,7 @@ import {
 } from "./fixtures.js";
 import { createBdd, createLibraryRegistry, createStepLibrary } from "./registry.js";
 import { runScenarioSteps } from "./runner.js";
+import { REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
 
 describe("parseFixtureNames", () => {
   it("reads destructured names from arrow, async and function steps", () => {
@@ -604,6 +605,46 @@ describe("defineFeature with fixtures", () => {
     await expect(declared[0]!.fn({ page: "P", context: "C" }, {})).rejects.toThrow(
       /Unknown step library "missing-in-warning-test"/,
     );
+  });
+
+  it("puts the warning about an unknown library on every scenario with it, for the reporter to print", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    (globalThis as Record<symbol, unknown>)[REPORTER_FLAG] = true;
+    try {
+      const uses = createStepLibrary(undefined, "fixtures");
+      const detailsOf: Record<string, any> = {};
+      const test: any = Object.assign(
+        (title: string, details: unknown) => (detailsOf[title] = details),
+        {
+          describe: (_: string, body: () => void) => body(),
+          skip: () => {},
+          only: () => {},
+          step: () => {},
+        },
+      );
+      defineFeature(
+        parseFeature(
+          "@Libraries=gone-for-the-reporter\nFeature: F\n" +
+            "  Scenario: One\n    Given a thing\n\n  Scenario: Two\n    Given a thing\n",
+        ),
+        { test, registry: createLibraryRegistry({ uses }, { defaultLibraries: [] }) },
+      );
+
+      const warningsOf = (title: string) =>
+        [detailsOf[title].annotation]
+          .flat()
+          .filter((a: any) => a.type === WARNING_ANNOTATION)
+          .map((a: any) => a.description);
+      expect(warningsOf("Scenario: One")).toHaveLength(1);
+      expect(warningsOf("Scenario: One")[0]).toMatch(
+        /Unknown step library "gone-for-the-reporter"/,
+      );
+      // the same text on the second scenario, so the reporter prints it once, whichever is in the run
+      expect(warningsOf("Scenario: Two")).toEqual(warningsOf("Scenario: One"));
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      delete (globalThis as Record<symbol, unknown>)[REPORTER_FLAG];
+    }
   });
 
   it("says nothing about an unknown library to a suite with no fixtures library", () => {

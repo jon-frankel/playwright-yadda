@@ -31,11 +31,13 @@ const warned = new Set<string>();
  * Print a warning about how a scenario is declared, once. Playwright loads the spec in its main
  * process and again in every worker, so only the main process prints: a worker has
  * `TEST_WORKER_INDEX` set before it loads anything. When the yadda reporter is in use (and the
- * warning can reach it as an annotation) it prints instead, for the scenarios that run.
+ * warning can reach it as an annotation) it prints instead, for the scenarios that run. Pass
+ * `annotated: false` for a warning that no scenario carries, which only the loader can print.
  */
-export function warnOnce(message: string): void {
+export function warnOnce(message: string, annotated = true): void {
   if (process.env.TEST_WORKER_INDEX !== undefined) return;
-  if ((globalThis as Record<symbol, unknown>)[REPORTER_FLAG] && supportsTestDetails()) return;
+  if (annotated && (globalThis as Record<symbol, unknown>)[REPORTER_FLAG] && supportsTestDetails())
+    return;
   if (warned.has(message)) return;
   warned.add(message);
   console.warn(`playwright-yadda: ${message}`);

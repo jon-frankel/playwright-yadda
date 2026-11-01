@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import Yadda from "yadda";
 import { defineFeature, defineFeatureSuite, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
-import { WARNING_ANNOTATION } from "./warnings.js";
+import { REPORTER_FLAG, resetWarningsForTests, WARNING_ANNOTATION } from "./warnings.js";
 
 describe("feature", () => {
   const gherkinText = `
@@ -224,6 +224,37 @@ Feature: Pending Feature
     expect(warningsOf("Scenario: Without").map((a: any) => a.description)).toEqual([
       expect.stringContaining("ignoring @timeout"),
     ]);
+  });
+
+  it("still warns about a feature's tags when it has no scenario to carry the warning, with the reporter in use", () => {
+    resetWarningsForTests();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    (globalThis as Record<symbol, unknown>)[REPORTER_FLAG] = true;
+    try {
+      const mockTest: any = Object.assign(vi.fn<() => void>(), {
+        describe: (_: string, fn: any) => fn(),
+        skip: vi.fn<() => void>(),
+        only: vi.fn<() => void>(),
+        step: vi.fn<() => void>(),
+      });
+      const registry = createLibraryRegistry({ common: new Yadda.Library() });
+      // Yadda refuses to parse a feature without scenarios, so only one built by hand has none
+      const empty = { title: "Empty", annotations: { "timeout:soon": true }, scenarios: [] };
+      defineFeature(empty as any, { test: mockTest, registry });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("ignoring @timeout, which needs a whole number");
+
+      // with a scenario to carry it, the reporter has it and the loader stays quiet
+      warn.mockClear();
+      resetWarningsForTests();
+      defineFeature(
+        parseFeature("@timeout:soon\nFeature: Full\n  Scenario: S\n    Given step one\n"),
+        { test: mockTest, registry },
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      delete (globalThis as Record<symbol, unknown>)[REPORTER_FLAG];
+    }
   });
 
   it("should run through defineFeatureSuite with pre-parsed features", async () => {

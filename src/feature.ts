@@ -82,8 +82,23 @@ export function pathTagsOf(filepath: string, root?: string): string[] {
   }
   const tags: string[] = [];
   for (const name of names) {
-    const tag = name.slice(1).trim().toLowerCase();
-    if (tag && !tags.includes(tag)) tags.push(tag);
+    const raw = name.slice(1).trim();
+    // Only the name is case-insensitive; a value keeps its case, as it does when written in the file
+    const split = raw.search(/[:=]/);
+    const tag =
+      split < 0 ? raw.toLowerCase() : raw.slice(0, split).toLowerCase() + raw.slice(split);
+    if (!tag) continue;
+    // Playwright's `--grep` cannot match a tag with a space in it
+    if (/\s/.test(tag)) {
+      if (!warned.has(tag)) {
+        warned.add(tag);
+        console.warn(
+          `playwright-yadda: ignoring the path tag "@${tag}" (${filepath}): it has whitespace`,
+        );
+      }
+      continue;
+    }
+    if (!tags.includes(tag)) tags.push(tag);
   }
   return tags;
 }
@@ -97,11 +112,13 @@ const tagName = (tag: string) => tag.split(/[:=]/)[0]!.trim().toLowerCase();
  */
 function applyPathTags(feature: ParsedFeature, tags: string[]): void {
   if (tags.length === 0) return;
-  feature.pathTags = tags;
   const annotations: Record<string, string | boolean | undefined> = { ...feature.annotations };
   const explicit = new Set(Object.keys(annotations).map(tagName));
-  for (const tag of tags) {
-    if (explicit.has(tagName(tag))) continue;
+  // Only the path tags the file does not override: a library it switches off is not loaded either
+  const kept = tags.filter((tag) => !explicit.has(tagName(tag)));
+  if (kept.length === 0) return;
+  feature.pathTags = kept;
+  for (const tag of kept) {
     // `@timeout=5000/` is the spelling for systems that do not allow `:` in a file name
     const equals = tag.indexOf("=");
     if (equals > 0) annotations[tag.slice(0, equals).trim()] = tag.slice(equals + 1).trim() || true;

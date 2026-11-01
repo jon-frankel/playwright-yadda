@@ -314,6 +314,30 @@ Feature: Pending Feature
         expect(feature.annotations).toEqual({ timeout: "5000", mode: "parallel" });
       });
 
+      it("does not load a library the file switches off", () => {
+        const feature = loadFeatureFile(
+          write("@storefront/off.feature", "@storefront=false\n"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.pathTags).toBeUndefined();
+        expect(feature.annotations).toEqual({ storefront: "false" });
+      });
+
+      it("keeps the case of a value and ignores names with whitespace", () => {
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const feature = loadFeatureFile(
+          write("@Env=Staging/@two words/c.feature"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.annotations).toEqual({ env: "Staging" });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("whitespace"));
+        warn.mockRestore();
+      });
+
       it("adds nothing without a root or an @ name", () => {
         const feature = loadFeatureFile(write("@game/z.feature"));
         expect(feature.pathTags).toBeUndefined();

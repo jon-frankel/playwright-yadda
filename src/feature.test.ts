@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import Yadda from "yadda";
 import { defineFeature, defineFeatureSuite, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
+import { WARNING_ANNOTATION } from "./warnings.js";
 
 describe("feature", () => {
   const gherkinText = `
@@ -191,6 +192,38 @@ Feature: Pending Feature
       { annotation: { type: "feature-file", description: feature.filepath } },
       expect.any(Function),
     );
+  });
+
+  it("puts the warnings about a scenario's tags on it as annotations, a feature's on all of them", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const feature = parseFeature(
+      "@timeout:soon\nFeature: Warned\n  @mode:serial\n  Scenario: With a warning\n    Given step one\n\n  Scenario: Without\n    Given step one\n",
+      "gherkin",
+      "features/warned.feature",
+    );
+    const mockTest: any = Object.assign(vi.fn<() => void>(), {
+      describe: (_: string, fn: any) => fn(),
+      skip: vi.fn<() => void>(),
+      only: vi.fn<() => void>(),
+      step: vi.fn<() => void>(),
+    });
+
+    defineFeature(feature, {
+      test: mockTest,
+      registry: createLibraryRegistry({ common: new Yadda.Library() }),
+    });
+
+    const warningsOf = (title: string) => {
+      const details = mockTest.mock.calls.find((call: unknown[]) => call[0] === title)?.[1];
+      return [details.annotation].flat().filter((a: any) => a.type === WARNING_ANNOTATION);
+    };
+    expect(warningsOf("Scenario: With a warning").map((a: any) => a.description)).toEqual([
+      expect.stringContaining("ignoring @timeout"),
+      expect.stringContaining("ignoring @mode on a scenario"),
+    ]);
+    expect(warningsOf("Scenario: Without").map((a: any) => a.description)).toEqual([
+      expect.stringContaining("ignoring @timeout"),
+    ]);
   });
 
   it("should run through defineFeatureSuite with pre-parsed features", async () => {

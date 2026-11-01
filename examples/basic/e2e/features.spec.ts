@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineFeatureSuite } from "playwright-yadda";
+import { hooks } from "../steps/hooks.js";
 import { registry } from "../steps/registry.js";
 import { test } from "../steps/test.js";
 
@@ -11,4 +12,5 @@ defineFeatureSuite({
   test,
   registry,
   features: featuresDir,
+  hooks,
 });

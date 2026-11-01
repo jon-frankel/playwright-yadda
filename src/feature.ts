@@ -12,6 +12,7 @@ import {
 } from "./fixtures.js";
 import { extractLibraryNames } from "./annotations.js";
 import { featureTestTitle, scenarioTestTitle } from "./grep.js";
+import { createHooks, runAll, warnSuppressed, type Hooks } from "./hooks.js";
 import { trackLines } from "./lines.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps, type StepLocation } from "./runner.js";
@@ -188,6 +189,19 @@ function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
 /** The warning for each way a scenario's fixtures could not be worked out, worded for its first scenario */
 const fixtureWarnings = new Map<string, string>();
 
+/** What a running scenario still owes its After hooks if Playwright abandons its body */
+interface OwedHooks {
+  args: Record<string, unknown>;
+  afterScenario: ReturnType<Hooks["select"]>;
+  afterStep: ReturnType<Hooks["select"]>;
+  /** The step in progress, if any */
+  step?: string | undefined;
+  /** The body has reached its own After hooks, so `afterEach` leaves them to it */
+  started: boolean;
+  /** `afterEach` has taken the After hooks over: the abandoned body, if it resumes, must not run them or more steps */
+  over?: boolean;
+}
+
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -202,8 +216,15 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     defaultLibraries?: (K | string)[];
     libraryInheritance?: "merge" | "override";
     createContext?: (fixtures: any) => Promise<TCtx> | TCtx;
+    /** @deprecated Use `hooks.BeforeScenario`. Kept working as it was. */
     onBeforeScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+    /**
+     * @deprecated Use `hooks.AfterScenario`, which also runs when the scenario fails. This one
+     * does not.
+     */
     onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+    /** Tag-filtered scenario, step and worker hooks, from `createHooks()` */
+    hooks?: Hooks;
     /**
      * Works out which fixtures a scenario's steps use. `defineFeatureSuite` makes one and shares it
      * between its features, so a step line is matched once for the suite; pass one when defining
@@ -220,6 +241,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext,
     onBeforeScenario,
     onAfterScenario,
+    hooks = createHooks(),
     fixtureCollector,
   } = options;
 
@@ -334,6 +356,51 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   test.describe(featureTestTitle(feature.title), () => {
     configureDescribe(test, featureSettings);
 
+    // Worker hooks: `beforeAll`/`afterAll` of the feature's describe, when the feature's tags select them
+    const featureTagNames = featureTags.scenario.playwrightTags;
+    const workerArgs = (testInfo: any) => ({ feature, tags: featureTagNames, testInfo });
+    // Playwright abandons a test's body when it times out, so its own `finally` never runs. What
+    // each running scenario still owes is kept here for `afterEach`, which Playwright does run.
+    const owed = new Map<string, OwedHooks>();
+    if (typeof test.afterEach === "function") {
+      // oxlint-disable-next-line no-empty-pattern
+      test.afterEach(async ({}: any, testInfo: any) => {
+        const state = owed.get(testInfo.testId);
+        owed.delete(testInfo.testId);
+        // One-way hand-off: whichever of this and the body gets here first runs the After hooks
+        if (!state || state.started || state.over) return;
+        state.over = true;
+        const timeout =
+          testInfo.error ?? new Error("The test did not finish (it timed out or was interrupted)");
+        try {
+          if (state.step !== undefined) {
+            await runAll(state.afterStep, { ...state.args, step: state.step, error: timeout });
+          }
+        } catch (error) {
+          warnSuppressed("AfterStep", error);
+        }
+        try {
+          await runAll(state.afterScenario, state.args);
+        } catch (error) {
+          warnSuppressed("AfterScenario", error);
+        }
+      });
+    }
+
+    const beforeWorker = hooks.select("BeforeWorker", featureTagNames);
+    const afterWorker = hooks.select("AfterWorker", featureTagNames);
+    if (beforeWorker.length > 0 && typeof test.beforeAll === "function") {
+      // Playwright reads the first parameter's source and wants a destructuring pattern
+      // oxlint-disable-next-line no-empty-pattern
+      test.beforeAll(async ({}: any, testInfo: any) =>
+        runAll(beforeWorker, workerArgs(testInfo), { stopOnError: true }),
+      );
+    }
+    if (afterWorker.length > 0 && typeof test.afterAll === "function") {
+      // oxlint-disable-next-line no-empty-pattern
+      test.afterAll(async ({}: any, testInfo: any) => runAll(afterWorker, workerArgs(testInfo)));
+    }
+
     for (const scenario of feature.scenarios) {
       const {
         scenario: tags,
@@ -412,20 +479,98 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
               testInfo,
             } as unknown as TCtx);
 
-        // 4. Lifecycle before hook
-        if (onBeforeScenario) {
-          await onBeforeScenario(scenario, ctx);
-        }
+        // 4. Lifecycle before hooks
+        const hookArgs = {
+          feature,
+          scenario,
+          ctx,
+          fixtures,
+          tags: tags.playwrightTags,
+        };
+        const beforeScenarioHooks = hooks.select("BeforeScenario", tags.playwrightTags);
+        const afterScenarioHooks = hooks.select("AfterScenario", tags.playwrightTags);
+        const beforeStepHooks = hooks.select("BeforeStep", tags.playwrightTags);
+        const afterStepHooks = hooks.select("AfterStep", tags.playwrightTags);
+        const state: OwedHooks = {
+          args: hookArgs,
+          afterScenario: afterScenarioHooks,
+          afterStep: afterStepHooks,
+          started: false,
+        };
+        if (testInfo?.testId !== undefined) owed.set(testInfo.testId, state);
+        const stepHooks =
+          beforeStepHooks.length > 0 || afterStepHooks.length > 0
+            ? {
+                before: (step: string) => {
+                  state.step = step;
+                  return runAll(
+                    beforeStepHooks,
+                    { ...hookArgs, step },
+                    { stopOnError: true, stopWhen: () => !!state.over },
+                  );
+                },
+                after: async (step: string, error?: unknown) => {
+                  // `afterEach` has done this already; the step's own error is still reported
+                  if (state.over) {
+                    if (error !== undefined) throw error;
+                    return;
+                  }
+                  state.step = undefined;
+                  try {
+                    await runAll(afterStepHooks, { ...hookArgs, step, error });
+                  } catch (hookError) {
+                    // the step's own error is the one reported
+                    if (error === undefined) throw hookError;
+                    if (hookError !== error) warnSuppressed("AfterStep", hookError);
+                  }
+                },
+              }
+            : undefined;
 
-        // 5. Execute steps wrapped in test.step()
-        await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
-          runScenarioSteps(yadda, scenario.steps, ctx, test.step, stepLocations),
-        );
+        // `AfterScenario` hooks run once the scenario has started, even when it fails
+        let failure: { error: unknown } | undefined;
+        try {
+          if (onBeforeScenario) {
+            await onBeforeScenario(scenario, ctx);
+          }
+          await runAll(beforeScenarioHooks, hookArgs, {
+            stopOnError: true,
+            stopWhen: () => !!state.over,
+          });
 
-        // 6. Lifecycle after hook
-        if (onAfterScenario) {
-          await onAfterScenario(scenario, ctx);
+          // 5. Execute steps wrapped in test.step()
+          await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
+            runScenarioSteps(
+              yadda,
+              scenario.steps,
+              ctx,
+              test.step,
+              stepHooks,
+              () => !!state.over,
+              stepLocations,
+            ),
+          );
+
+          // 6. Lifecycle after hook (only after a scenario that passed)
+          if (onAfterScenario && !state.over) {
+            await onAfterScenario(scenario, ctx);
+          }
+        } catch (error) {
+          failure = { error };
         }
+        // `afterEach` has already run them if the test timed out while this body was still going
+        if (state.over) {
+          if (failure) throw failure.error;
+          return;
+        }
+        state.started = true;
+        try {
+          await runAll(afterScenarioHooks, hookArgs);
+        } catch (error) {
+          if (failure) warnSuppressed("AfterScenario", error);
+          failure ??= { error };
+        }
+        if (failure) throw failure.error;
       };
 
       const declareScenario = () =>

@@ -39,6 +39,19 @@ export {
   type StepFixtures,
 } from "./fixtures.js";
 
+// Hooks
+export {
+  createHooks,
+  type HookKind,
+  type HookRunner,
+  type HookOptions,
+  type Hooks,
+  type ScenarioHookArgs,
+  type StepHookArgs,
+  type WorkerHookArgs,
+} from "./hooks.js";
+export { parseTagExpression, type TagExpression } from "./tag-expression.js";
+
 // Library Registry
 export {
   createBdd,
@@ -54,6 +67,7 @@ export {
   createScenarioYadda,
   runScenarioSteps,
   runStep,
+  type StepHooks,
   type StepLocation,
   type TestStepWrapper,
 } from "./runner.js";

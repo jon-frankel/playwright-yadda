@@ -93,7 +93,15 @@ describe("runner", () => {
     });
     const where = { file: "/f/shop.feature", line: 4, column: 1 };
 
-    await runScenarioSteps(yadda, ["a step", "another"], {}, wrapper as never, [where, undefined]);
+    await runScenarioSteps(
+      yadda,
+      ["a step", "another"],
+      {},
+      wrapper as never,
+      undefined,
+      undefined,
+      [where, undefined],
+    );
 
     // A step with no location is wrapped as it always was, with no third argument
     expect(wrapper.mock.calls.map((call) => call.slice(2))).toEqual([[{ location: where }], []]);

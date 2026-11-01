@@ -21,12 +21,12 @@ Actual's `yarn start` is several processes. `serve.mjs` keeps them in the proces
 
 The step libraries are the layer the features talk to. Selectors and Playwright calls live in the steps. `steps/support/` holds only what two or more steps needed to share.
 
-| Library        | Steps for                                                                   |
-| -------------- | --------------------------------------------------------------------------- |
-| `session`      | the demo budget, as a Playwright fixture (`fixtures` mode, `createBdd`)     |
-| `common`       | navigation, filtering and right-clicking lists, assertions                  |
-| `rules`        | the rule editor: conditions, actions, splits                                |
-| `transactions` | adding a transaction and checking the transaction list                      |
+| Library        | Steps for                                                               |
+| -------------- | ----------------------------------------------------------------------- |
+| `session`      | the demo budget, as a Playwright fixture (`fixtures` mode, `createBdd`) |
+| `common`       | navigation, filtering and right-clicking lists, assertions              |
+| `rules`        | the rule editor: conditions, actions, splits                            |
+| `transactions` | adding a transaction and checking the transaction list                  |
 
 `common` and `session` are defaults every scenario gets. `rules` and `transactions` are selected by path tags: `features/@rules/@transactions/` loads both for the features inside, and `features/@smoke/` tags the payees feature `@smoke` (`playwright test --grep @smoke`).
 

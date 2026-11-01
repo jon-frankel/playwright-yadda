@@ -213,7 +213,7 @@ Limits of reading the pattern from the step definition:
 - **Every matching definition counts.** If the step text matches several definitions (say a regex and a more specific one), the fixtures of all of them are set up, because Yadda picks between them only when the step runs.
 - **Pass the function you wrote.** The names are read from `fn.toString()`. A wrapped or `.bind()`-ed function hides its parameters, and so would a bundler that rewrites destructuring (a minifier keeps the property names, which is all that is read).
 - **Plain identifiers.** Fixture names like `"my-fixture"` cannot be destructured this way; Playwright reads them the same way.
-- **Promise-style steps only.** A step in `'fixtures'` mode returns a promise (or nothing); Yadda's `next` callback is not passed.
+- **Step styles are Yadda's own.** A step may be sync, return a promise, or take a trailing `next` callback; the first argument is just replaced by the fixtures.
 - **Unknown libraries** are still reported when the scenario runs, not when the suite is declared.
 
 ---

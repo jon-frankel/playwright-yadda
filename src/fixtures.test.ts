@@ -138,6 +138,76 @@ describe("fixtures mode step libraries", () => {
   });
 });
 
+describe("step styles in fixtures mode", () => {
+  const run = (steps: ReturnType<typeof createStepLibrary>, step: string) =>
+    runScenarioSteps(Yadda.createInstance([steps as any]), [step], { page: "P" });
+
+  it("runs sync steps", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    const seen: unknown[] = [];
+    steps.given("a sync step", ({ page }) => {
+      seen.push(page);
+    });
+    await run(steps, "Given a sync step");
+    expect(seen).toEqual(["P"]);
+  });
+
+  it("waits for steps that return a promise, and fails on a rejection", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    const seen: string[] = [];
+    steps.given("a slow step", async ({}) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      seen.push("done");
+    });
+    steps.given("a failing step", async ({}) => {
+      throw new Error("boom");
+    });
+    await run(steps, "Given a slow step");
+    expect(seen).toEqual(["done"]);
+    await expect(run(steps, "Given a failing step")).rejects.toThrow("boom");
+  });
+
+  it("passes next to callback-style steps, with and without captured arguments", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    const seen: unknown[] = [];
+    steps.given("a callback step", ({ page }, next: () => void) => {
+      setTimeout(() => {
+        seen.push(["no args", page]);
+        next();
+      }, 10);
+    });
+    steps.given(/^a callback step with (\d+)$/, ({ page }, n: string, next: () => void) => {
+      setTimeout(() => {
+        seen.push(["arg", page, n]);
+        next();
+      }, 10);
+    });
+    await run(steps, "Given a callback step");
+    await run(steps, "Given a callback step with 7");
+    expect(seen).toEqual([
+      ["no args", "P"],
+      ["arg", "P", "7"],
+    ]);
+  });
+
+  it("fails a callback-style step that passes next an error", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a bad callback step", ({}, next: (err?: Error) => void) => {
+      next(new Error("callback failed"));
+    });
+    await expect(run(steps, "Given a bad callback step")).rejects.toThrow("callback failed");
+  });
+
+  it("reads fixtures from a callback-style step like any other", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a callback step", ({ account }, next: () => void) => {
+      void account;
+      next();
+    });
+    expect(collectScenarioFixtures([steps], ["Given a callback step"])).toEqual(["account"]);
+  });
+});
+
 describe("defineFeature with fixtures", () => {
   const feature = (libraries: string, steps: string[]) =>
     parseFeature(

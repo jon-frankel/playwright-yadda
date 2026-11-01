@@ -233,11 +233,19 @@ export function withScenarioFixtures<T>(fixtures: Record<string, unknown>, body:
  * Wrap a user step so it receives the scenario's fixtures instead of Yadda's copy of the
  * scenario context. Outside a feature suite (`runStep` called directly) it falls back to that
  * context, so a context holding `page` and the like still works.
+ *
+ * Yadda tells a step that takes a `next` callback from one that does not by comparing the
+ * function's declared `length` with the number of arguments it would pass, and tells a promise from
+ * a sync step by the return value. So the wrapper keeps the step's `length` and returns its result
+ * untouched; the step then behaves as it would in `'param'` mode: sync, promise-returning or
+ * callback style.
  */
 export function bindFixtureStep(fn: (...args: any[]) => unknown) {
-  return async function (this: unknown, context: unknown, ...args: unknown[]) {
+  const bound = function (this: unknown, context: unknown, ...args: unknown[]) {
     return fn.call(this, activeFixtures.getStore() ?? context, ...args);
   };
+  Object.defineProperty(bound, "length", { value: fn.length });
+  return bound;
 }
 
 // -- Building the Playwright test callback ----------------------------------------------------

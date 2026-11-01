@@ -75,6 +75,25 @@ describe("review blockers", () => {
     expect(stdout()).toContain("AFTER-EACH-HOOK-FAILED");
   });
 
+  it("prints an afterEach hook error whose message matches the failed step's error", () => {
+    const reporter = new YaddaReporter();
+    // Two different throws with the same message (seen in a real Playwright 1.64 run):
+    // the step's and the afterEach hook's, with different stacks
+    const stepErr: TestError = {
+      message: "Error: boom",
+      stack: "Error: boom\n    at step (/proj/steps.ts:6:40)",
+    };
+    const hookErr: TestError = {
+      message: "Error: boom",
+      stack: "Error: boom\n    at hook (/proj/HOOK-LOCATION.ts:9:30)",
+    };
+    reporter.onTestEnd(
+      makeTest(scenarioPath("S")),
+      makeResult("failed", [makeStep("Given a bad step", stepErr)], [stepErr, hookErr]),
+    );
+    expect(stdout()).toContain("HOOK-LOCATION");
+  });
+
   it("prints the feature file once when a scenario's body never ran (fixture/hook failure)", () => {
     const reporter = new YaddaReporter();
     const fixtureErr: TestError = { message: "Error: browserType.launch failed" };

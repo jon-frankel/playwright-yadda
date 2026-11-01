@@ -142,12 +142,14 @@ export default class YaddaReporter implements Reporter {
     // Playwright sets no error on the step still running when the test times out or is
     // interrupted; such a step has not ended, which it reports as a negative duration
     const cutShort = status === "timedOut" || status === "interrupted";
-    const shownMessages = new Set<string>();
+    // How many errors per message are already shown under steps; each covers one result error
+    const shown = new Map<string, number>();
     for (const step of steps) {
       const failedStep = !!step.error || (cutShort && step.duration < 0);
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
       if (step.error) {
-        shownMessages.add(stripAnsi(step.error.message ?? ""));
+        const key = stripAnsi(step.error.message ?? "");
+        shown.set(key, (shown.get(key) ?? 0) + 1);
         lines.push(indent(red(formatError(step.error, this.isInternalFrame)), "        "));
       }
     }
@@ -156,7 +158,12 @@ export default class YaddaReporter implements Reporter {
     const errors = result.errors?.length ? result.errors : result.error ? [result.error] : [];
     if (!ok && !skipped) {
       for (const err of errors) {
-        if (shownMessages.has(stripAnsi(err.message ?? ""))) continue;
+        const key = stripAnsi(err.message ?? "");
+        const covered = shown.get(key) ?? 0;
+        if (covered > 0) {
+          shown.set(key, covered - 1);
+          continue;
+        }
         lines.push(indent(red(formatError(err, this.isInternalFrame)), "    "));
       }
     }

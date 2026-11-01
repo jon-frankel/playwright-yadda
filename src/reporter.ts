@@ -157,6 +157,11 @@ export default class YaddaReporter implements Reporter {
       }
     }
 
+    // Playwright records no error for a `@fail` scenario that passes, which it still counts as failed
+    if (!ok && !skipped && status === "passed" && test.expectedStatus === "failed") {
+      lines.push(indent(red("Expected to fail, but passed."), "    "));
+    }
+
     // Errors not already shown under a step: fixtures, hooks, timeouts, teardown
     const errors = result.errors?.length ? result.errors : result.error ? [result.error] : [];
     if (!ok && !skipped) {

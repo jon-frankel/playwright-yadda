@@ -77,6 +77,36 @@ describe("resolveTags", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 
+  it("ignores a scenario's @retries in a @mode:serial feature, which retries it all", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { scenario, own } = resolveTags(
+      { "mode:serial": true, "retries:1": true },
+      { "retries:3": true },
+    );
+    expect(scenario.retries).toBe(1);
+    expect(own.retries).toBeUndefined();
+    expect(scenario.playwrightTags).toEqual(["@mode:serial", "@retries:1"]);
+    expect(warn).toHaveBeenCalledOnce();
+    // outside a serial feature it stands
+    expect(resolveTags({ "mode:parallel": true }, { "retries:3": true }).own.retries).toBe(3);
+  });
+
+  it("says which feature and scenario a warning is about, once for each", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tags = { "timeout:soon": true };
+    resolveTags({}, tags, { where: '"F" > "S1"' });
+    resolveTags({}, tags, { where: '"F" > "S1"' });
+    resolveTags({}, tags, { where: '"F" > "S2"' });
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0]?.[0]).toContain('(got soon) ("F" > "S1")');
+  });
+
+  it("leaves the feature's own problems to the one caller that resolves them", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    resolveTags({ "timeout:soon": true }, {}, { featureWarnings: false });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("switches a tag off with =false in any case, or a boolean false", () => {
     expect(resolveTags({ skip: true }, { skip: "False" }).scenario.skip).toBeUndefined();
     expect(resolveTags({ only: true }, { only: "FALSE" }).scenario.only).toBe(false);

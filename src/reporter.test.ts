@@ -141,6 +141,7 @@ describe("YaddaReporter", () => {
     expect(printed).toMatch(/✓.*Fails as expected/);
     expect(printed).not.toContain("Error: boom\n    at step");
     expect(printed).toMatch(/✗.*Passes unexpectedly/);
+    expect(printed).toContain("Expected to fail, but passed.");
 
     out = [];
     reporter.onEnd({ status: "failed" } as any);

@@ -12,9 +12,14 @@ object PlaywrightGrep {
   /** Every scenario of the feature. The trailing `Scenario:` stops "Cart" from also matching "Cart Admin". */
   fun forFeature(featureTitle: String): String = "Feature: ${escape(featureTitle)} Scenario: "
 
-  /** One scenario. Anchored at the end so "Clears cart" doesn't also run "Clears cart twice". */
+  /**
+   * One scenario. Anchored at the end so "Clears cart" doesn't also run "Clears cart twice", but
+   * Playwright (1.42 and later) appends a test's tags (`@smoke @timeout:5000`) to the title it
+   * matches, and playwright-yadda passes every tag of the feature and the scenario, so any number
+   * of those may follow the title.
+   */
   fun forScenario(featureTitle: String, scenarioTitle: String): String =
-    "Feature: ${escape(featureTitle)} Scenario: ${escape(scenarioTitle)}$"
+    "Feature: ${escape(featureTitle)} Scenario: ${escape(scenarioTitle)}(?: @\\S+)*$"
 
   /** A scenario outline: its examples may be named after the outline, so only the start is fixed. */
   fun forScenarioOutline(featureTitle: String, scenarioTitle: String): String =

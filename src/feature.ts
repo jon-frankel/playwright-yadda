@@ -213,13 +213,18 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     return [...names];
   };
 
-  const featureSettings = resolveTags(feature.annotations, undefined).feature;
+  const featureSettings = resolveTags(feature.annotations, undefined, {
+    where: `"${feature.title}"`,
+  }).feature;
 
   test.describe(`Feature: ${feature.title}`, () => {
     configureDescribe(test, featureSettings);
 
     for (const scenario of feature.scenarios) {
-      const { scenario: tags, own } = resolveTags(feature.annotations, scenario.annotations);
+      const { scenario: tags, own } = resolveTags(feature.annotations, scenario.annotations, {
+        where: `"${feature.title}" > "${scenario.title}"`,
+        featureWarnings: false,
+      });
 
       // `@skip` and `@pending` skip, and win over `@fixme` (which only differs in how Playwright
       // reports it) and `@only`

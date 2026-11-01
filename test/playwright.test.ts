@@ -199,6 +199,17 @@ describe("special tags with the real Playwright", () => {
       expect(titles(["--grep", "@smoke"])).toHaveLength(10);
     });
 
+    it(
+      "selects one scenario with the end-anchored pattern the IDE plugin builds",
+      { timeout: 60_000 },
+      () => {
+        // Playwright matches a test's tags after its title, so the pattern allows them (PlaywrightGrep.kt)
+        expect(titles(["--grep", "Feature: Special tags Scenario: Slow(?: @\\S+)*$"])).toEqual([
+          "Slow",
+        ]);
+      },
+    );
+
     it("leaves scenarios out with --grep-invert", { timeout: 60_000 }, () => {
       const all = titles([]);
       expect(all).toHaveLength(13);

@@ -90,7 +90,9 @@ function readNumber(
   if (!isSet(value)) return undefined;
   const number = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
   if (!Number.isInteger(number)) {
-    report(`ignoring @${name}, which needs a whole number, e.g. @${name}:2 (got ${String(value)})`);
+    report(
+      `ignoring @${name}, which needs a whole number, e.g. @${name}:${name === "timeout" ? 5000 : 2} (got ${String(value)})`,
+    );
     return undefined;
   }
   return number;
@@ -126,14 +128,27 @@ function settingsOf(tags: Map<string, string | true>, report: Report) {
 export function resolveTags(
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
-  /** `quiet` for a caller that only asks a question of the tags, and has no business warning */
-  { quiet = false }: { quiet?: boolean } = {},
+  {
+    quiet = false,
+    where,
+    featureWarnings = true,
+  }: {
+    /** For a caller that only asks a question of the tags, and has no business warning */
+    quiet?: boolean;
+    /** What a warning is about, such as the feature's and the scenario's titles */
+    where?: string;
+    /** Whether to warn about the feature's own tags; a caller that resolves them once says no after that */
+    featureWarnings?: boolean;
+  } = {},
 ): ResolvedTags {
-  const report: Report = quiet ? () => {} : warnOnce;
+  const report: Report = quiet
+    ? () => {}
+    : (message) => warnOnce(where ? `${message} (${where})` : message);
+  const reportFeature: Report = featureWarnings ? report : () => {};
   const featureTags = tagsOf(featureAnnotations);
   const scenarioTags = tagsOf(scenarioAnnotations);
 
-  const feature = settingsOf(featureTags, report);
+  const feature = settingsOf(featureTags, reportFeature);
   const own = settingsOf(scenarioTags, report);
   // A mode is a setting of a group of tests. Playwright refuses a `parallel` describe inside a
   // `serial` one, and a describe of one scenario has nothing to run in serial with, so a scenario
@@ -141,6 +156,14 @@ export function resolveTags(
   if (own.mode !== undefined) {
     report("ignoring @mode on a scenario: it applies to a whole feature, so put it on the feature");
     delete own.mode;
+  }
+  // A scenario that retries on its own is a unit of its own for Playwright: in a serial feature its
+  // failure skips what follows it, which only the scenario is retried after
+  if (feature.mode === "serial" && own.retries !== undefined) {
+    report(
+      "ignoring @retries on a scenario of a @mode:serial feature: put it on the feature, which retries all of it",
+    );
+    delete own.retries;
   }
   // A scenario tag that is ignored is not passed to Playwright either: it would replace the
   // feature's, which still applies

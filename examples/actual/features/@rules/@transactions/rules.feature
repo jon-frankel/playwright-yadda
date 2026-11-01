@@ -40,9 +40,11 @@ Feature: Rules
     And the user right-clicks the first row
     Then a context menu offers "Edit"
 
-  # Steps for deleting a rule aren't written yet. @fixme keeps the scenario in the report as skipped.
-  @fixme
   Scenario: A rule can be deleted
-    When the user filters the list for "Fast Internet"
-    And the user deletes the first rule
+    When the user starts a new rule
+    And the rule applies when the payee is "Ikea"
+    And the rule sets the category to "General"
+    And the user saves the rule
+    And the user deletes the rule "payee is Ikea"
+    And the user filters the list for "Ikea"
     Then "No rules" is shown

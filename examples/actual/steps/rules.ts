@@ -85,3 +85,13 @@ ruleSteps.then(
     await expect(row.getByTestId(part).locator(":scope > div")).toHaveText([text]);
   },
 );
+
+ruleSteps.when(
+  /^the user deletes the rule "([^"]+)"$/,
+  async function (this: ActualContext, text: string) {
+    // Found by its text: the list reloads after a save, and the new rule isn't always first yet.
+    const row = this.page.getByTestId("table").getByTestId("row").filter({ hasText: text });
+    await row.first().click({ button: "right" });
+    await this.page.getByRole("menu").getByRole("button", { name: "Delete" }).click();
+  },
+);

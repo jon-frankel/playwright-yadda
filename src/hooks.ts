@@ -35,7 +35,6 @@ export interface WorkerHookArgs {
   feature: ParsedFeature;
   /** The feature's tags */
   tags: string[];
-  fixtures: Record<string, any>;
   testInfo: any;
 }
 
@@ -81,7 +80,7 @@ export interface Hooks {
   BeforeWorker: Register<WorkerHook>;
   /** As `BeforeWorker`, in `test.afterAll` */
   AfterWorker: Register<WorkerHook>;
-  /** The hooks of a kind that apply to `tags`, in the order they run. Used by `defineFeature`. */
+  /** @internal The hooks of a kind that apply to `tags`, in the order they run. Used by `defineFeature`. */
   select(kind: HookKind, tags: readonly string[]): HookRunner[];
 }
 
@@ -141,7 +140,11 @@ export async function runAll(
       await hook.run(args);
     } catch (error) {
       if (error instanceof Error && !error.message.includes(hook.name)) {
-        error.message = `${hook.name} failed: ${error.message}`;
+        try {
+          error.message = `${hook.name} failed: ${error.message}`;
+        } catch {
+          // a read-only message (a DOMException, a frozen error): report it as it is
+        }
       }
       failure ??= { error };
       if (stopOnError) break;

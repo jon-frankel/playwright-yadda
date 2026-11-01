@@ -42,6 +42,8 @@ export {
 // Hooks
 export {
   createHooks,
+  type HookKind,
+  type HookRunner,
   type HookOptions,
   type Hooks,
   type ScenarioHookArgs,

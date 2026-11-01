@@ -68,11 +68,7 @@ export async function runScenarioSteps(
       failed = true;
       error = e;
     }
-    try {
-      await stepHooks.after(stepText, failed ? error : undefined);
-    } catch (e) {
-      if (!failed) throw e;
-    }
+    await stepHooks.after(stepText, failed ? error : undefined);
     if (failed) throw error;
   };
   for (const stepText of steps) {

@@ -125,6 +125,14 @@ function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
 
+/** A hook error that is not the one reported, because a step or scenario had already failed */
+export function warnSuppressed(where: string, title: string, error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  console.warn(
+    `playwright-yadda: ${where} hook failed after "${title}" had already failed: ${reason}`,
+  );
+}
+
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -229,23 +237,19 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       where: `"${feature.title}"`,
       featureWarnings: false,
     }).scenario.playwrightTags;
-    const workerArgs = (fixtures: any, testInfo: any) => ({
-      feature,
-      tags: featureTags,
-      fixtures: { ...fixtures, testInfo },
-      testInfo,
-    });
+    const workerArgs = (testInfo: any) => ({ feature, tags: featureTags, testInfo });
     const beforeWorker = hooks.select("BeforeWorker", featureTags);
     const afterWorker = hooks.select("AfterWorker", featureTags);
     if (beforeWorker.length > 0 && typeof test.beforeAll === "function") {
-      test.beforeAll(async (fixtures: any, testInfo: any) =>
-        runAll(beforeWorker, workerArgs(fixtures, testInfo), { stopOnError: true }),
+      // Playwright reads the first parameter's source and wants a destructuring pattern
+      // oxlint-disable-next-line no-empty-pattern
+      test.beforeAll(async ({}: any, testInfo: any) =>
+        runAll(beforeWorker, workerArgs(testInfo), { stopOnError: true }),
       );
     }
     if (afterWorker.length > 0 && typeof test.afterAll === "function") {
-      test.afterAll(async (fixtures: any, testInfo: any) =>
-        runAll(afterWorker, workerArgs(fixtures, testInfo)),
-      );
+      // oxlint-disable-next-line no-empty-pattern
+      test.afterAll(async ({}: any, testInfo: any) => runAll(afterWorker, workerArgs(testInfo)));
     }
 
     for (const scenario of feature.scenarios) {
@@ -328,7 +332,11 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
                 before: (step: string) =>
                   runAll(beforeStepHooks, { ...hookArgs, step }, { stopOnError: true }),
                 after: (step: string, error?: unknown) =>
-                  runAll(afterStepHooks, { ...hookArgs, step, error }),
+                  runAll(afterStepHooks, { ...hookArgs, step, error }).catch((hookError) => {
+                    // the step's own error is the one reported
+                    if (error === undefined) throw hookError;
+                    warnSuppressed("AfterStep", step, hookError);
+                  }),
               }
             : undefined;
 
@@ -355,6 +363,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         try {
           await runAll(afterScenarioHooks, hookArgs);
         } catch (error) {
+          if (failure) warnSuppressed("AfterScenario", scenario.title, error);
           failure ??= { error };
         }
         if (failure) throw failure.error;

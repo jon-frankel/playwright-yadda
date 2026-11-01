@@ -218,3 +218,48 @@ describe("special tags with the real Playwright", () => {
     });
   });
 });
+
+describe("hooks with the real Playwright", () => {
+  // `beforeAll` is read by Playwright, which wants a destructuring pattern for its first parameter
+  let status: number | null;
+  let specs: Spec[] = [];
+  beforeAll(() => {
+    const run = runPlaywright("bdd-hooks.spec.ts");
+    status = run.status;
+    specs = run.report ? specsOf(run.report) : [];
+  }, 60_000);
+
+  const ran = (title: string) =>
+    specs
+      .find((spec) => spec.title === `Scenario: ${title}`)
+      ?.tests[0]?.annotations.filter((a) => a.type === "hook")
+      .map((a) => a.description);
+
+  it("loads the spec and passes (the failing scenario is @fail)", () => {
+    expect(status).toBe(0);
+    expect(specs).toHaveLength(2);
+  });
+
+  it("runs Before hooks in order, filtered by tag, and After hooks in reverse", () => {
+    expect(ran("Tagged")).toEqual([
+      "BeforeWorker",
+      "BeforeScenario 1",
+      "BeforeScenario mobile",
+      "BeforeStep Given a step that passes",
+      "AfterStep Given a step that passes ok",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+
+  it("runs AfterStep and AfterScenario when a step fails", () => {
+    // Playwright may run `beforeAll` again around a scenario that has a describe of its own
+    expect(ran("Fails")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
+      "BeforeScenario 1",
+      "BeforeStep Given a step that fails",
+      "AfterStep Given a step that fails failed",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+});

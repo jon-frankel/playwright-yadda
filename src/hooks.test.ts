@@ -133,6 +133,48 @@ describe("hooks", () => {
     expect(log).toEqual(["cleanup"]);
   });
 
+  it("a failing BeforeStep skips the step and reaches AfterStep as its error", async () => {
+    const hooks = createHooks();
+    const { log, tests } = setup(hooks);
+    hooks.BeforeStep(() => {
+      throw new Error("before step failed");
+    });
+    hooks.AfterStep(({ error }) => void log.push(`after: ${(error as Error).message}`));
+    await expect(tests["Scenario: Slow mobile"]({ page: {}, context: {} })).rejects.toThrow(
+      /before step failed/,
+    );
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatch(/^after: .*before step failed$/);
+  });
+
+  it("reports the step's error, not a failing AfterStep/AfterScenario hook's", async () => {
+    const hooks = createHooks();
+    const { tests } = setup(hooks);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    hooks.AfterStep(() => {
+      throw new Error("after step broke");
+    });
+    hooks.AfterScenario(() => {
+      throw new Error("after scenario broke");
+    });
+    await expect(tests["Scenario: Plain"]({ page: {}, context: {} })).rejects.toThrow(/boom/);
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("copes with an error whose message is read-only", async () => {
+    const hooks = createHooks();
+    const { log, tests } = setup(hooks);
+    hooks.AfterScenario(() => void log.push("ran"));
+    hooks.AfterScenario(() => {
+      throw new DOMException("aborted", "AbortError");
+    });
+    await expect(tests["Scenario: Slow mobile"]({ page: {}, context: {} })).rejects.toThrow(
+      /aborted/,
+    );
+    expect(log).toContain("ran");
+  });
+
   it("registers worker hooks on beforeAll/afterAll, filtered by the feature's tags", async () => {
     const hooks = createHooks();
     const log: string[] = [];

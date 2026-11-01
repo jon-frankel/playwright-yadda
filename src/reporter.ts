@@ -9,6 +9,7 @@ import type {
   TestResult,
 } from "@playwright/test/reporter";
 import type { YaddaReporterOptions } from "./types.js";
+import { REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
 
 // Same rules as Playwright's own reporters: FORCE_COLOR=0/false disables, any other value forces
 const forceColor = process.env.FORCE_COLOR;
@@ -101,6 +102,9 @@ export default class YaddaReporter implements Reporter {
   constructor(options?: YaddaReporterOptions | null) {
     const full = typeof options === "object" && options !== null && options.fullStackTrace === true;
     this.isInternalFrame = full ? undefined : makeInternalFrameTest();
+    // Playwright makes the reporters before it loads the specs. The loader stays quiet about how
+    // scenarios are declared, because onBegin prints it, for the scenarios that are in the run.
+    (globalThis as Record<symbol, unknown>)[REPORTER_FLAG] = true;
   }
 
   printsToStdio(): boolean {
@@ -108,7 +112,20 @@ export default class YaddaReporter implements Reporter {
   }
 
   onBegin(_config: unknown, suite: { allTests(): TestCase[] }): void {
-    const n = suite.allTests().length;
+    const tests = suite.allTests();
+    // Warnings about how scenarios are declared, each once however many scenarios or projects carry it
+    const warnings = new Set<string>();
+    for (const test of tests) {
+      for (const annotation of test.annotations ?? []) {
+        if (annotation.type === WARNING_ANNOTATION && annotation.description) {
+          warnings.add(annotation.description);
+        }
+      }
+    }
+    for (const warning of warnings) {
+      process.stderr.write(`${yellow(`playwright-yadda: ${warning}`)}\n`);
+    }
+    const n = tests.length;
     process.stdout.write(`Running ${n} ${n === 1 ? "scenario" : "scenarios"}\n\n`);
   }
 

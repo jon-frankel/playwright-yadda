@@ -1,4 +1,5 @@
 import type { AnnotationRecord } from "./types.js";
+import { warnOnce } from "./warnings.js";
 
 /** Values `@mode:` takes, as `test.describe.configure({ mode })` does */
 export const TEST_MODES = ["parallel", "serial", "default"] as const;
@@ -31,6 +32,8 @@ export interface ResolvedTags {
   feature: Pick<ScenarioTags, "timeout" | "retries" | "mode">;
   /** Settings the scenario's own tags give: applied to a describe around that scenario alone */
   own: Pick<ScenarioTags, "timeout" | "retries" | "mode">;
+  /** What was wrong with the tags, as the warnings say it (also for a `quiet` caller) */
+  warnings: string[];
 }
 
 /**
@@ -70,14 +73,6 @@ function toPlaywrightTags(tags: Map<string, string | true>): string[] {
 
 const isSet = (value: string | true | undefined): value is string | true =>
   value !== undefined && !(typeof value === "string" && value.toLowerCase() === "false");
-
-/** Problems already warned about by this process, so each is reported once */
-const warned = new Set<string>();
-function warnOnce(message: string) {
-  if (warned.has(message)) return;
-  warned.add(message);
-  console.warn(`playwright-yadda: ${message}`);
-}
 
 type Report = (message: string) => void;
 
@@ -141,9 +136,12 @@ export function resolveTags(
     featureWarnings?: boolean;
   } = {},
 ): ResolvedTags {
-  const report: Report = quiet
-    ? () => {}
-    : (message) => warnOnce(where ? `${message} (${where})` : message);
+  const warnings: string[] = [];
+  const report: Report = (message) => {
+    const text = where ? `${message} (${where})` : message;
+    warnings.push(text);
+    if (!quiet) warnOnce(text);
+  };
   const reportFeature: Report = featureWarnings ? report : () => {};
   const featureTags = tagsOf(featureAnnotations);
   const scenarioTags = tagsOf(scenarioAnnotations);
@@ -196,10 +194,5 @@ export function resolveTags(
   };
   if (skip) scenario.skip = skip;
 
-  return { scenario, feature, own };
-}
-
-/** For tests: forget the problems already warned about, so each test sees its own warnings */
-export function resetWarningsForTests(): void {
-  warned.clear();
+  return { scenario, feature, own, warnings };
 }

@@ -295,3 +295,45 @@ describe("hooks with the real Playwright", () => {
     ]);
   });
 });
+
+describe("warnings about how scenarios are declared, with the real Playwright", () => {
+  const warning = /ignoring @mode on a scenario/g;
+  const here = path.join(root, "src", "reporter.ts");
+  /** How often the warning was printed, wherever it went */
+  const printed = (args: string[]) => {
+    const run = runPlaywright("warnings.spec.ts", args);
+    return { count: (`${run.stdout}\n${run.stderr}`.match(warning) ?? []).length, run };
+  };
+
+  it("prints a warning once, although every worker loads the spec", () => {
+    expect(printed(["--workers=3", "--reporter=list"]).count).toBe(1);
+  }, 60_000);
+
+  it("prints it once with one worker, and when only listing the tests", () => {
+    expect(printed(["--workers=1", "--reporter=list"]).count).toBe(1);
+    expect(printed(["--list", "--reporter=list"]).count).toBe(1);
+  }, 60_000);
+
+  it("leaves the printing to the yadda reporter, once, when it is the reporter", () => {
+    const { count, run } = printed(["--workers=3", `--reporter=${here}`]);
+    expect(count).toBe(1);
+    // before the scenarios, not among them
+    expect(run.stderr.indexOf("ignoring @mode")).toBeGreaterThanOrEqual(0);
+    expect(run.status).toBe(0);
+  }, 60_000);
+
+  it("prints it from the yadda reporter only when its scenario is in the run", () => {
+    expect(printed(["--reporter=" + here, "--grep", "Clean"]).count).toBe(0);
+    expect(printed(["--reporter=" + here, "--grep", "Sets a mode"]).count).toBe(1);
+  }, 60_000);
+
+  it("puts the warning on the scenario as an annotation, for any reporter", () => {
+    const run = runPlaywright("warnings.spec.ts");
+    const types = specsOf(run.report)
+      .flatMap((spec) => spec.tests.flatMap((t) => t.annotations))
+      .filter((a) => a.type === "_playwright-yadda-warning");
+    expect(types.map((a) => a.description)).toEqual([
+      expect.stringContaining("ignoring @mode on a scenario"),
+    ]);
+  }, 60_000);
+});

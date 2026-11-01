@@ -5,12 +5,6 @@ import { indexOfOrdinal } from "./support/ordinal.js";
 
 export const commonSteps = createStepLibrary();
 
-commonSteps.given("the demo budget is open", async function (this: ActualContext) {
-  await this.page.goto("/");
-  await this.page.getByRole("button", { name: "Try the demo", exact: true }).click();
-  await this.page.getByTestId("budget-table").waitFor();
-});
-
 commonSteps.given(
   /^the (Rules|Payees) page is open$/,
   async function (this: ActualContext, section: string) {

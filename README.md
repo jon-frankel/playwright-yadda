@@ -111,7 +111,7 @@ pnpm playwright test
 
 ### 5. Special tags
 
-Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest, so `@skip=false` on a scenario runs it although its feature is `@skip`. `@timeout`, `@retries` and `@mode` take no `=false`: use `@timeout:0` or `@retries:0` to override a feature's value. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`. For the tags in this table, the last two mean the same.
+Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest, so `@skip=false` on a scenario runs it although its feature is `@skip`. `@timeout`, `@retries` and `@mode` take no `=false`: use `@retries:0`, or `@timeout:0` (no timeout at all), to override a feature's value. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`. For the tags in this table, the last two mean the same.
 
 | Tag                                               | What it does                                                                                                                                                                                   |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

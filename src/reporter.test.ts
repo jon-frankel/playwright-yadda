@@ -31,7 +31,13 @@ const allOutput = () => stripAnsi(out.join("") + err.join(""));
 function makeTest(scenario: string, retries = 0): TestCase {
   return {
     title: `Scenario: ${scenario}`,
-    titlePath: () => ["", "chromium", "features.spec.ts", "Feature: Alpha", `Scenario: ${scenario}`],
+    titlePath: () => [
+      "",
+      "chromium",
+      "features.spec.ts",
+      "Feature: Alpha",
+      `Scenario: ${scenario}`,
+    ],
     annotations: [{ type: "feature-file", description: `${process.cwd()}/features/a.feature` }],
     retries,
   } as unknown as TestCase;
@@ -57,7 +63,10 @@ function makeResult(
   } as unknown as TestResult;
 }
 
-const boom: TestError = { message: "Error: boom", stack: "Error: boom\n    at step (steps.ts:1:1)" };
+const boom: TestError = {
+  message: "Error: boom",
+  stack: "Error: boom\n    at step (steps.ts:1:1)",
+};
 
 describe("YaddaReporter", () => {
   it("prints errors raised outside tests (onError)", () => {
@@ -104,7 +113,10 @@ describe("YaddaReporter", () => {
         );
       }
     }
-    reporter.onTestEnd(flaky, makeResult("failed", 0, [makeStep("Given a flaky step", boom)], [boom]));
+    reporter.onTestEnd(
+      flaky,
+      makeResult("failed", 0, [makeStep("Given a flaky step", boom)], [boom]),
+    );
     reporter.onTestEnd(flaky, makeResult("passed", 1, [makeStep("Given a flaky step")]));
 
     out = [];

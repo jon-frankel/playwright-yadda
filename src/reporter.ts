@@ -84,11 +84,8 @@ function formatError(
  * step code; pass `{ fullStackTrace: true }` to keep them.
  */
 export default class YaddaReporter implements Reporter {
-  private passed = 0;
-  private failed = 0;
-  private skipped = 0;
-  private flaky = 0;
-  private failures: string[] = [];
+  // Final attempt of each test (Playwright reuses the TestCase across retries)
+  private finalResults = new Map<TestCase, TestResult>();
   private currentFeature: string | undefined;
   private isInternalFrame: ((line: string) => boolean) | undefined;
 
@@ -112,14 +109,11 @@ export default class YaddaReporter implements Reporter {
     const heading =
       featureIdx >= 0 ? titles.slice(featureIdx) : titles.slice(Math.min(2, titles.length - 1)); // drop project + file
 
+    this.finalResults.set(test, result);
+
     const status = result.status;
     const ok = status === "passed";
     const skipped = status === "skipped";
-    if (ok) {
-      this.passed++;
-      if (result.retry > 0) this.flaky++;
-    } else if (skipped) this.skipped++;
-    else this.failed++;
 
     const lines: string[] = [];
     const retry = result.retry > 0 ? dim(` (retry #${result.retry})`) : "";
@@ -137,13 +131,19 @@ export default class YaddaReporter implements Reporter {
     lines.push(`${mark} ${bold(heading[heading.length - 1] ?? test.title)}${retry}${duration}`);
 
     const steps = result.steps.filter((s) => s.category === "test.step");
+    // Playwright sets no error on the step still running when the test times out or is interrupted
+    const cutShort = status === "timedOut" || status === "interrupted";
+    const cutShortStep =
+      cutShort && !steps.some((s) => s.error) ? steps[steps.length - 1] : undefined;
     let errorShown = false;
     for (const step of steps) {
-      const failedStep = !!step.error;
+      const failedStep = !!step.error || step === cutShortStep;
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
       if (failedStep) {
-        errorShown = true;
-        lines.push(indent(red(formatError(step.error!, this.isInternalFrame)), "        "));
+        if (step.error) {
+          errorShown = true;
+          lines.push(indent(red(formatError(step.error, this.isInternalFrame)), "        "));
+        }
       }
     }
 
@@ -156,15 +156,39 @@ export default class YaddaReporter implements Reporter {
 
     const block = lines.join("\n") + "\n\n";
     process.stdout.write(block);
-    if (!ok && !skipped && result.retry === test.retries) this.failures.push(heading.join(" › "));
+  }
+
+  onStdOut(chunk: string | Buffer): void {
+    process.stdout.write(chunk);
+  }
+
+  onStdErr(chunk: string | Buffer): void {
+    process.stderr.write(chunk);
+  }
+
+  /** Errors outside any test: file loading, config, worker crashes */
+  onError(error: TestError): void {
+    process.stdout.write(`${red(formatError(error, this.isInternalFrame))}\n\n`);
   }
 
   onEnd(result: FullResult): void {
+    let passed = 0;
+    let failed = 0;
+    let skipped = 0;
+    let flaky = 0;
+    for (const final of this.finalResults.values()) {
+      if (final.status === "passed") {
+        if (final.retry > 0) flaky++;
+        else passed++;
+      } else if (final.status === "skipped") skipped++;
+      else failed++;
+    }
+
     const parts: string[] = [];
-    if (this.failed) parts.push(red(`${this.failed} failed`));
-    if (this.flaky) parts.push(yellow(`${this.flaky} flaky`));
-    if (this.skipped) parts.push(yellow(`${this.skipped} skipped`));
-    parts.push(green(`${this.passed} passed`));
+    if (failed) parts.push(red(`${failed} failed`));
+    if (flaky) parts.push(yellow(`${flaky} flaky`));
+    if (skipped) parts.push(yellow(`${skipped} skipped`));
+    parts.push(green(`${passed} passed`));
     process.stdout.write(`${parts.join(", ")} ${dim(`(${result.status})`)}\n`);
   }
 }

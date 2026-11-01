@@ -41,7 +41,8 @@ jobs:
         working-directory: examples/${{ inputs.example }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup
+      - id: setup
+        uses: ./.github/actions/setup
         with:
           cache-dependency-path: |
             pnpm-lock.yaml
@@ -74,10 +75,10 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: examples/${{ inputs.example }}/${{ inputs.cache-path }}
-          key: example-${{ inputs.example }}-${{ hashFiles(format('examples/{0}/{1}', inputs.example, inputs.cache-key-file)) }}
+          key: example-${{ inputs.example }}-${{ runner.os }}-node${{ steps.setup.outputs.node-version }}-${{ hashFiles(format('examples/{0}/{1}', inputs.example, inputs.cache-key-file)) }}
 
       - name: Test
-        run: pnpm run test
+        run: pnpm run test --trace=retain-on-failure
 
       - name: Upload Playwright results
         if: failure()

@@ -4,10 +4,10 @@ name: PR Check
 # request; Validate Main runs all of them after the merge.
 #
 # What each suite depends on:
-#   unit tests       the library: src/, package.json, the lockfile, and the root build and test config
+#   unit tests       the library: src/, test/, package.json, the lockfile, and the root build and test config
 #   examples/<name>  that example, plus the library, which the example is run against
 #   JetBrains plugin ide/jetbrains/, plus examples/, whose feature files its tests open
-# A change under .github/ runs everything, so a workflow change is exercised by the pull request that makes it.
+# A change under .github/, or a pull request too large to list its files, runs everything, so a workflow change is exercised by the pull request that makes it.
 on:
   pull_request:
     branches: [main]
@@ -39,19 +39,25 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
         run: |
+          # The files endpoint stops listing at 3000 files, so a PR that large can't be filtered reliably.
+          # Run everything for it rather than risk skipping a suite.
+          count=$(gh api "repos/$REPOSITORY/pulls/$PULL_REQUEST" --jq .changed_files)
+          echo "Changed files: $count"
+          everything=false
+          if [ "$count" -ge 3000 ]; then everything=true; fi
+
           # The new path of every changed file, and the old path of a renamed one.
           files=$(gh api "repos/$REPOSITORY/pulls/$PULL_REQUEST/files" --paginate \
             --jq '.[] | .filename, (.previous_filename // empty)')
-          echo "Changed files:"
           printf '%s\n' "$files"
 
           changed() { printf '%s\n' "$files" | grep -Eq "$1"; }
           output() {
-            if changed "^\.github/" || changed "$2"; then value=true; else value=false; fi
+            if $everything || changed "^\.github/" || changed "$2"; then value=true; else value=false; fi
             echo "$1=$value" | tee -a "$GITHUB_OUTPUT"
           }
 
-          library='^(src/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.npmrc$|tsconfig\.json$|tsdown\.config\.ts$|vitest\.config\.ts$)'
+          library='^(src/|test/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.npmrc$|tsconfig\.json$|tsdown\.config\.ts$|vitest\.config\.ts$)'
 
           output unit-tests "$library"
           output example-basic "$library|^examples/basic/"

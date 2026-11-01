@@ -6,6 +6,7 @@ import { isScenarioOnly, isScenarioPending } from "./annotations.js";
 import {
   BASE_FIXTURE_NAMES,
   createFixtureCollector,
+  type FixtureCollector,
   createFixtureTestBody,
   TEST_INFO_KEY,
   withScenarioFixtures,
@@ -127,6 +128,12 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext?: (fixtures: any) => Promise<TCtx> | TCtx;
     onBeforeScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
     onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+    /**
+     * Works out which fixtures a scenario's steps use. `defineFeatureSuite` makes one and shares it
+     * between its features, so a step line is matched once for the suite; pass one when defining
+     * several features yourself. Each call makes its own if it is not given one.
+     */
+    fixtureCollector?: FixtureCollector;
   },
 ): void {
   const {
@@ -137,6 +144,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext,
     onBeforeScenario,
     onAfterScenario,
+    fixtureCollector,
   } = options;
 
   const registry: ILibraryRegistryManager<K> =
@@ -158,7 +166,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
    * Fixtures to set up for a scenario: `page` and `context`, which the default scenario context is
    * made of, plus whatever the steps of the libraries it resolves destructure.
    */
-  const collectFixtures = createFixtureCollector();
+  const collectFixtures = fixtureCollector ?? createFixtureCollector();
   const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
     const names = new Set<string>(BASE_FIXTURE_NAMES);
     try {
@@ -281,7 +289,9 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
     }
   }
 
+  // One for the whole suite: steps repeat across feature files, and matching them is the costly part
+  const fixtureCollector = createFixtureCollector();
   for (const feature of parsedFeatures) {
-    defineFeature(feature, options);
+    defineFeature(feature, { ...options, fixtureCollector });
   }
 }

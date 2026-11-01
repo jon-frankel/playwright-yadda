@@ -217,6 +217,7 @@ Limits of reading the pattern from the step definition:
 - **A fixture the `test` does not have stops the whole run.** Playwright rejects a test that names an unknown fixture when it loads the spec file, so one typo in one step means no tests run, and the error points at this library rather than the step. `testInfo` is the common one: the `TestInfo` is `$testInfo` here, and `testInfo` throws when the step is defined.
 - **Define every step library before the suite is declared.** The fixtures are collected when `defineFeatureSuite` runs. A step defined later fails when it runs with an error naming the fixture it did not get, instead of receiving `undefined`.
 - **Names starting with `$`** are fixtures too, except `$testInfo`.
+- **Declaring the suite does the matching up front.** Each distinct step line is matched against the patterns of the libraries its scenario enables, once per suite; repeated lines and repeated sequences cost nothing more. Libraries that do not use `'fixtures'` mode add no cost. With every line distinct, 16,000 lines against 500 patterns in one library takes about 5 seconds, and Playwright loads the spec in the runner and in each worker, so split large libraries by `@Libraries` to keep what each scenario matches small.
 - **Unknown libraries** log a warning when the suite is declared (only `page` and `context` are set up for that scenario), and the scenario fails with `UnknownLibraryError` when it runs.
 
 ### The scenario context in `'fixtures'` steps

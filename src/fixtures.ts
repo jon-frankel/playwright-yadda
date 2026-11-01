@@ -287,11 +287,26 @@ export function recordStepFixtures(
  * scenario fails when it runs, before any definition could use its fixtures.
  *
  * Matching a step line against a library's patterns is the costly part, and suites repeat step
- * lines across scenarios, so each (library, step line) is matched once per collector. Make one
- * collector per suite, once its libraries are defined: it does not see steps defined afterwards.
+ * lines across scenarios (and whole step sequences, in generated ones), so each (library, step
+ * line) is matched once per collector, and each sequence over the same libraries is ranked once.
+ * Make one collector per suite, once its libraries are defined: it does not see steps defined
+ * afterwards.
  */
-export function createFixtureCollector(): (libraries: StepLibrary[], steps: string[]) => string[] {
+export function createFixtureCollector(): FixtureCollector {
   const matches = new WeakMap<object, Map<string, unknown[]>>();
+  // A whole scenario's answer, for scenarios that repeat another's steps over the same libraries
+  const ids = new WeakMap<object, number>();
+  let nextId = 1;
+  const sequences = new Map<string, string[]>();
+  const sequenceKey = (libraries: StepLibrary[], steps: string[]) =>
+    libraries
+      .map((library) => {
+        if (!ids.has(library)) ids.set(library, nextId++);
+        return ids.get(library);
+      })
+      .join(",") +
+    "\n" +
+    steps.join("\n");
   const cached = (library: StepLibrary, step: string): unknown[] => {
     let byStep = matches.get(library);
     if (!byStep) matches.set(library, (byStep = new Map()));
@@ -302,6 +317,10 @@ export function createFixtureCollector(): (libraries: StepLibrary[], steps: stri
 
   return (libraries, steps) => {
     if (!libraries.some((library) => declaredFixtures.has(library))) return [];
+
+    const key = sequenceKey(libraries, steps);
+    const known = sequences.get(key);
+    if (known) return [...known];
 
     const names = new Set<string>();
     // Yadda only asks a library for the macros compatible with a step, so the cache can stand in
@@ -335,9 +354,13 @@ export function createFixtureCollector(): (libraries: StepLibrary[], steps: stri
         names.add(name);
       }
     }
+    sequences.set(key, [...names]);
     return [...names];
   };
 }
+
+/** What {@link createFixtureCollector} returns */
+export type FixtureCollector = (libraries: StepLibrary[], steps: string[]) => string[];
 
 /** The fixtures a single scenario's steps use; see {@link createFixtureCollector} */
 export function collectScenarioFixtures(libraries: StepLibrary[], steps: string[]): string[] {

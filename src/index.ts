@@ -29,8 +29,10 @@ export {
 
 // Playwright fixtures in steps
 export {
+  createFixtureCollector,
   FixtureDeclarationError,
   parseFixtureNames,
+  type FixtureCollector,
   type FixtureStepFunction,
   type FixtureStepLibrary,
   type FixturesOf,

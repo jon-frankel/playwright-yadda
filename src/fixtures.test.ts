@@ -2,7 +2,7 @@
 import { test as base } from "@playwright/test";
 import { describe, expect, it, vi } from "vitest";
 import Yadda from "yadda";
-import { defineFeature, parseFeature } from "./feature.js";
+import { defineFeature, defineFeatureSuite, parseFeature } from "./feature.js";
 import {
   collectScenarioFixtures,
   createFixtureCollector,
@@ -211,6 +211,27 @@ describe("fixtures mode step libraries", () => {
       ]);
     }
     expect(lookups).toHaveBeenCalledTimes(2);
+  });
+
+  it("answers a repeated sequence of steps without ranking it again", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a first step", async ({ account }) => account);
+    steps.given("a second step", async ({ page }) => page);
+    const interpreter = vi.spyOn(Yadda, "Interpreter");
+
+    const collect = createFixtureCollector();
+    const lines = ["Given a first step", "Given a second step"];
+    expect(collect([steps], lines)).toEqual(["account", "page"]);
+    expect(collect([steps], [...lines])).toEqual(["account", "page"]);
+    expect(interpreter).toHaveBeenCalledTimes(1);
+
+    // a different sequence, or different libraries, is not mistaken for it
+    expect(collect([steps], [lines[1]!, lines[0]!])).toEqual(["page", "account"]);
+    const other = createStepLibrary(undefined, "fixtures");
+    other.given("a first step", async ({ elsewhere }) => elsewhere);
+    expect(collect([other], [lines[0]!])).toEqual(["elsewhere"]);
+    expect(interpreter).toHaveBeenCalledTimes(3);
+    interpreter.mockRestore();
   });
 
   it("does not remember lookups between collectors, so steps defined later are seen", () => {
@@ -571,6 +592,41 @@ describe("defineFeature with fixtures", () => {
     await expect(declared[0]!.fn({ page: "P", context: "C" }, {})).rejects.toThrow(
       /Unknown step library "missing"/,
     );
+  });
+});
+
+describe("defineFeatureSuite with fixtures", () => {
+  it("matches a step line once for the whole suite, not once per feature file", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("the user is signed in", async ({ account }) => account);
+    steps.when("they open the dashboard", async ({ page }) => page);
+    const lookups = vi.spyOn(steps, "find_compatible_macros");
+
+    const features = ["A", "B", "C"].map((title) =>
+      parseFeature(
+        `@Libraries=steps\nFeature: ${title}\n  Scenario: S\n    Given the user is signed in\n    When they open the dashboard\n`,
+      ),
+    );
+    const declared: Array<(...args: any[]) => Promise<void>> = [];
+    const declare = (_: string, ...rest: unknown[]) => declared.push(rest.at(-1) as any);
+    const test: any = Object.assign((...args: [string, ...unknown[]]) => declare(...args), {
+      describe: (_: string, body: () => void) => body(),
+      skip: declare,
+      only: declare,
+      step: (_: string, body: () => Promise<void>) => body(),
+    });
+
+    defineFeatureSuite({
+      test,
+      registry: createLibraryRegistry({ steps }, { defaultLibraries: [] }),
+      features,
+    });
+
+    expect(declared).toHaveLength(3);
+    for (const fn of declared) {
+      expect(parseFixtureNames(fn)).toEqual(["page", "context", "account"]);
+    }
+    expect(lookups).toHaveBeenCalledTimes(2);
   });
 });
 

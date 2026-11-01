@@ -80,6 +80,14 @@ export interface ParsedScenario {
   annotations?: AnnotationRecord;
   description?: string[];
   steps: string[];
+  /** Line (1-based) of the `Scenario:` heading, when the feature was parsed from text */
+  line?: number;
+  /**
+   * Line (1-based) each of `steps` starts on, in the same order. A step from a `Background:` has the
+   * line it is written on there, and an outline's steps the lines of the outline. Absent when the
+   * lines could not be worked out, so a step can be told by its text only.
+   */
+  stepLines?: number[];
 }
 
 /**
@@ -89,6 +97,8 @@ export interface ParsedFeature {
   title: string;
   /** Path of the file the feature was loaded from, when it came from one */
   filepath?: string;
+  /** Line (1-based) of the `Feature:` heading, when the feature was parsed from text */
+  line?: number;
   annotations?: AnnotationRecord;
   /**
    * Tags taken from `@`-prefixed directory and file names in the feature's path (without the `@`).

@@ -1,0 +1,99 @@
+{
+  "_": "Shared by src/grep.test.ts and the JetBrains plugin's PlaywrightGrepTest. `grep` is the exact pattern for the titles; `selects` and `rejects` are what Playwright would match it against, after the project and file: the titles and tags joined with spaces. `kind` is feature, scenario or outline.",
+  "cases": [
+    {
+      "name": "a scenario matches only itself",
+      "kind": "scenario",
+      "feature": "Storefront Shopping",
+      "scenario": "Customer clears cart",
+      "grep": "Feature: Storefront Shopping Scenario: Customer clears cart(?: @\\S+)*$",
+      "selects": ["Feature: Storefront Shopping Scenario: Customer clears cart"],
+      "rejects": [
+        "Feature: Storefront Shopping Scenario: Customer clears cart twice",
+        "Feature: Admin Scenario: Customer clears cart",
+        "Feature: Storefront Shopping Extra Scenario: Customer clears cart"
+      ]
+    },
+    {
+      "name": "a scenario still matches itself when Playwright appends its tags",
+      "kind": "scenario",
+      "feature": "Storefront Shopping",
+      "scenario": "Customer clears cart",
+      "grep": "Feature: Storefront Shopping Scenario: Customer clears cart(?: @\\S+)*$",
+      "selects": [
+        "Feature: Storefront Shopping Scenario: Customer clears cart @libraries",
+        "Feature: Storefront Shopping Scenario: Customer clears cart @libraries @smoke @timeout:5000"
+      ],
+      "rejects": ["Feature: Storefront Shopping Scenario: Customer clears cart twice @smoke"]
+    },
+    {
+      "name": "a pattern is not case sensitive, as Playwright makes it",
+      "kind": "scenario",
+      "feature": "Storefront",
+      "scenario": "Clears cart",
+      "grep": "Feature: Storefront Scenario: Clears cart(?: @\\S+)*$",
+      "selects": ["feature: STOREFRONT scenario: clears CART"],
+      "rejects": []
+    },
+    {
+      "name": "a feature matches all of its scenarios and no other feature",
+      "kind": "feature",
+      "feature": "Storefront",
+      "grep": "Feature: Storefront Scenario: ",
+      "selects": ["Feature: Storefront Scenario: One", "Feature: Storefront Scenario: Two @smoke"],
+      "rejects": ["Feature: Storefront Admin Scenario: One"]
+    },
+    {
+      "name": "titles with regular expression characters are matched literally",
+      "kind": "scenario",
+      "feature": "F",
+      "scenario": "Cart (empty) costs $0.00 [a|b] a+b? c\\d {1} ^ /",
+      "grep": "Feature: F Scenario: Cart \\(empty\\) costs \\$0\\.00 \\[a\\|b\\] a\\+b\\? c\\\\d \\{1\\} \\^ \\/(?: @\\S+)*$",
+      "selects": ["Feature: F Scenario: Cart (empty) costs $0.00 [a|b] a+b? c\\d {1} ^ /"],
+      "rejects": ["Feature: F Scenario: Cart empty costs $0x00 a|b aab c\\d 1 ^ /"]
+    },
+    {
+      "name": "a title with spaces around it is matched as Playwright is given it, trimmed",
+      "kind": "scenario",
+      "feature": "  Shop  ",
+      "scenario": "  Pay  ",
+      "grep": "Feature: Shop Scenario: Pay(?: @\\S+)*$",
+      "selects": ["Feature: Shop Scenario: Pay"],
+      "rejects": ["Feature: Shop Scenario: Pay later"]
+    },
+    {
+      "name": "an outline matches each of its examples, a placeholder standing for the example's value",
+      "kind": "outline",
+      "feature": "Order checkout",
+      "scenario": "A cart with [n] keyboards",
+      "grep": "Feature: Order checkout Scenario: A cart with .* keyboards(?: @\\S+)*$",
+      "selects": [
+        "Feature: Order checkout Scenario: A cart with 1 keyboards",
+        "Feature: Order checkout Scenario: A cart with 25 keyboards @libraries @smoke"
+      ],
+      "rejects": [
+        "Feature: Order checkout Scenario: A cart with 1 mice",
+        "Feature: Order checkout Scenario: A cart with 1 keyboards and a mouse",
+        "Feature: Cart Scenario: A cart with 1 keyboards"
+      ]
+    },
+    {
+      "name": "an outline with several placeholders, and one that starts a title",
+      "kind": "outline",
+      "feature": "F",
+      "scenario": "[n] of [item]",
+      "grep": "Feature: F Scenario: .* of .*(?: @\\S+)*$",
+      "selects": ["Feature: F Scenario: 3 of mice"],
+      "rejects": ["Feature: G Scenario: 3 of mice"]
+    },
+    {
+      "name": "an outline whose title has no placeholder is just its title",
+      "kind": "outline",
+      "feature": "F",
+      "scenario": "Remove",
+      "grep": "Feature: F Scenario: Remove(?: @\\S+)*$",
+      "selects": ["Feature: F Scenario: Remove"],
+      "rejects": ["Feature: F Scenario: Remove 1"]
+    }
+  ]
+}

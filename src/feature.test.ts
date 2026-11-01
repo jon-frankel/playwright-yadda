@@ -513,4 +513,60 @@ Feature: Pending Feature
       });
     });
   });
+
+  describe("where steps are reported", () => {
+    const source = `Feature: Located
+  Background:
+    Given the shop is open
+
+  Scenario: Buying
+    When they buy
+    Then they pay
+`;
+
+    /** Defines the feature against a fake test and returns the options each test.step was given */
+    const stepOptions = async (feature: ReturnType<typeof parseFeature>) => {
+      const library = new Yadda.Library();
+      library.define(/.*/, () => {});
+      let body: any;
+      const steps: unknown[][] = [];
+      const mockTest: any = Object.assign(
+        (_title: string, ...rest: any[]) => {
+          body = rest.at(-1);
+        },
+        {
+          describe: (_title: string, fn: any) => fn(),
+          step: async (_title: string, stepBody: () => Promise<void>, ...options: unknown[]) => {
+            steps.push(options);
+            await stepBody();
+          },
+        },
+      );
+      defineFeature(feature, {
+        test: mockTest,
+        registry: createLibraryRegistry({ common: library }),
+      });
+      await body({ page: {}, context: {} });
+      return steps;
+    };
+
+    it("gives each step the line it is written on in the feature file", async () => {
+      const feature = parseFeature(source, "gherkin", "/features/located.feature");
+      expect(await stepOptions(feature)).toEqual([
+        [{ location: { file: path.resolve("/features/located.feature"), line: 3, column: 1 } }],
+        [{ location: { file: path.resolve("/features/located.feature"), line: 6, column: 1 } }],
+        [{ location: { file: path.resolve("/features/located.feature"), line: 7, column: 1 } }],
+      ]);
+    });
+
+    it("gives none when the feature did not come from a file", async () => {
+      expect(await stepOptions(parseFeature(source, "gherkin"))).toEqual([[], [], []]);
+    });
+
+    it("gives none for a feature whose lines are not known", async () => {
+      const feature = parseFeature(source, "gherkin", "/features/located.feature");
+      for (const scenario of feature.scenarios) delete scenario.stepLines;
+      expect(await stepOptions(feature)).toEqual([[], [], []]);
+    });
+  });
 });

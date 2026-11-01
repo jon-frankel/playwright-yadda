@@ -80,4 +80,22 @@ describe("runner", () => {
     expect(stepWrappersCalled).toEqual(["first step", "second step"]);
     expect(mockTestStep).toHaveBeenCalledTimes(2);
   });
+
+  it("tells the step wrapper where each step is written, when it is told", async () => {
+    const lib = new Yadda.Library();
+    lib.define("a step", () => {});
+    lib.define("another", () => {});
+    const yadda = createScenarioYadda([lib]);
+    const wrapper = vi.fn<
+      (title: string, body: () => Promise<void>, options?: unknown) => Promise<void>
+    >(async (_title, body) => {
+      await body();
+    });
+    const where = { file: "/f/shop.feature", line: 4, column: 1 };
+
+    await runScenarioSteps(yadda, ["a step", "another"], {}, wrapper as never, [where, undefined]);
+
+    // A step with no location is wrapped as it always was, with no third argument
+    expect(wrapper.mock.calls.map((call) => call.slice(2))).toEqual([[{ location: where }], []]);
+  });
 });

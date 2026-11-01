@@ -11,11 +11,14 @@ import {
   withScenarioFixtures,
 } from "./fixtures.js";
 import { extractLibraryNames } from "./annotations.js";
+import { featureTestTitle, scenarioTestTitle } from "./grep.js";
+import { trackLines } from "./lines.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
-import { createScenarioYadda, runScenarioSteps } from "./runner.js";
+import { createScenarioYadda, runScenarioSteps, type StepLocation } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
 import {
   FEATURE_TAGS_ANNOTATION,
+  supportsStepLocation,
   supportsTestDetails,
   warnOnce,
   WARNING_ANNOTATION,
@@ -61,7 +64,10 @@ export function parseFeature(
       ? new Yadda.parsers.MarkdownFeatureParser(language)
       : new Yadda.parsers.FeatureParser(language);
 
+  const lines = trackLines(parser as Parameters<typeof trackLines>[0]);
   const parsed = parser.parse(content) as ParsedFeature;
+  const featureLine = lines.featureLine();
+  if (featureLine !== undefined) parsed.line = featureLine;
   if (filepath) parsed.filepath = path.resolve(filepath);
   return parsed;
 }
@@ -227,6 +233,21 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         });
 
   const detailsSupported = supportsTestDetails();
+  const stepLocationsSupported = supportsStepLocation();
+
+  /**
+   * Where each of the scenario's steps is written in its feature file, for Playwright to show in
+   * place of the line of this package that runs them. Only when the file and every line are known.
+   */
+  const stepLocationsOf = (
+    parsedFeature: ParsedFeature,
+    scenario: ParsedScenario,
+  ): StepLocation[] | undefined => {
+    const { filepath } = parsedFeature;
+    const { stepLines } = scenario;
+    if (!stepLocationsSupported || !filepath || stepLines?.length !== scenario.steps.length) return;
+    return stepLines.map((line) => ({ file: filepath, line, column: 1 }));
+  };
 
   const resolveOpts: ResolveLibrariesOptions<K> = {};
   if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
@@ -310,7 +331,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     for (const warning of featureTags.warnings) warnOnce(warning, false);
   }
 
-  test.describe(`Feature: ${feature.title}`, () => {
+  test.describe(featureTestTitle(feature.title), () => {
     configureDescribe(test, featureSettings);
 
     for (const scenario of feature.scenarios) {
@@ -362,6 +383,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         ? (title: string, body: unknown) => declare(title, details, body)
         : declare;
 
+      const stepLocations = stepLocationsOf(feature, scenario);
+
       const runScenario = async (stepFixtures: Record<string, any>, testInfo: any) => {
         const { page, context } = stepFixtures;
         const fixtures = { ...stepFixtures, testInfo };
@@ -396,7 +419,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
         // 5. Execute steps wrapped in test.step()
         await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
-          runScenarioSteps(yadda, scenario.steps, ctx, test.step),
+          runScenarioSteps(yadda, scenario.steps, ctx, test.step, stepLocations),
         );
 
         // 6. Lifecycle after hook
@@ -407,7 +430,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
       const declareScenario = () =>
         testFn(
-          `Scenario: ${scenario.title}`,
+          scenarioTestTitle(scenario.title),
           createFixtureTestBody(fixtureNames, runScenario) as unknown,
         );
 

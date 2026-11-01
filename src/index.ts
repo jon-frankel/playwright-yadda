@@ -50,7 +50,13 @@ export {
 } from "./registry.js";
 
 // Step & Scenario Runners
-export { createScenarioYadda, runScenarioSteps, runStep, type TestStepWrapper } from "./runner.js";
+export {
+  createScenarioYadda,
+  runScenarioSteps,
+  runStep,
+  type StepLocation,
+  type TestStepWrapper,
+} from "./runner.js";
 
 // Feature and Suite Definitions
 export {
@@ -61,3 +67,12 @@ export {
   pathTagsOf,
   parseFeature,
 } from "./feature.js";
+
+// Titles of the tests, and the `--grep` patterns that select them
+export {
+  featureTestTitle,
+  grepForFeature,
+  grepForScenario,
+  grepForScenarioOutline,
+  scenarioTestTitle,
+} from "./grep.js";

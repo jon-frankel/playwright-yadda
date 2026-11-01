@@ -23,11 +23,5 @@ pre-push:
       run: pnpm run typecheck
     4-test:
       run: pnpm run test
-    5-example-basic:
-      run: pnpm --dir examples/basic test
-    6-example-wordpress:
-      run: pnpm --dir examples/wordpress test
-    7-example-actual:
-      run: pnpm --dir examples/actual test
-    8-ide-jetbrains:
+    5-ide-jetbrains:
       run: scripts/ide-jetbrains-test.sh

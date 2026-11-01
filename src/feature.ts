@@ -148,27 +148,23 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       const isPending = isScenarioPending(feature.annotations, scenario.annotations);
       const isOnly = isScenarioOnly(feature.annotations, scenario.annotations);
 
-      let testFn = test;
-      if (isPending) {
-        testFn = test.skip;
-        // A skipped scenario's body never runs, so its feature file has to be attached up front
-        if (feature.filepath && detailsSupported) {
-          testFn = (title: string, body: unknown) =>
-            test.skip(
-              title,
-              { annotation: { type: FEATURE_FILE_ANNOTATION, description: feature.filepath } },
-              body,
-            );
-        }
-      } else if (isOnly) {
-        testFn = test.only;
-      }
+      const kind = isPending ? "skip" : isOnly ? "only" : undefined;
+      const declare = (kind ? test[kind] : test) as (...args: unknown[]) => void;
+      // Attached when the test is declared, so reporters still see it if a fixture or hook fails
+      // before the body runs, and for skipped scenarios whose body never does
+      const attachUpFront = !!feature.filepath && detailsSupported;
+      const details = {
+        annotation: { type: FEATURE_FILE_ANNOTATION, description: feature.filepath },
+      };
+      const testFn = attachUpFront
+        ? (title: string, body: unknown) => declare(title, details, body)
+        : declare;
 
       testFn(`Scenario: ${scenario.title}`, async ({ page, context }: any, testInfo: any) => {
         const fixtures = { page, context, testInfo };
 
-        // Lets reporters show which file the scenario came from
-        if (feature.filepath) {
+        // Older Playwright cannot take it at declaration; this is the best it can do
+        if (feature.filepath && !attachUpFront) {
           testInfo?.annotations?.push({
             type: FEATURE_FILE_ANNOTATION,
             description: feature.filepath,

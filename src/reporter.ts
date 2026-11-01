@@ -91,6 +91,8 @@ export default class YaddaReporter implements Reporter {
   // Final attempt of each test (Playwright reuses the TestCase across retries)
   private finalResults = new Map<TestCase, TestResult>();
   private currentFeature: string | undefined;
+  // Feature title -> file, so a scenario that fails before its annotation exists still groups
+  private fileByFeature = new Map<string, string>();
   private isInternalFrame: ((line: string) => boolean) | undefined;
 
   constructor(options?: YaddaReporterOptions | null) {
@@ -124,8 +126,10 @@ export default class YaddaReporter implements Reporter {
     const duration = dim(` (${result.duration}ms)`);
     const mark = ok ? green("✓") : skipped ? yellow("-") : red("✗");
     // Print the feature (and its file) once, before its first scenario
-    const featureFile = test.annotations.find((a) => a.type === "feature-file")?.description;
     const featureTitle = heading.length > 1 ? heading.slice(0, -1).join(" › ") : "";
+    const annotatedFile = test.annotations.find((a) => a.type === "feature-file")?.description;
+    if (annotatedFile) this.fileByFeature.set(featureTitle, annotatedFile);
+    const featureFile = annotatedFile ?? this.fileByFeature.get(featureTitle);
     const featureKey = featureFile ?? featureTitle;
     if (featureKey !== this.currentFeature) {
       this.currentFeature = featureKey;
@@ -138,21 +142,23 @@ export default class YaddaReporter implements Reporter {
     // Playwright sets no error on the step still running when the test times out or is
     // interrupted; such a step has not ended, which it reports as a negative duration
     const cutShort = status === "timedOut" || status === "interrupted";
-    let errorShown = false;
+    const shownMessages = new Set<string>();
     for (const step of steps) {
       const failedStep = !!step.error || (cutShort && step.duration < 0);
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
       if (step.error) {
-        errorShown = true;
+        shownMessages.add(stripAnsi(step.error.message ?? ""));
         lines.push(indent(red(formatError(step.error, this.isInternalFrame)), "        "));
       }
     }
 
-    // Failure outside any step (fixtures, hooks, timeouts)
+    // Errors not already shown under a step: fixtures, hooks, timeouts, teardown
     const errors = result.errors?.length ? result.errors : result.error ? [result.error] : [];
-    if (!ok && !skipped && !errorShown) {
-      for (const err of errors)
+    if (!ok && !skipped) {
+      for (const err of errors) {
+        if (shownMessages.has(stripAnsi(err.message ?? ""))) continue;
         lines.push(indent(red(formatError(err, this.isInternalFrame)), "    "));
+      }
     }
 
     const block = lines.join("\n") + "\n\n";

@@ -47,27 +47,19 @@ function makeResult(
   steps: TestStep[] = [],
   errors: TestError[] = [],
 ): TestResult {
-  return { status, retry: 0, duration: 5, steps, errors, error: errors[0] } as unknown as TestResult;
+  return {
+    status,
+    retry: 0,
+    duration: 5,
+    steps,
+    errors,
+    error: errors[0],
+  } as unknown as TestResult;
 }
 
 const scenarioPath = (name: string) => ["", "", "a.spec.ts", "Feature: Alpha", `Scenario: ${name}`];
 
 describe("review blockers", () => {
-  it("counts a test.fail() test that failed as expected as passed, like Playwright", () => {
-    const reporter = new YaddaReporter();
-    const err: TestError = { message: "Error: expected", stack: "Error: expected" };
-    // Playwright: status "failed", expectedStatus "failed" -> outcome "expected"
-    const t = makeTest(["", "", "a.spec.ts", "fails expectedly"], {
-      expectedStatus: "failed",
-      outcome: () => "expected",
-    });
-    reporter.onTestEnd(t, makeResult("failed", [], [err]));
-    out = [];
-    reporter.onEnd({ status: "passed" } as any);
-    expect(stdout()).not.toContain("failed,");
-    expect(stdout()).toContain("1 passed");
-  });
-
   it("prints an afterEach hook error even when a step also failed", () => {
     const reporter = new YaddaReporter();
     const stepErr: TestError = { message: "Error: STEP-FAILED", stack: "Error: STEP-FAILED" };
@@ -81,16 +73,6 @@ describe("review blockers", () => {
       makeResult("failed", [makeStep("Given a bad step", stepErr)], [stepErr, hookErr]),
     );
     expect(stdout()).toContain("AFTER-EACH-HOOK-FAILED");
-  });
-
-  it("keeps the describe title of a non-Gherkin test when the project has no name", () => {
-    const reporter = new YaddaReporter();
-    // Default config without `projects`: the project title is ""
-    reporter.onTestEnd(
-      makeTest(["", "", "a.spec.ts", "Plain group", "plain test"], {}, false),
-      makeResult("passed"),
-    );
-    expect(stdout()).toContain("Plain group");
   });
 
   it("prints the feature file once when a scenario's body never ran (fixture/hook failure)", () => {

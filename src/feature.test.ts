@@ -160,6 +160,31 @@ Feature: Pending Feature
     );
   });
 
+  it("should attach the feature file when a normal scenario is declared, not from its body", () => {
+    const feature = parseFeature(
+      "Feature: Normal Feature\n  Scenario: Normal Scenario\n    Given step one\n",
+      "gherkin",
+      "features/normal.feature",
+    );
+    const mockTest: any = Object.assign(vi.fn<() => void>(), {
+      describe: (_: string, fn: any) => fn(),
+      skip: vi.fn<() => void>(),
+      only: vi.fn<() => void>(),
+      step: vi.fn<() => void>(),
+    });
+
+    defineFeature(feature, {
+      test: mockTest,
+      registry: createLibraryRegistry({ common: new Yadda.Library() }),
+    });
+
+    expect(mockTest).toHaveBeenCalledWith(
+      "Scenario: Normal Scenario",
+      { annotation: { type: "feature-file", description: feature.filepath } },
+      expect.any(Function),
+    );
+  });
+
   it("should run through defineFeatureSuite with pre-parsed features", async () => {
     const feature = parseFeature(gherkinText);
     const mockTest: any = Object.assign(vi.fn<() => void>(), {

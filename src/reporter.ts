@@ -7,7 +7,6 @@ import type {
   TestCase,
   TestError,
   TestResult,
-  TestStep,
 } from "@playwright/test/reporter";
 import type { YaddaReporterOptions } from "./types.js";
 
@@ -63,7 +62,12 @@ function formatError(
 ): string {
   const clean = (t: string) => (useColor ? t : stripAnsi(t));
   const text = clean(error.stack ?? error.message ?? String(error.value ?? "Unknown error"));
-  const snippet = error.snippet ? clean(error.snippet) : undefined;
+  // The snippet shows the code at error.location; when that is an internal frame the stack
+  // above no longer mentions it, so showing it would contradict the filter
+  const loc = error.location;
+  const snippetIsInternal =
+    !!loc && !!isInternalFrame?.(`    at ${loc.file}:${loc.line}:${loc.column}`);
+  const snippet = error.snippet && !snippetIsInternal ? clean(error.snippet) : undefined;
   const body = isInternalFrame
     ? text
         .split("\n")
@@ -189,5 +193,3 @@ export default class YaddaReporter implements Reporter {
     process.stdout.write(`${parts.join(", ")} ${dim(`(${result.status})`)}\n`);
   }
 }
-
-export type { TestStep };

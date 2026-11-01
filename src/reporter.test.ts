@@ -160,4 +160,38 @@ describe("YaddaReporter", () => {
     expect(lines.some((l) => l.includes("✗ Given"))).toBe(false);
     expect(stdout()).toContain("Test timeout of 1000ms exceeded.");
   });
+
+  it("omits the code snippet when it points inside playwright-yadda, unless fullStackTrace", () => {
+    const internal: TestError = {
+      message: "Error: undefined step",
+      stack: "Error: undefined step",
+      location: { file: `${process.cwd()}/src/runner.ts`, line: 29, column: 13 },
+      snippet: "SNIPPET-INSIDE-RUNNER",
+    };
+    const run = (reporter: YaddaReporter) => {
+      out = [];
+      reporter.onTestEnd(
+        makeTest("Undefined"),
+        makeResult("failed", 0, [makeStep("Given nothing", internal)], [internal]),
+      );
+      return stdout();
+    };
+
+    expect(run(new YaddaReporter())).not.toContain("SNIPPET-INSIDE-RUNNER");
+    expect(run(new YaddaReporter({ fullStackTrace: true }))).toContain("SNIPPET-INSIDE-RUNNER");
+  });
+
+  it("keeps the code snippet when it points at user code", () => {
+    const user: TestError = {
+      message: "Error: boom",
+      stack: "Error: boom\n    at step (/proj/steps.ts:1:1)",
+      location: { file: "/proj/steps.ts", line: 1, column: 1 },
+      snippet: "SNIPPET-IN-USER-CODE",
+    };
+    new YaddaReporter().onTestEnd(
+      makeTest("Boom"),
+      makeResult("failed", 0, [makeStep("When it breaks", user)], [user]),
+    );
+    expect(stdout()).toContain("SNIPPET-IN-USER-CODE");
+  });
 });

@@ -3,6 +3,15 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
+import {
+  BASE_FIXTURE_NAMES,
+  createFixtureCollector,
+  type FixtureCollector,
+  createFixtureTestBody,
+  TEST_INFO_KEY,
+  usesFixturesMode,
+  withScenarioFixtures,
+} from "./fixtures.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import type {
@@ -104,6 +113,9 @@ function supportsTestDetails(): boolean {
   }
 }
 
+/** Problems already warned about by this process, so each is reported once */
+const warned = new Set<string>();
+
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -120,6 +132,12 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext?: (fixtures: any) => Promise<TCtx> | TCtx;
     onBeforeScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
     onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+    /**
+     * Works out which fixtures a scenario's steps use. `defineFeatureSuite` makes one and shares it
+     * between its features, so a step line is matched once for the suite; pass one when defining
+     * several features yourself. Each call makes its own if it is not given one.
+     */
+    fixtureCollector?: FixtureCollector;
   },
 ): void {
   const {
@@ -130,6 +148,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext,
     onBeforeScenario,
     onAfterScenario,
+    fixtureCollector,
   } = options;
 
   const registry: ILibraryRegistryManager<K> =
@@ -142,6 +161,49 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         });
 
   const detailsSupported = supportsTestDetails();
+
+  const resolveOpts: ResolveLibrariesOptions<K> = {};
+  if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
+  if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
+
+  /**
+   * Fixtures to set up for a scenario: `page` and `context`, which the default scenario context is
+   * made of, plus whatever the steps of the libraries it resolves destructure.
+   */
+  const collectFixtures = fixtureCollector ?? createFixtureCollector();
+  const usesFixtures = () =>
+    registry.getAvailableKeys().some((key) => {
+      const library = registry.get(key);
+      return library !== undefined && usesFixturesMode(library);
+    });
+  const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
+    const names = new Set<string>(BASE_FIXTURE_NAMES);
+    try {
+      const libraries = registry.resolve(
+        parsedFeature.annotations,
+        scenario.annotations,
+        resolveOpts,
+      );
+      for (const name of collectFixtures(libraries, scenario.steps)) names.add(name);
+    } catch (error) {
+      // The scenario fails with this same error when it runs. Say why its fixtures are only the
+      // base ones, which would otherwise show up as a confusing "fixture not found" first. Only
+      // suites that use fixtures mode need telling, and once per problem: every Playwright process
+      // that loads the spec declares every scenario.
+      if (usesFixtures()) {
+        const reason = error instanceof Error ? error.message : String(error);
+        if (!warned.has(reason)) {
+          warned.add(reason);
+          console.warn(
+            `playwright-yadda: could not work out the fixtures for "${parsedFeature.title}" > ` +
+              `"${scenario.title}" (nor any other scenario with this problem), so only ` +
+              `${BASE_FIXTURE_NAMES.join(" and ")} are set up for them: ${reason}`,
+          );
+        }
+      }
+    }
+    return [...names];
+  };
 
   test.describe(`Feature: ${feature.title}`, () => {
     for (const scenario of feature.scenarios) {
@@ -160,8 +222,13 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         ? (title: string, body: unknown) => declare(title, details, body)
         : declare;
 
-      testFn(`Scenario: ${scenario.title}`, async ({ page, context }: any, testInfo: any) => {
-        const fixtures = { page, context, testInfo };
+      // Playwright sets up the fixtures the test callback destructures, so the callback has to name
+      // the ones this scenario's steps use. They are read from the steps' own parameters.
+      const fixtureNames = scenarioFixtureNames(feature, scenario);
+
+      const runScenario = async (stepFixtures: Record<string, any>, testInfo: any) => {
+        const { page, context } = stepFixtures;
+        const fixtures = { ...stepFixtures, testInfo };
 
         // Older Playwright cannot take it at declaration; this is the best it can do
         if (feature.filepath && !attachUpFront) {
@@ -172,10 +239,6 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 1. Resolve step libraries dynamically for this specific scenario
-        const resolveOpts: ResolveLibrariesOptions<K> = {};
-        if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
-        if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
-
         const libraries = registry.resolve(feature.annotations, scenario.annotations, resolveOpts);
 
         // 2. Build isolated Yadda runner instance
@@ -196,13 +259,20 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 5. Execute steps wrapped in test.step()
-        await runScenarioSteps(yadda, scenario.steps, ctx, test.step);
+        await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
+          runScenarioSteps(yadda, scenario.steps, ctx, test.step),
+        );
 
         // 6. Lifecycle after hook
         if (onAfterScenario) {
           await onAfterScenario(scenario, ctx);
         }
-      });
+      };
+
+      testFn(
+        `Scenario: ${scenario.title}`,
+        createFixtureTestBody(fixtureNames, runScenario) as unknown,
+      );
     }
   });
 }
@@ -236,7 +306,9 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
     }
   }
 
+  // One for the whole suite: steps repeat across feature files, and matching them is the costly part
+  const fixtureCollector = createFixtureCollector();
   for (const feature of parsedFeatures) {
-    defineFeature(feature, options);
+    defineFeature(feature, { ...options, fixtureCollector });
   }
 }

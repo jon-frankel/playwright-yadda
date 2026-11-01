@@ -2,6 +2,7 @@ import { createLibraryRegistry } from "playwright-yadda";
 import { commonSteps } from "./common.js";
 import { storefrontSteps } from "./storefront.js";
 import { adminSteps } from "./admin.js";
+import { inventorySteps } from "./inventory.js";
 import { orderSteps } from "./orders.js";
 
 export const registry = createLibraryRegistry({
@@ -9,4 +10,5 @@ export const registry = createLibraryRegistry({
   storefront: storefrontSteps,
   admin: adminSteps,
   orders: orderSteps,
+  inventory: inventorySteps,
 });

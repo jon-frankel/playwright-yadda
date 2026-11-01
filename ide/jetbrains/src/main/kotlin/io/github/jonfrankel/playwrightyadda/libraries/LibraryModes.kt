@@ -15,7 +15,9 @@ import com.intellij.psi.util.PsiTreeUtil
  *
  * That is so for `createStepLibrary(dictionary, "fixtures", language)`, and for the `createStepLibrary`
  * that `createBdd(test)` returns, however it is reached: `createBdd(test).createStepLibrary()`,
- * `const { createStepLibrary } = createBdd(test)` or `const bdd = createBdd(test); bdd.createStepLibrary()`.
+ * `const { createStepLibrary } = createBdd(test)` (also when exported from another module, which the IDE resolves) or
+ * `const bdd = createBdd(test); bdd.createStepLibrary()`. A call with another qualifier, such as the namespace of
+ * `import * as yadda from "playwright-yadda"`, is read by its mode argument like an unqualified one.
  */
 object LibraryModes {
   private const val MAX_HOPS = 5
@@ -28,9 +30,11 @@ object LibraryModes {
   fun isFixtures(call: JSCallExpression): Boolean {
     val callee = call.methodExpression as? JSReferenceExpression ?: return false
     val qualifier = callee.qualifier
-    if (qualifier != null) return comesFromCreateBdd(qualifier, 0)
-
-    if (declaredByCreateBdd(callee)) return true
+    if (qualifier != null) {
+      if (comesFromCreateBdd(qualifier, 0)) return true
+    } else if (declaredByCreateBdd(callee)) {
+      return true
+    }
     return stringValue(call.arguments.getOrNull(1), 0) == "fixtures"
   }
 
@@ -47,7 +51,8 @@ object LibraryModes {
 
   /**
    * `createStepLibrary` as `const { createStepLibrary } = createBdd(test)` declares it. The IDE resolves a name
-   * taken out of a pattern to a copy that has no parents, so the declaration is looked for by name in the file.
+   * taken out of a pattern, in the same file, to a copy that has no parents, so that declaration is looked for
+   * by name in the file. One exported from another module resolves to its declaration.
    */
   private fun declaredByCreateBdd(reference: JSReferenceExpression): Boolean {
     val resolved = reference.resolve() as? JSVariable

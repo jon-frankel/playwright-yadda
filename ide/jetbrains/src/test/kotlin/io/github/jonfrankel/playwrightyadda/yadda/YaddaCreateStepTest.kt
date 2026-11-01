@@ -296,6 +296,39 @@ class YaddaCreateStepTest : BasePlatformTestCase() {
     assertFixturesStub(created("const bdd = createBdd(test);\nexport const storefrontSteps = bdd.createStepLibrary();\n"))
   }
 
+  fun `test a namespaced createStepLibrary with the fixtures mode gets the fixtures first`() {
+    assertFixturesStub(
+      created("import * as yadda from \"playwright-yadda\";\nexport const storefrontSteps = yadda.createStepLibrary(undefined, \"fixtures\");\n"),
+    )
+  }
+
+  fun `test a namespaced createStepLibrary with no mode keeps the function`() {
+    assertPlainStub(created("import * as yadda from \"playwright-yadda\";\nexport const storefrontSteps = yadda.createStepLibrary();\n"))
+  }
+
+  fun `test a createStepLibrary that another module takes from createBdd gets the fixtures first`() {
+    myFixture.addFileToProject("bdd.ts", "export const { createStepLibrary } = createBdd(test);\n")
+    assertFixturesStub(
+      created("import { createStepLibrary } from \"./bdd.js\";\nexport const storefrontSteps = createStepLibrary();\n"),
+    )
+  }
+
+  fun `test a createStepLibrary that another module takes from a plain import keeps the function`() {
+    myFixture.addFileToProject("bdd.ts", "export { createStepLibrary } from \"playwright-yadda\";\n")
+    assertPlainStub(
+      created("import { createStepLibrary } from \"./bdd.js\";\nexport const storefrontSteps = createStepLibrary();\n"),
+    )
+  }
+
+  fun `test create all writes the fixtures stub for each step of a fixtures library`() {
+    project(storefront = "export const storefrontSteps = createStepLibrary(undefined, \"fixtures\");\n")
+    open("features/a.feature", feature, "the moon")
+    create("Create all Yadda step definitions")
+    val written = text("storefront.ts")
+    assertTrue(written, written.contains("storefrontSteps.given(\"the moon is full\", async ({}) => {"))
+    assertTrue(written, written.contains("storefrontSteps.given(\"the sun is out\", async ({}) => {"))
+  }
+
   fun `test a library made with the default mode keeps the function`() {
     assertPlainStub(created("export const storefrontSteps = createStepLibrary();\n"))
   }

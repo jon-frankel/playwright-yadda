@@ -1,7 +1,7 @@
 import type { TestCase, TestError, TestResult, TestStep } from "@playwright/test/reporter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import YaddaReporter from "./reporter.js";
-import { REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
+import { FEATURE_TAGS_ANNOTATION, REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
 
 // eslint-disable-next-line no-control-regex
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -255,5 +255,52 @@ describe("YaddaReporter", () => {
       makeResult("failed", 0, [makeStep("When it breaks", user)], [user]),
     );
     expect(stdout()).toContain("SNIPPET-IN-USER-CODE");
+  });
+
+  describe("tags", () => {
+    const tagged = (scenario: string, featureTags: string[], tags: string[]) =>
+      Object.assign(makeTest(scenario), {
+        tags,
+        annotations: [
+          { type: "feature-file", description: `${process.cwd()}/features/a.feature` },
+          ...(featureTags.length
+            ? [{ type: FEATURE_TAGS_ANNOTATION, description: featureTags.join(" ") }]
+            : []),
+        ],
+      });
+
+    const run = (options: ConstructorParameters<typeof YaddaReporter>[0], tests: TestCase[]) => {
+      const reporter = new YaddaReporter(options);
+      for (const test of tests) reporter.onTestEnd(test, makeResult("passed", 0));
+      return stdout();
+    };
+
+    it("prints a feature's tags with the feature, and a scenario's other tags with the scenario", () => {
+      const printed = run(undefined, [
+        tagged("One", ["@storefront", "@slow"], ["@storefront", "@slow", "@smoke"]),
+        tagged("Two", ["@storefront", "@slow"], ["@storefront", "@slow"]),
+      ]);
+      expect(printed).toContain("Feature: Alpha @storefront @slow\n");
+      expect(printed).toContain("✓ Scenario: One @smoke (5ms)");
+      expect(printed).toContain("✓ Scenario: Two (5ms)");
+      expect(printed.match(/@storefront/g)).toHaveLength(1);
+    });
+
+    it("prints a scenario's value for a tag it overrides, and the feature's with the feature", () => {
+      const printed = run(undefined, [tagged("One", ["@timeout:5000"], ["@timeout:100"])]);
+      expect(printed).toContain("Feature: Alpha @timeout:5000\n");
+      expect(printed).toContain("✓ Scenario: One @timeout:100 (5ms)");
+    });
+
+    it("prints no tags when there are none, or when asked not to", () => {
+      expect(run(undefined, [tagged("One", [], [])])).toContain("✓ Scenario: One (5ms)");
+      out = [];
+      const printed = run({ tags: false }, [tagged("One", ["@a"], ["@a", "@b"])]);
+      expect(printed).not.toContain("@");
+    });
+
+    it("prints a scenario's tags when Playwright gives no feature annotation", () => {
+      expect(run(undefined, [tagged("One", [], ["@smoke"])])).toContain("✓ Scenario: One @smoke");
+    });
   });
 });

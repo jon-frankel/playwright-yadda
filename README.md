@@ -302,6 +302,14 @@ Stack traces hide frames from yadda and playwright-yadda so they start at your s
 reporter: [["playwright-yadda/reporter", { fullStackTrace: true }]],
 ```
 
+The tags in effect are printed on one line, where they apply: a feature's after its title, and a scenario's other tags after the scenario's title. A tag a scenario overrides is printed on the scenario with its own value. They come from Playwright's `tag` (Playwright 1.42 or later). To turn them off, pass `{ tags: false }`:
+
+```
+features/@admin/@smoke.feature
+Feature: Admin smoke test @admin @smoke
+✓ Scenario: Administrator deletes product (113ms)
+```
+
 ## IDE Support
 
 ### WebStorm and other JetBrains IDEs

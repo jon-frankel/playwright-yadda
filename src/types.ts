@@ -178,4 +178,9 @@ export interface FeatureSuiteOptions<
 export interface YaddaReporterOptions {
   /** Keep yadda and playwright-yadda frames in stack traces. Default: false. */
   fullStackTrace?: boolean;
+  /**
+   * Print the tags in effect: a feature's own after its title, and a scenario's other tags after
+   * the scenario's. Needs Playwright 1.42 or later. Default: true.
+   */
+  tags?: boolean;
 }

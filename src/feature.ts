@@ -14,7 +14,12 @@ import { extractLibraryNames } from "./annotations.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
-import { supportsTestDetails, warnOnce, WARNING_ANNOTATION } from "./warnings.js";
+import {
+  FEATURE_TAGS_ANNOTATION,
+  supportsTestDetails,
+  warnOnce,
+  WARNING_ANNOTATION,
+} from "./warnings.js";
 import type {
   DefaultScenarioContext,
   FeatureSuiteOptions,
@@ -298,6 +303,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     where: `"${feature.title}"`,
   });
   const featureSettings = featureTags.feature;
+  // The tags of the feature alone, for the reporter to tell them from the scenario's own
+  const featureTagList = featureTags.scenario.playwrightTags.join(" ");
   // The reporter prints a warning from the scenarios that carry it; with none, nothing would
   if (feature.scenarios.length === 0) {
     for (const warning of featureTags.warnings) warnOnce(warning, false);
@@ -341,6 +348,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       const warnings = [...featureTags.warnings, ...tagWarnings, ...fixtureProblems];
       const annotations = [
         ...(attachFile ? [{ type: FEATURE_FILE_ANNOTATION, description: feature.filepath }] : []),
+        ...(featureTagList ? [{ type: FEATURE_TAGS_ANNOTATION, description: featureTagList }] : []),
         ...warnings.map((description) => ({ type: WARNING_ANNOTATION, description })),
       ];
       if (annotations.length > 0 && detailsSupported) {

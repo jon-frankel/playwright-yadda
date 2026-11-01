@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
@@ -45,7 +46,9 @@ export function parseFeature(
       ? new Yadda.parsers.MarkdownFeatureParser(language)
       : new Yadda.parsers.FeatureParser(language);
 
-  return parser.parse(content) as ParsedFeature;
+  const parsed = parser.parse(content) as ParsedFeature;
+  if (filepath) parsed.filepath = path.resolve(filepath);
+  return parsed;
 }
 
 /**
@@ -88,6 +91,23 @@ export function findFeatureFiles(targetPath: string): string[] {
 }
 
 /**
+ * Whether the installed Playwright accepts a details object (`{ annotation }`) in `test(title, details, fn)`,
+ * which it has done since 1.42.
+ */
+function supportsTestDetails(): boolean {
+  try {
+    const { version } = createRequire(import.meta.url)("@playwright/test/package.json");
+    const [major = 0, minor = 0] = String(version).split(".").map(Number);
+    return major > 1 || (major === 1 && minor >= 42);
+  } catch {
+    return false;
+  }
+}
+
+/** Test annotation type carrying the path of the feature file a scenario came from */
+export const FEATURE_FILE_ANNOTATION = "feature-file";
+
+/**
  * Define Playwright tests for a parsed feature
  */
 export function defineFeature<TCtx = DefaultScenarioContext, K extends string = string>(
@@ -121,20 +141,35 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
           inheritance: libraryInheritance,
         });
 
+  const detailsSupported = supportsTestDetails();
+
   test.describe(`Feature: ${feature.title}`, () => {
     for (const scenario of feature.scenarios) {
       const isPending = isScenarioPending(feature.annotations, scenario.annotations);
       const isOnly = isScenarioOnly(feature.annotations, scenario.annotations);
 
-      let testFn = test;
-      if (isPending) {
-        testFn = test.skip;
-      } else if (isOnly) {
-        testFn = test.only;
-      }
+      const kind = isPending ? "skip" : isOnly ? "only" : undefined;
+      const declare = (kind ? test[kind] : test) as (...args: unknown[]) => void;
+      // Attached when the test is declared, so reporters still see it if a fixture or hook fails
+      // before the body runs, and for skipped scenarios whose body never does
+      const attachUpFront = !!feature.filepath && detailsSupported;
+      const details = {
+        annotation: { type: FEATURE_FILE_ANNOTATION, description: feature.filepath },
+      };
+      const testFn = attachUpFront
+        ? (title: string, body: unknown) => declare(title, details, body)
+        : declare;
 
       testFn(`Scenario: ${scenario.title}`, async ({ page, context }: any, testInfo: any) => {
         const fixtures = { page, context, testInfo };
+
+        // Older Playwright cannot take it at declaration; this is the best it can do
+        if (feature.filepath && !attachUpFront) {
+          testInfo?.annotations?.push({
+            type: FEATURE_FILE_ANNOTATION,
+            description: feature.filepath,
+          });
+        }
 
         // 1. Resolve step libraries dynamically for this specific scenario
         const resolveOpts: ResolveLibrariesOptions<K> = {};

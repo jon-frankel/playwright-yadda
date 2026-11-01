@@ -155,6 +155,23 @@ The test names stay `Feature: …` and `Scenario: …`. Yadda 3.2 can't build a 
 
 ---
 
+## Reporter
+
+A Playwright reporter prints each scenario with a ✓ / ✗ beside every step and the stack trace of the failing step below it:
+
+```ts
+// playwright.config.ts
+export default defineConfig({
+  reporter: [["playwright-yadda/reporter"]],
+});
+```
+
+Stack traces hide frames from yadda and playwright-yadda so they start at your step code. To keep them, pass `{ fullStackTrace: true }`:
+
+```ts
+reporter: [["playwright-yadda/reporter", { fullStackTrace: true }]],
+```
+
 ## IDE Support
 
 ### WebStorm and other JetBrains IDEs

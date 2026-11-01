@@ -15,6 +15,7 @@ export type {
   ParsedScenario,
   ResolveLibrariesOptions,
   StepLibrary,
+  YaddaReporterOptions,
 } from "./types.js";
 
 // Annotation parsing utilities

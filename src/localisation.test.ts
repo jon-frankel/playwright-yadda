@@ -28,7 +28,8 @@ function mockTest() {
   const titles: string[] = [];
   const scenarios: Array<() => Promise<void>> = [];
   const test: any = Object.assign(
-    (title: string, fn: any) => {
+    (title: string, ...rest: any[]) => {
+      const fn = rest[rest.length - 1]; // (title, fn) or (title, details, fn)
       titles.push(title);
       scenarios.push(() => fn({ page: {}, context: {} }, {}));
     },

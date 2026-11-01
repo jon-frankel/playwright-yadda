@@ -87,6 +87,8 @@ export interface ParsedScenario {
  */
 export interface ParsedFeature {
   title: string;
+  /** Path of the file the feature was loaded from, when it came from one */
+  filepath?: string;
   annotations?: AnnotationRecord;
   description?: string[];
   scenarios: ParsedScenario[];
@@ -163,4 +165,12 @@ export interface FeatureSuiteOptions<
    * Optional hook executed after all scenario steps complete
    */
   onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+}
+
+/**
+ * Options for the `playwright-yadda/reporter` Playwright reporter
+ */
+export interface YaddaReporterOptions {
+  /** Keep yadda and playwright-yadda frames in stack traces. Default: false. */
+  fullStackTrace?: boolean;
 }

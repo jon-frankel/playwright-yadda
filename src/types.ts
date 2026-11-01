@@ -8,6 +8,7 @@ import type {
   PlaywrightWorkerOptions,
 } from "@playwright/test";
 import type Yadda from "yadda";
+import type { Hooks } from "./hooks.js";
 
 /**
  * Standard Yadda Step Library type
@@ -162,12 +163,20 @@ export interface FeatureSuiteOptions<
   createContext?: (fixtures: TFixtures & { context: BrowserContext }) => Promise<TCtx> | TCtx;
 
   /**
+   * Tag-filtered scenario, step and worker hooks: `const hooks = createHooks()`, then
+   * `hooks.BeforeScenario({ tags: '@mobile and not @slow' }, fn)` and so on.
+   */
+  hooks?: Hooks;
+
+  /**
    * Optional hook executed before the scenario steps run
+   * @deprecated Use `hooks.BeforeScenario`. Kept working as it was.
    */
   onBeforeScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
 
   /**
-   * Optional hook executed after all scenario steps complete
+   * Optional hook executed after all scenario steps complete (not when the scenario fails)
+   * @deprecated Use `hooks.AfterScenario`, which also runs when the scenario fails.
    */
   onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
 }

@@ -37,7 +37,7 @@ type Spec = {
     expectedStatus: string;
     status: string;
     timeout: number;
-    results: { status: string }[];
+    results: { status: string; errors?: { message: string }[] }[];
   }[];
 };
 
@@ -216,6 +216,83 @@ describe("special tags with the real Playwright", () => {
       expect(titles(["--grep-invert", "@smoke|@mode:serial"])).toEqual([]);
       expect(titles(["--grep-invert", "@fail|@fixme|@skip|@pending"])).toHaveLength(9);
     });
+  });
+});
+
+describe("hooks with the real Playwright", () => {
+  // `beforeAll` is read by Playwright, which wants a destructuring pattern for its first parameter
+  let status: number | null;
+  let specs: Spec[] = [];
+  beforeAll(() => {
+    const run = runPlaywright("bdd-hooks.spec.ts");
+    status = run.status;
+    specs = run.report ? specsOf(run.report) : [];
+  }, 60_000);
+
+  const ran = (title: string) =>
+    specs
+      .find((spec) => spec.title === `Scenario: ${title}`)
+      ?.tests[0]?.annotations.filter((a) => a.type === "hook")
+      .map((a) => a.description);
+
+  it("loads the spec; only the scenario that times out fails the run", () => {
+    expect(status).toBe(1);
+    const results = specs.map((spec) => [spec.title, spec.tests[0]?.status]);
+    expect(results.filter(([, outcome]) => outcome === "unexpected")).toEqual([
+      ["Scenario: Times out", "unexpected"],
+      ["Scenario: Hangs until teardown", "unexpected"],
+    ]);
+    expect(specs).toHaveLength(4);
+  });
+
+  it("runs Before hooks in order, filtered by tag, and After hooks in reverse", () => {
+    expect(ran("Tagged")).toEqual([
+      "BeforeWorker",
+      "BeforeScenario 1",
+      "BeforeScenario mobile",
+      "BeforeStep Given a step that passes",
+      "AfterStep Given a step that passes ok",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+
+  it("runs AfterStep and AfterScenario when the test times out", () => {
+    expect(ran("Times out")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
+      "BeforeScenario 1",
+      "BeforeStep Given a step that hangs",
+      "AfterStep Given a step that hangs failed",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+
+  it("runs each After hook once when the abandoned body resumes after the timeout", () => {
+    expect(ran("Hangs until teardown")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
+      "BeforeScenario 1",
+      "BeforeStep Given a step that hangs until teardown",
+      "AfterStep Given a step that hangs until teardown failed",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+
+  it("reports only the timeout for a body that resumes during teardown", () => {
+    const errors = specs.find((spec) => spec.title === "Scenario: Hangs until teardown")?.tests[0]
+      ?.results[0]?.errors;
+    expect(errors).toHaveLength(1);
+    expect(errors?.[0]?.message).toContain("timeout");
+  });
+
+  it("runs AfterStep and AfterScenario when a step fails", () => {
+    // Playwright copies annotations added in `beforeAll` onto the other tests of the worker
+    expect(ran("Fails")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
+      "BeforeScenario 1",
+      "BeforeStep Given a step that fails",
+      "AfterStep Given a step that fails failed",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
   });
 });
 

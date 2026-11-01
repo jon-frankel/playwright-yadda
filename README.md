@@ -214,6 +214,40 @@ Binds step libraries to your extended `test`, so the fixtures a step destructure
 
 ---
 
+## Hooks
+
+`createHooks()` makes a registry of scenario, step and worker hooks, each optionally limited by a tag expression. Pass it to `defineFeatureSuite` as `hooks`.
+
+```typescript
+import { createHooks, defineFeatureSuite } from "playwright-yadda";
+
+const hooks = createHooks();
+
+hooks.BeforeScenario({ tags: "@mobile and not @slow" }, async ({ fixtures }) => {
+  await fixtures.page.setViewportSize({ width: 390, height: 844 });
+});
+hooks.AfterStep(({ step, error }) => {
+  if (error) console.log(`failed: ${step}`);
+});
+hooks.AfterScenario({ name: "cleanup", order: 10 }, async ({ ctx }) => ctx.cleanup?.());
+
+defineFeatureSuite({ test, registry, features, hooks });
+```
+
+| Hook                               | Runs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BeforeScenario` / `AfterScenario` | Around a scenario's steps. `AfterScenario` also runs when a step or a `BeforeScenario` hook fails, and when the test times out. Then they run from `afterEach` (the step in progress, if any, goes to `AfterStep` with the timeout as its `error`), an error from them is only logged as a warning, and the abandoned scenario runs no more steps or hooks if it resumes. A hook that is itself still running when the timeout hits is cut short, and the hooks after it in the same list run from `afterEach` only if they had not started. |
+| `BeforeStep` / `AfterStep`         | Around each step, inside its `test.step()`. `AfterStep` gets the step's `error` and runs when the step fails.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `BeforeWorker` / `AfterWorker`     | In `test.beforeAll` / `test.afterAll` of each feature's describe, see below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+Each is called as `Hook(fn)` or `Hook({ tags, name, order }, fn)`. `tags` is an expression of `@tags` with `and`, `or`, `not` and parentheses (`not` binds tightest, then `and`, then `or`); it is checked when the hook is registered, and matched against the scenario's tags, its feature's included. `order` (default 0) sorts hooks, lowest first, with ties in registration order. Before hooks run in that order and After hooks in the reverse. If one After hook throws, the others still run and the first error is reported. If a Before hook throws, the rest of the Before hooks and the steps are skipped. When a step or scenario has already failed, its error is the one reported and an After hook's own error is only logged as a warning. `AfterScenario` hooks do not run if `createContext` throws, as the hooks get that context. A tag with a value matches only in full (`@owner:bob`, not `@owner`), `@name=value` and `@name:value` are the same tag, and a tag switched off with `=false` is not matched. Tag matching ignores case (`@Wip` matches `@wip`), and a tag whose value has spaces is passed to Playwright without it (`@owner=bob smith` is `@owner`). Playwright's own signals, such as `test.skip()` called in a step, reach `AfterStep` as its `error` too. Tags with parentheses in their names (`@issue(12)`) cannot be used in expressions.
+
+Hooks receive `{ feature, scenario, ctx, fixtures, tags }` (steps add `step`, and `AfterStep` `error`).
+
+**Worker hooks run per feature, not once per worker.** They are `beforeAll`/`afterAll` in the feature's describe, so a worker that runs several features runs them once for each, and with `fullyParallel` once for every worker that gets a test of the feature. Their `tags` are matched against the feature's tags alone. They receive `{ feature, tags, testInfo }`, and no fixtures: Playwright only sets up the ones a `beforeAll` callback destructures. Register them before calling `defineFeatureSuite`: they are picked up when a feature is declared, while scenario and step hooks are looked up when each scenario runs. A once-per-worker hook would need an auto worker-scoped fixture on your `test`.
+
+`onBeforeScenario` and `onAfterScenario` still work but are deprecated: use `BeforeScenario` and `AfterScenario`. Unlike `AfterScenario`, `onAfterScenario` does not run when the scenario fails. Where both are given, the old `onBeforeScenario` runs before the hooks, and the old `onAfterScenario` after the scenario's steps and before the `AfterScenario` hooks.
+
 ## Playwright fixtures in steps
 
 Steps can use the fixtures of your `test.extend({...})`, and Playwright's own (`request`, `browserName`, `baseURL`, …), the way a Playwright test does:

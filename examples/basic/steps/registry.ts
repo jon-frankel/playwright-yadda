@@ -4,6 +4,7 @@ import { storefrontSteps } from "./storefront.js";
 import { adminSteps } from "./admin.js";
 import { inventorySteps } from "./inventory.js";
 import { orderSteps } from "./orders.js";
+import { hookSteps } from "./hooks.js";
 import { tagsSteps } from "./tags.js";
 import { playgroundBoundSteps } from "./playground/bound.js";
 import { playgroundFixtureSteps } from "./playground/fixtures.js";
@@ -18,6 +19,7 @@ export const registry = createLibraryRegistry({
   orders: orderSteps,
   inventory: inventorySteps,
   tags: tagsSteps,
+  hooks: hookSteps,
   // Empty, for ide-playground/create-step.feature
   fixtures: playgroundFixtureSteps,
   bound: playgroundBoundSteps,

@@ -254,11 +254,6 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         const { page, context } = stepFixtures;
         const fixtures = { ...stepFixtures, testInfo };
 
-        // `@fail`, `@slow` and a scenario's own `@timeout` are runtime calls on the running test
-        if (tags.fail) test.fail();
-        if (tags.slow) test.slow();
-        if (own.timeout !== undefined) test.setTimeout(own.timeout);
-
         // Older Playwright cannot take it at declaration; this is the best it can do
         if (attachLate) {
           testInfo?.annotations?.push({
@@ -304,11 +299,16 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
           createFixtureTestBody(fixtureNames, runScenario) as unknown,
         );
 
-      // `@retries` and `@mode` are describe-level settings, and Playwright has no per-test form, so
-      // a scenario that sets one gets a describe of its own, with no title (microsoft/playwright#10825)
-      if (own.retries !== undefined || own.mode !== undefined) {
+      // `@fail`, `@slow`, `@timeout` and `@retries` are given to Playwright in a describe of the
+      // scenario's own, with no title (microsoft/playwright#10825). Calling `test.fail()` or
+      // `test.slow()` in the running test would be too late for its fixtures and `beforeEach`
+      // hooks, which Playwright has set up by then, and a describe's settings cover them. A
+      // feature's `@timeout` and `@retries` are on the feature's describe, which this one inherits.
+      if (tags.fail || tags.slow || own.timeout !== undefined || own.retries !== undefined) {
         test.describe(() => {
-          configureDescribe(test, { retries: own.retries, mode: own.mode });
+          configureDescribe(test, { timeout: own.timeout, retries: own.retries });
+          if (tags.fail) test.fail();
+          if (tags.slow) test.slow();
           declareScenario();
         });
       } else {

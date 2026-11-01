@@ -1,8 +1,9 @@
-import Yadda from "yadda";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defineFeature, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
 import { resolveTags } from "./tags.js";
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("resolveTags", () => {
   it("reads @name:value and @name=value as the same tag", () => {
@@ -21,11 +22,23 @@ describe("resolveTags", () => {
   it("lets a scenario's tag override the feature's", () => {
     const { scenario, feature, own } = resolveTags(
       { "timeout:1000": true, "retries:1": true, "mode:serial": true },
-      { "timeout:2000": true, "mode:parallel": true },
+      { "timeout:2000": true },
     );
-    expect(scenario).toMatchObject({ timeout: 2000, retries: 1, mode: "parallel" });
+    expect(scenario).toMatchObject({ timeout: 2000, retries: 1, mode: "serial" });
     expect(feature).toEqual({ timeout: 1000, retries: 1, mode: "serial" });
-    expect(own).toEqual({ timeout: 2000, mode: "parallel" });
+    expect(own).toEqual({ timeout: 2000 });
+  });
+
+  describe("@mode on a scenario", () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it("is ignored with a warning: a mode belongs to a whole feature", () => {
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { scenario, own } = resolveTags({ "mode:serial": true }, { "mode:parallel": true });
+      expect(scenario.mode).toBe("serial");
+      expect(own.mode).toBeUndefined();
+      expect(warn).toHaveBeenCalledOnce();
+    });
   });
 
   it("lets @skip=false on a scenario turn off the feature's @skip", () => {
@@ -52,6 +65,18 @@ describe("resolveTags", () => {
         "@libraries",
       ]);
     });
+  });
+
+  it("does not pass a tag switched off with =false to Playwright", () => {
+    expect(resolveTags({ skip: true }, { skip: "false" }).scenario.playwrightTags).toEqual([]);
+  });
+
+  it("accepts only whole numbers for @timeout and @retries", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { scenario } = resolveTags({ "timeout:1e3": true, "retries:0x2": true });
+    expect(scenario.timeout).toBeUndefined();
+    expect(scenario.retries).toBeUndefined();
+    expect(resolveTags({ "retries:0": true }).scenario.retries).toBe(0);
   });
 
   describe("invalid values", () => {
@@ -157,38 +182,33 @@ Scenario: S
     expect(calls.filter((c) => c[0] === "describe")).toHaveLength(1);
   });
 
-  it("gives a scenario with its own @retries or @mode an untitled describe", () => {
-    const { calls } = run(feature("", "@retries:3\n@mode:serial"));
+  it("gives a scenario with its own @retries or @timeout an untitled describe", () => {
+    const { calls } = run(feature("", "@retries:3\n@timeout:9000"));
     expect(calls.filter((c) => c[0] === "describe")).toEqual([
       ["describe", "Feature: F"],
       ["describe"],
     ]);
-    expect(calls).toContainEqual(["configure", { retries: 3, mode: "serial" }]);
+    expect(calls).toContainEqual(["configure", { timeout: 9000, retries: 3 }]);
     expect(calls.findIndex((c) => c[0] === "configure")).toBeLessThan(
       calls.findIndex((c) => c[0] === "test"),
     );
   });
 
-  it("calls test.fail, test.slow and test.setTimeout when the scenario runs", async () => {
-    const { test, calls } = mockTest();
-    let body: any;
-    test.mockBody = true;
-    const original = test;
-    const wrapped: any = Object.assign((title: string, ...rest: unknown[]) => {
-      body = rest.at(-1);
-      original(title, ...rest);
-    }, original);
-    defineFeature(parseFeature(feature("", "@fail\n@slow\n@timeout:9000")), {
-      test: wrapped,
-      registry: createLibraryRegistry({
-        common: new Yadda.Library().define("a step", () => {}),
-      }),
-    });
-    expect(calls.map((c) => c[0])).not.toContain("fail");
-    await body({ page: {}, context: {} });
-    expect(calls).toContainEqual(["fail"]);
-    expect(calls).toContainEqual(["slow"]);
-    expect(calls).toContainEqual(["setTimeout", 9000]);
+  it("declares @fail and @slow in the scenario's untitled describe, before the test", () => {
+    const { calls } = run(feature("", "@fail\n@slow"));
+    expect(calls.map((c) => c[0])).toEqual(["describe", "describe", "fail", "slow", "test"]);
+  });
+
+  it("applies a feature's @fail to each of its scenarios", () => {
+    const { calls } = run(feature("@fail", ""));
+    expect(calls.map((c) => c[0])).toEqual(["describe", "describe", "fail", "test"]);
+  });
+
+  it("ignores a scenario's @mode, and does not give it a describe", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { calls } = run(feature("@mode:serial", "@mode:parallel"));
+    expect(calls).toContainEqual(["configure", { mode: "serial" }]);
+    expect(calls.map((c) => c[0])).toEqual(["describe", "configure", "test"]);
   });
 
   it("leaves unknown tags inert", () => {

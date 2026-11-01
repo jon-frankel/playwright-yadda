@@ -56,9 +56,11 @@ function tagsOf(annotations: AnnotationRecord | undefined): Map<string, string |
 
 /** The tags as Playwright wants them: `@name`, or `@name:value` when there is a value without spaces */
 function toPlaywrightTags(tags: Map<string, string | true>): string[] {
-  return [...tags].map(([name, value]) =>
-    value === true || /\s/.test(value) ? `@${name}` : `@${name}:${value}`,
-  );
+  return [...tags]
+    .filter(([, value]) => isSet(value))
+    .map(([name, value]) =>
+      value === true || /\s/.test(value) ? `@${name}` : `@${name}:${value}`,
+    );
 }
 
 const isSet = (value: string | true | undefined): value is string | true =>
@@ -75,8 +77,8 @@ function warnOnce(message: string) {
 function readNumber(tags: Map<string, string | true>, name: string): number | undefined {
   const value = tags.get(name);
   if (value === undefined) return undefined;
-  const number = typeof value === "string" ? Number(value) : NaN;
-  if (!Number.isInteger(number) || number < 0) {
+  const number = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(number)) {
     warnOnce(
       `ignoring @${name}, which needs a whole number, e.g. @${name}:2 (got ${String(value)})`,
     );
@@ -127,6 +129,15 @@ export function resolveTags(
 
   const feature = settingsOf(featureTags);
   const own = settingsOf(scenarioTags);
+  // A mode is a setting of a group of tests. Playwright refuses a `parallel` describe inside a
+  // `serial` one, and a describe of one scenario has nothing to run in serial with, so a scenario
+  // cannot set it.
+  if (own.mode !== undefined) {
+    warnOnce(
+      "ignoring @mode on a scenario: it applies to a whole feature, so put it on the feature",
+    );
+    delete own.mode;
+  }
   const effective = { ...feature, ...own };
 
   const scenario: ScenarioTags = {

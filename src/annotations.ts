@@ -1,3 +1,4 @@
+import { resolveTags } from "./tags.js";
 import type { AnnotationRecord, ResolveLibrariesOptions } from "./types.js";
 
 /**
@@ -79,37 +80,23 @@ export function resolveLibraryNames(
 }
 
 /**
- * Checks whether a scenario should be skipped/pending based on annotations
+ * Checks whether a scenario is skipped by `@skip`, `@pending` or `@fixme`, on the feature or the
+ * scenario. The scenario's tag overrides the feature's, so `@skip=false` on a scenario runs it.
  */
 export function isScenarioPending(
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
 ): boolean {
-  const check = (annotations?: AnnotationRecord) => {
-    if (!annotations) return false;
-    const pending = getAnnotationValue(annotations, "pending");
-    const skip = getAnnotationValue(annotations, "skip");
-    return (
-      Boolean(pending !== undefined && pending !== false) ||
-      Boolean(skip !== undefined && skip !== false)
-    );
-  };
-
-  return check(featureAnnotations) || check(scenarioAnnotations);
+  return resolveTags(featureAnnotations, scenarioAnnotations).scenario.skip !== undefined;
 }
 
 /**
- * Checks whether a scenario has an `@only` annotation
+ * Checks whether a scenario is focused by `@only`, on the feature or the scenario. The scenario's
+ * tag overrides the feature's, so `@only=false` on a scenario unfocuses it.
  */
 export function isScenarioOnly(
   featureAnnotations?: AnnotationRecord,
   scenarioAnnotations?: AnnotationRecord,
 ): boolean {
-  const check = (annotations?: AnnotationRecord) => {
-    if (!annotations) return false;
-    const only = getAnnotationValue(annotations, "only");
-    return Boolean(only !== undefined && only !== false);
-  };
-
-  return check(featureAnnotations) || check(scenarioAnnotations);
+  return resolveTags(featureAnnotations, scenarioAnnotations).scenario.only;
 }

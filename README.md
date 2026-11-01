@@ -134,7 +134,7 @@ Discovers feature files and registers them with Playwright's `test` runner.
 - `test`: The Playwright `test` instance.
 - `registry`: The `LibraryRegistry` or `LibraryRegistryManager`.
 - `features`: Directory path, file path, glob pattern, or pre-parsed feature array.
-- `createContext`: Optional custom factory function to initialize scenario context. It receives the fixtures set up for the scenario (`page`, `context`, any the steps use) and `testInfo`.
+- `createContext`: Optional custom factory function to initialize scenario context. It receives `page`, `context` and `testInfo`, plus any other fixtures the scenario's steps use. It cannot ask for fixtures itself: Playwright only sets up what a step or this library names.
 - `language`: The Yadda localisation the feature files are written in (default `Yadda.localisation.English`). It sets the words read as `Feature:`, `Scenario:`, `Examples:` and so on. Use the same language for the step libraries.
 
 ```ts
@@ -203,18 +203,25 @@ defineFeatureSuite({ test, registry, features });
 Playwright decides what to set up from the destructuring pattern of the test function's first argument. There is no generated spec file here, so for each scenario the test function is built when the suite is declared, with a pattern naming:
 
 1. `page` and `context`, always. The default scenario context (`{ page, context, testInfo }`) is made of them, so `'bound'` and `'param'` steps keep working.
-2. the fixtures destructured by every step definition in the scenario's libraries that matches one of its steps.
+2. the fixtures destructured by the step definition Yadda would run for each of the scenario's steps, from the libraries the scenario enables (`@Libraries`, on the feature or the scenario, plus the defaults).
 
-A fixture no matching step destructures is not set up, so an expensive fixture costs only the scenarios whose steps use it.
+A fixture none of those steps destructures is not set up, so an expensive fixture costs only the scenarios whose steps use it.
 
 Limits of reading the pattern from the step definition:
 
 - **Destructure in the first parameter.** `async ({ page }) => ...` works. `async (fixtures) => ...` and a rest property (`{ page, ...rest }`) throw when the step is defined, as they would in a Playwright test. Use `({})` for a step that needs none.
-- **Every matching definition counts.** If the step text matches several definitions (say a regex and a more specific one), the fixtures of all of them are set up, because Yadda picks between them only when the step runs.
+- **Yadda's choice between definitions is repeated.** When a step text matches several definitions (a regex and a more specific one, or the same text in two libraries), the closest pattern wins, and a tie goes to the library of the previous step, as Yadda does when it runs the steps. Only the winner's fixtures are set up. If Yadda could not choose (an ambiguous step), the fixtures of every match are set up and the scenario fails when it runs.
 - **Pass the function you wrote.** The names are read from `fn.toString()`. A wrapped or `.bind()`-ed function hides its parameters, and so would a bundler that rewrites destructuring (a minifier keeps the property names, which is all that is read).
 - **Plain identifiers.** Fixture names like `"my-fixture"` cannot be destructured this way; Playwright reads them the same way.
 - **Step styles are Yadda's own.** A step may be sync, return a promise, or take a trailing `next` callback; the first argument is just replaced by the fixtures.
-- **Unknown libraries** are still reported when the scenario runs, not when the suite is declared.
+- **A fixture the `test` does not have stops the whole run.** Playwright rejects a test that names an unknown fixture when it loads the spec file, so one typo in one step means no tests run, and the error points at this library rather than the step. `testInfo` is the common one: the `TestInfo` is `$testInfo` here, and `testInfo` throws when the step is defined.
+- **Define every step library before the suite is declared.** The fixtures are collected when `defineFeatureSuite` runs. A step defined later fails when it runs with an error naming the fixture it did not get, instead of receiving `undefined`.
+- **Names starting with `$`** are fixtures too, except `$testInfo`.
+- **Unknown libraries** log a warning when the suite is declared (only `page` and `context` are set up for that scenario), and the scenario fails with `UnknownLibraryError` when it runs.
+
+### The scenario context in `'fixtures'` steps
+
+The first argument is the fixtures, not the scenario context built by `createContext` or set by `'bound'` and `'param'` steps. An arrow function cannot reach that context. A `function` step can: `this` is the scenario context there, as in `'bound'` mode, and what it sets is carried to later steps. The third argument of `define` (`macroContext`) is reachable the same way, and not as a fixture.
 
 ---
 

@@ -8,6 +8,7 @@ import {
   createFixtureTestBody,
   FixtureDeclarationError,
   parseFixtureNames,
+  withScenarioFixtures,
 } from "./fixtures.js";
 import { createBdd, createLibraryRegistry, createStepLibrary } from "./registry.js";
 import { runScenarioSteps } from "./runner.js";
@@ -65,6 +66,28 @@ describe("parseFixtureNames", () => {
     );
   });
 
+  it("keeps custom fixtures whose names start with $, and leaves out only $testInfo", () => {
+    expect(parseFixtureNames(({ $custom, $testInfo }: any) => [$custom, $testInfo])).toEqual([
+      "$custom",
+    ]);
+  });
+
+  it("points testInfo at $testInfo, since testInfo is not a fixture", () => {
+    expect(() => parseFixtureNames(({ testInfo }: any) => testInfo)).toThrow(/\$testInfo/);
+  });
+
+  it("rejects functions whose parameters cannot be read", () => {
+    const bound = (({ page }: any) => page).bind(null);
+    expect(() => parseFixtureNames(bound)).toThrow(/bound|native/);
+    expect(() => parseFixtureNames(Math.max)).toThrow(FixtureDeclarationError);
+  });
+
+  it("rejects a parameter list it cannot find the end of, instead of reading no fixtures", () => {
+    // the scanner does not know regex literals, so this "(" never closes
+    const fn = ({ a = /\(/, b }: any) => [a, b];
+    expect(() => parseFixtureNames(fn)).toThrow(FixtureDeclarationError);
+  });
+
   it("rejects rest properties", () => {
     expect(() => parseFixtureNames(({ page, ...rest }: any) => [page, rest])).toThrow(/Rest/);
   });
@@ -116,11 +139,56 @@ describe("fixtures mode step libraries", () => {
     ).toEqual(["account", "page", "request"]);
   });
 
-  it("includes the fixtures of every macro a step matches", () => {
+  it("takes the fixtures of the definition Yadda would run, not of every one that matches", () => {
     const steps = createStepLibrary(undefined, "fixtures");
     steps.given(/^a (.*)$/, async ({ a }) => a);
     steps.given(/^a specific thing$/, async ({ b }) => b);
-    expect(collectScenarioFixtures([steps], ["Given a specific thing"])).toEqual(["a", "b"]);
+    expect(collectScenarioFixtures([steps], ["Given a specific thing"])).toEqual(["b"]);
+    expect(collectScenarioFixtures([steps], ["Given a vague thing"])).toEqual(["a"]);
+  });
+
+  it("follows Yadda in preferring the library of the previous step on a tie", () => {
+    const first = createStepLibrary(undefined, "fixtures");
+    first.given("the first step", async ({ one }) => one);
+    first.given("a shared step", async ({ fromFirst }) => fromFirst);
+    const second = createStepLibrary(undefined, "fixtures");
+    second.given("a shared step", async ({ fromSecond }) => fromSecond);
+
+    expect(
+      collectScenarioFixtures([first, second], ["Given the first step", "Given a shared step"]),
+    ).toEqual(["one", "fromFirst"]);
+  });
+
+  it("takes every candidate's fixtures when Yadda could not choose between them", () => {
+    const first = createStepLibrary(undefined, "fixtures");
+    first.given("a shared step", async ({ fromFirst }) => fromFirst);
+    const second = createStepLibrary(undefined, "fixtures");
+    second.given("a shared step", async ({ fromSecond }) => fromSecond);
+
+    expect(collectScenarioFixtures([first, second], ["Given a shared step"])).toEqual([
+      "fromFirst",
+      "fromSecond",
+    ]);
+  });
+
+  it("takes no fixtures for a step nothing defines", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a known step", async ({ a }) => a);
+    expect(collectScenarioFixtures([steps], ["Given an unknown step"])).toEqual([]);
+  });
+
+  it("keeps the first definition's fixtures when a duplicate is refused", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a dup", async ({ first }) => first);
+    expect(() => steps.given("a dup", async ({ second }) => second)).toThrow(/Duplicate/);
+    expect(collectScenarioFixtures([steps], ["Given a dup"])).toEqual(["first"]);
+  });
+
+  it("rejects testInfo in a step, naming the step", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    expect(() => steps.given("uses test info", async ({ testInfo }) => testInfo)).toThrow(
+      /\$testInfo.*uses test info|uses test info.*\$testInfo/s,
+    );
   });
 
   it("runs the step with the scenario's fixtures and its captured arguments", async () => {
@@ -135,6 +203,89 @@ describe("fixtures mode step libraries", () => {
     // outside a feature suite the scenario context is what the step receives
     expect(calls[0]?.[0]).toMatchObject({ page: "ctx page" });
     expect(calls[0]?.[1]).toBe("3");
+  });
+});
+
+describe("fixtures a step asked for but did not receive", () => {
+  const run = (steps: ReturnType<typeof createStepLibrary>, step: string) =>
+    runScenarioSteps(Yadda.createInstance([steps as any]), [step], { page: "P" });
+
+  it("fails naming the step and the fixture, instead of passing undefined", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a step needing an account", async ({ account }) => account);
+    await expect(
+      withScenarioFixtures({ page: "P" }, () => run(steps, "Given a step needing an account")),
+    ).rejects.toThrow(/"account".*step needing an account|step needing an account.*"account"/s);
+  });
+
+  it("fails the same way when the step runs outside a suite on a context without it", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a step needing an account", async ({ account }) => account);
+    await expect(run(steps, "Given a step needing an account")).rejects.toThrow(/"account"/);
+  });
+
+  it("accepts a fixture whose value is undefined, such as an unset option", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    const seen: unknown[] = [];
+    steps.given("a step needing a base url", async ({ baseURL }) => {
+      seen.push(baseURL);
+    });
+    await withScenarioFixtures({ page: "P", baseURL: undefined }, () =>
+      run(steps, "Given a step needing a base url"),
+    );
+    expect(seen).toEqual([undefined]);
+  });
+});
+
+describe("the scenario context in fixtures mode", () => {
+  it("is `this` in a function step, shared with later steps and with other modes", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    const seen: unknown[] = [];
+    steps.given("a step that sets state", function (this: any, { page }) {
+      this.shared = `set with ${page}`;
+    });
+    const bound = createStepLibrary();
+    bound.then("a bound step that reads it", function (this: any) {
+      seen.push(this.shared);
+    });
+    steps.then("a step that reads it too", function (this: any, {}) {
+      seen.push(this.shared);
+    });
+
+    await runScenarioSteps(
+      Yadda.createInstance([steps, bound]),
+      [
+        "Given a step that sets state",
+        "Then a bound step that reads it",
+        "Then a step that reads it too",
+      ],
+      { page: "P" },
+    );
+    expect(seen).toEqual(["set with P", "set with P"]);
+  });
+
+  it("carries the macroContext of define to `this`, not to the fixtures", async () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    const seen: unknown[] = [];
+    steps.given(
+      "a step reading its macro context",
+      function (this: any, {}) {
+        seen.push(this.fromMacro);
+      },
+      { fromMacro: "M" },
+    );
+    steps.given("a step asking for it as a fixture", async ({ fromMacro }) => fromMacro, {
+      fromMacro: "M",
+    });
+    // as in a suite, where the fixtures come from Playwright and not from Yadda's context
+    const run = (step: string) =>
+      withScenarioFixtures({ page: "P" }, () =>
+        runScenarioSteps(Yadda.createInstance([steps]), [step], { page: "P" }),
+      );
+
+    await run("Given a step reading its macro context");
+    expect(seen).toEqual(["M"]);
+    await expect(run("Given a step asking for it as a fixture")).rejects.toThrow(/"fromMacro"/);
   });
 });
 
@@ -295,6 +446,24 @@ describe("defineFeature with fixtures", () => {
       ["bound", "PAGE"],
       ["param", "PAGE", "INFO"],
     ]);
+  });
+
+  it("sets up and passes a custom fixture whose name starts with $", async () => {
+    const seen: unknown[] = [];
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given("a step with a dollar fixture", async ({ $custom }) => {
+      seen.push($custom);
+    });
+
+    const { test, declared } = fakeTest();
+    defineFeature(feature("steps", ["Given a step with a dollar fixture"]), {
+      test,
+      registry: createLibraryRegistry({ steps }, { defaultLibraries: [] }),
+    });
+
+    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "$custom"]);
+    await declared[0]!.fn({ page: "P", context: "C", $custom: "V" }, "INFO");
+    expect(seen).toEqual(["V"]);
   });
 
   it("gives createContext every fixture set up for the scenario", async () => {

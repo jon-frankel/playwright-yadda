@@ -55,13 +55,17 @@ export function createStepLibrary(
     const define = base.define.bind(base);
     base.define = (signatures, fn, macroContext, options) => {
       if (!fn) return define(signatures, fn, macroContext, options);
+      let names: string[];
       try {
-        recordStepFixtures(base, signatures, parseFixtureNames(fn));
+        names = parseFixtureNames(fn);
       } catch (error) {
         if (error instanceof Error) error.message += ` (step: ${String(signatures)})`;
         throw error;
       }
-      return define(signatures, bindFixtureStep(fn), macroContext, options);
+      // Recorded once Yadda has accepted it, so a refused duplicate cannot overwrite the original
+      const library = define(signatures, bindFixtureStep(fn, names), macroContext, options);
+      recordStepFixtures(base, signatures, names);
+      return library;
     };
   }
 

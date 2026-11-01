@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import type { TestInfo, TestType } from "@playwright/test";
-import type Yadda from "yadda";
+import Yadda from "yadda";
 import type { StepLibrary } from "./types.js";
 
 /**
@@ -118,40 +118,56 @@ function splitTopLevel(text: string): string[] {
   return parts.map((part) => part.trim()).filter((part) => part !== "");
 }
 
-/** Text between the first `(` of a function's source and its matching `)`, or null if it has none */
-function parameterList(source: string): string | null {
+/**
+ * Text between the first `(` of a function's source and its matching `)`.
+ *
+ * @throws {FixtureDeclarationError} when there is no parameter list or it never closes. The last
+ * happens when a default value holds something this scanner reads wrongly, such as a regex literal
+ * with an unbalanced bracket; reading no fixtures there would hide the mistake.
+ */
+function parameterList(source: string): string {
   // `x => ...` and `async x => ...`: one bare parameter, which cannot be a destructuring pattern
   const bare = source.match(/^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*=>/);
   if (bare) return bare[1]!;
 
   const open = source.indexOf("(");
-  if (open === -1) return null;
-  let depth = 0;
-  let quote: string | null = null;
-  for (let i = open; i < source.length; i++) {
-    const ch = source[i]!;
-    if (quote) {
-      if (ch === "\\") i++;
-      else if (ch === quote) quote = null;
-    } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
-    else if (ch === "(") depth++;
-    else if (ch === ")" && --depth === 0) return source.slice(open + 1, i);
+  if (open !== -1) {
+    let depth = 0;
+    let quote: string | null = null;
+    for (let i = open; i < source.length; i++) {
+      const ch = source[i]!;
+      if (quote) {
+        if (ch === "\\") i++;
+        else if (ch === quote) quote = null;
+      } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+      else if (ch === "(") depth++;
+      else if (ch === ")" && --depth === 0) return source.slice(open + 1, i);
+    }
   }
-  return null;
+  throw new FixtureDeclarationError(
+    `Cannot find the end of the step's parameter list, so its fixtures cannot be read. ` +
+      `Simplify its parameters (no regex literals in default values, for one).`,
+  );
 }
 
 /**
  * The fixture names a function destructures from its first parameter, which is how Playwright
  * decides what to set up for a test. A function with no parameters needs none.
  *
- * Names starting with `$` (such as `$testInfo`) are not fixtures and are left out.
+ * `$testInfo` is not a fixture and is left out.
  *
  * @throws {FixtureDeclarationError} when the first parameter is not an object destructuring
  * pattern, or uses a rest property or a name that is not a plain identifier
  */
 export function parseFixtureNames(fn: (...args: any[]) => unknown): string[] {
-  const params = parameterList(stripComments(Function.prototype.toString.call(fn)));
-  if (params === null) return [];
+  const source = stripComments(Function.prototype.toString.call(fn));
+  if (source.includes("[native code]")) {
+    throw new FixtureDeclarationError(
+      "Cannot read the fixtures of a bound or native function; its parameters are not in its " +
+        "source. Pass the function itself, or wrap it in one that destructures them.",
+    );
+  }
+  const params = parameterList(source);
 
   const first = splitTopLevel(params)[0];
   if (first === undefined) return [];
@@ -177,7 +193,12 @@ export function parseFixtureNames(fn: (...args: any[]) => unknown): string[] {
           `plain identifiers.`,
       );
     }
-    if (!key.startsWith("$")) names.push(key);
+    if (key === "testInfo") {
+      throw new FixtureDeclarationError(
+        `"testInfo" is not a fixture; a step gets the scenario's TestInfo as "${TEST_INFO_KEY}".`,
+      );
+    }
+    if (key !== TEST_INFO_KEY) names.push(key);
   }
   return names;
 }
@@ -207,25 +228,45 @@ export function recordStepFixtures(
 }
 
 /**
- * The fixtures the steps of a scenario may use: those declared by every macro in `libraries` that
- * is compatible with one of `steps`, in first-seen order. Libraries that do not use fixtures
- * mode contribute nothing.
+ * The fixtures the steps of a scenario use: those declared by the macro Yadda would run for each of
+ * `steps`, in first-seen order. Libraries that do not use fixtures mode contribute nothing.
  *
- * A step several macros match gets the fixtures of all of them, since which one runs is only
- * decided by Yadda when the step executes.
+ * The winner is worked out the way Yadda does when it runs the steps one after another: the
+ * closest pattern wins, and a tie goes to the library of the previous step's macro. Where it
+ * cannot choose (an ambiguous step), every macro that matches counts, since the scenario then
+ * fails when it runs and a superset is the safe side to err on. A step nothing defines adds nothing.
  */
 export function collectScenarioFixtures(libraries: StepLibrary[], steps: string[]): string[] {
   const names = new Set<string>();
-  for (const library of libraries) {
-    const byMacro = declaredFixtures.get(library);
-    if (!byMacro) continue;
-    for (const step of steps) {
-      for (const macro of library.find_compatible_macros(step) as { toString(): string }[]) {
-        for (const name of byMacro.get(macro.toString()) ?? []) names.add(name);
+  // `rank_macros` is not in Yadda's typings; it is what the interpreter itself ranks steps with
+  const interpreter = new Yadda.Interpreter(libraries as any) as any;
+
+  for (const step of steps) {
+    const report = interpreter.rank_macros(step).validate();
+    // Moves the interpreter on, as running the step would, so the next step's tie goes the same way
+    try {
+      interpreter.validate([step]);
+    } catch {
+      // undefined or ambiguous; reported when the scenario runs
+    }
+
+    const macros: Macro[] = report.valid
+      ? [report.winner]
+      : libraries.flatMap((library) => library.find_compatible_macros(step) as Macro[]);
+
+    for (const macro of macros) {
+      for (const name of declaredFixtures.get(macro.library)?.get(macro.toString()) ?? []) {
+        names.add(name);
       }
     }
   }
   return [...names];
+}
+
+/** The parts of a Yadda macro used here */
+interface Macro {
+  library: object;
+  toString(): string;
 }
 
 // -- Running steps with the scenario's fixtures -----------------------------------------------
@@ -242,15 +283,31 @@ export function withScenarioFixtures<T>(fixtures: Record<string, unknown>, body:
  * scenario context. Outside a feature suite (`runStep` called directly) it falls back to that
  * context, so a context holding `page` and the like still works.
  *
+ * `names` are the fixtures the step destructures. One missing from what it is given fails the step
+ * naming it, rather than reaching it as `undefined`. That happens when steps are defined after the
+ * suite was declared, or when two copies of playwright-yadda are in play.
+ *
  * Yadda tells a step that takes a `next` callback from one that does not by comparing the
  * function's declared `length` with the number of arguments it would pass, and tells a promise from
  * a sync step by the return value. So the wrapper keeps the step's `length` and returns its result
  * untouched; the step then behaves as it would in `'param'` mode: sync, promise-returning or
  * callback style.
  */
-export function bindFixtureStep(fn: (...args: any[]) => unknown) {
+export function bindFixtureStep(fn: (...args: any[]) => unknown, names: readonly string[]) {
   const bound = function (this: unknown, context: unknown, ...args: unknown[]) {
-    return fn.call(this, activeFixtures.getStore() ?? context, ...args);
+    const fixtures = activeFixtures.getStore() ?? context;
+    const missing = names.find(
+      (name) => typeof fixtures !== "object" || fixtures === null || !Object.hasOwn(fixtures, name),
+    );
+    if (missing !== undefined) {
+      const step = (context as { step?: unknown } | null)?.step;
+      throw new Error(
+        `The step${typeof step === "string" ? ` "${step}"` : ""} uses the fixture "${missing}", ` +
+          `which was not set up for this scenario. Define every step library before ` +
+          `defineFeatureSuite() runs, and use one copy of playwright-yadda.`,
+      );
+    }
+    return fn.call(this, fixtures, ...args);
   };
   Object.defineProperty(bound, "length", { value: fn.length });
   return bound;

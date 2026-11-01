@@ -178,8 +178,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   const pathTags = feature.pathTags ?? [];
   // A path tag that names a library in the registry loads it, as `@Libraries=name` would. Added
   // after the feature's own `@Libraries`, so those keep their order, and treated as the feature's
-  // own: with "override", a scenario's `@Libraries` replaces it too.
-  // under the annotation key the registry reads (`libraries` unless it was made with another)
+  // own: with "override", a scenario's `@Libraries` replaces it too. Written under the annotation
+  // key the registry reads (`libraries` unless it was made with another).
   const librariesKey = (registry.options?.annotationKey ?? "libraries").trim().toLowerCase();
   const libraryTags = pathTags.filter((tag) => registry.has(tag));
   const featureAnnotations: AnnotationRecord | undefined =
@@ -250,7 +250,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       if (attachUpFront) {
         details.annotation = { type: FEATURE_FILE_ANNOTATION, description: feature.filepath };
       }
-      // Tags from the feature's path, so `--grep @name` and `--tag` find them
+      // Tags from the feature's path, so `--grep @name` finds them
       if (pathTags.length > 0 && detailsSupported) details.tag = pathTags.map((tag) => `@${tag}`);
       const testFn =
         Object.keys(details).length > 0

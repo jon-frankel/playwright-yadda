@@ -12,9 +12,12 @@ object PlaywrightGrep {
   /** Every scenario of the feature. The trailing `Scenario:` stops "Cart" from also matching "Cart Admin". */
   fun forFeature(featureTitle: String): String = "Feature: ${escape(featureTitle)} Scenario: "
 
-  /** One scenario. Anchored at the end so "Clears cart" doesn't also run "Clears cart twice". */
+  /**
+   * One scenario. Anchored at the end so "Clears cart" doesn't also run "Clears cart twice". Playwright
+   * puts a test's tags (such as those from `@dir` names) after its title, so they are allowed before the end.
+   */
   fun forScenario(featureTitle: String, scenarioTitle: String): String =
-    "Feature: ${escape(featureTitle)} Scenario: ${escape(scenarioTitle)}$"
+    "Feature: ${escape(featureTitle)} Scenario: ${escape(scenarioTitle)}(?: @.*)?$"
 
   /** A scenario outline: its examples may be named after the outline, so only the start is fixed. */
   fun forScenarioOutline(featureTitle: String, scenarioTitle: String): String =

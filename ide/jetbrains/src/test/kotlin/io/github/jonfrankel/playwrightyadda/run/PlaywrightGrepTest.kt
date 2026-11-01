@@ -14,6 +14,13 @@ class PlaywrightGrepTest : TestCase() {
     assertFalse(matches(grep, "Feature: Admin", "Scenario: Customer clears cart"))
   }
 
+  fun `test a scenario still matches when Playwright adds its tags after the title`() {
+    val grep = PlaywrightGrep.forScenario("Cart", "Add")
+    assertTrue(matches(grep, "Feature: Cart", "Scenario: Add @storefront @slow"))
+    assertTrue(matches(grep, "Feature: Cart", "Scenario: Add @my tag"))
+    assertFalse(matches(grep, "Feature: Cart", "Scenario: Add twice @storefront"))
+  }
+
   fun `test a feature matches all of its scenarios and no other feature`() {
     val grep = PlaywrightGrep.forFeature("Storefront")
     assertTrue(matches(grep, "Feature: Storefront", "Scenario: One"))

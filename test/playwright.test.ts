@@ -32,6 +32,7 @@ function runPlaywright(spec: string) {
 
 type Spec = {
   title: string;
+  tags?: string[];
   tests: { annotations: { type: string; description?: string }[]; results: { status: string }[] }[];
 };
 
@@ -85,5 +86,42 @@ describe("a fixture the test does not have", () => {
     expect(report?.stats?.expected ?? 0).toBe(0);
     const messages = (report?.errors ?? []).map((error: { message: string }) => error.message);
     expect(messages.join("\n")).toMatch(/unknown parameter "pgae"/);
+  }, 60_000);
+});
+
+describe("tags from path with the real Playwright", () => {
+  // Playwright validates the `tag` list itself, and `--grep` matches it, so this is the proof that
+  // what is generated is accepted and selects the right tests
+  let run: ReturnType<typeof runPlaywright>;
+  beforeAll(() => {
+    run = runPlaywright("path-tags.spec.ts");
+  }, 60_000);
+
+  it("gives each scenario the tags of its path, and runs the library the path names", () => {
+    const specs = run.report ? specsOf(run.report) : [];
+    const byTitle = Object.fromEntries(specs.map((spec) => [spec.title, spec]));
+    // `plain/other.feature` is untagged, and its step is only in `storefront`: it fails, which
+    // shows a library is loaded by the path alone for the tagged one
+    expect(byTitle["Scenario: Add item"]?.tags).toEqual(["storefront", "slow"]);
+    expect(byTitle["Scenario: Add item"]?.tests[0]?.results[0]?.status).toBe("passed");
+    expect(byTitle["Scenario: Nothing special"]?.tags ?? []).toEqual([]);
+    expect(byTitle["Scenario: Nothing special"]?.tests[0]?.results[0]?.status).toBe("failed");
+  });
+
+  it("lets --grep select by a path tag", () => {
+    const grep = spawnSync(
+      path.join(root, "node_modules", ".bin", "playwright"),
+      [
+        "test",
+        "path-tags.spec.ts",
+        "--config",
+        path.join(project, "playwright.config.ts"),
+        "--grep",
+        "@slow",
+      ],
+      { cwd: project, encoding: "utf8", env: cleanEnv() },
+    );
+    const titles = specsOf(JSON.parse(grep.stdout)).map((spec) => spec.title);
+    expect(titles).toEqual(["Scenario: Add item"]);
   }, 60_000);
 });

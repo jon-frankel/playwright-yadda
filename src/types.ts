@@ -124,7 +124,7 @@ export interface FeatureSuiteOptions<
   registry: LibraryRegistry<K> | ILibraryRegistryManager<K>;
 
   /**
-   * Feature files to run: glob pattern, file path, array of file paths, or pre-parsed features
+   * Feature files to run: directory path, file path, array of paths, or pre-parsed features
    */
   features: string | string[] | ParsedFeature[];
 

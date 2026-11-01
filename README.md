@@ -133,7 +133,9 @@ features/
 
 **Precedence.** Path libraries come after the feature's own `@Libraries`, and count as the feature's: with `libraryInheritance: "merge"` (the default) a scenario's `@Libraries` adds to them, and with `"override"` it replaces them, just as it replaces the feature's. An annotation written in the file wins over a path tag of the same name, so `@game=custom` in the file keeps its value under `@game/`.
 
-`loadFeatureFile(file, parserType, language, root)` takes the same `root` and sets `pathTags` on the feature; `tagsFromPath(file, root)` is the underlying helper. Features you pass already parsed are used as they are.
+`loadFeatureFile(file, parserType, language, root)` takes the same `root` and sets `pathTags` on the feature; `tagsFromPath(file, root)` and `pathTagAnnotations(tags)` are the underlying helpers. Features you pass already parsed are used as they are.
+
+The JetBrains plugin does not read path tags yet: its Find Usages and Rename for steps only follow `@Libraries`, so steps loaded through a path tag are missed there. Running a scenario from the editor does work.
 
 ---
 
@@ -159,7 +161,7 @@ Discovers feature files and registers them with Playwright's `test` runner.
 
 - `test`: The Playwright `test` instance.
 - `registry`: The `LibraryRegistry` or `LibraryRegistryManager`.
-- `features`: Directory path, file path, glob pattern, or pre-parsed feature array. `@` directory and file names under a directory become tags; see [Tags from path](#tags-from-path).
+- `features`: Directory path, file path, or pre-parsed feature array (or an array of them). `@` directory and file names under a directory become tags; see [Tags from path](#tags-from-path).
 - `createContext`: Optional custom factory function to initialize scenario context. It receives `page`, `context` and `testInfo`, plus any other fixtures the scenario's steps use. It cannot ask for fixtures itself: Playwright only sets up what a step or this library names.
 - `language`: The Yadda localisation the feature files are written in (default `Yadda.localisation.English`). It sets the words read as `Feature:`, `Scenario:`, `Examples:` and so on. Use the same language for the step libraries.
 

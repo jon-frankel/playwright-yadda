@@ -1,6 +1,6 @@
 # IDE playground
 
-Feature files to open in WebStorm with the Playwright Yadda plugin (0.17.0 or later) installed.
+Feature files to open in WebStorm with the Playwright Yadda plugin (0.17.2 or later) installed.
 
 **Nothing here runs.** The spec reads `../features` only, and several of these files are wrong on purpose.
 Each file says at the top what to expect. A file that should be clean has no markers; a file with a mistake has
@@ -22,6 +22,7 @@ one mistake, since Yadda stops at its first error.
 | `bare-rows.feature`           | Two warnings on the rows of the first scenario's table, which has no `---` lines: Yadda reads each row as a step of its own. The second scenario has the same rows between fences and no warning.                                                                 |
 | `comments-and-quotes.feature` | Lines between two lines of `###` are one comment: their step, heading and dashes mean nothing. A line of `"""` is a step to Yadda, not a doc string, so it is "Undefined step reference". Reformat Code moves a JSON or text block with its step.                 |
 | `create-step.feature`         | Every step is undefined. "Create Yadda step definition" writes `async ({}, qty: string) => …` into `steps/playground/fixtures.ts`, a fixtures-mode library, and `async function (…) …` into `steps/playground/bound.ts`, a bound one. The header lists each stub. |
+| `create-step-modes.feature`   | Every step is undefined. "Create Yadda step definition" writes `async ({}) => …` into the fixtures libraries made through a namespace import and through a `createBdd` in another file, and a plain function into the param library.                              |
 | `yadda-style.feature`         | Steps with no keyword, `Where:` rows without pipes, an annotated row, a row over two lines. Nothing is marked; Reformat Code changes nothing.                                                                                                                     |
 
 In `features/orders.feature`, which does run, the definitions in `steps/orders.ts` insist on their block and use

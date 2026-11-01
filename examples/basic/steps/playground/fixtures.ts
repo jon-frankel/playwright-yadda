@@ -7,3 +7,8 @@ import { test } from "../test.js";
  */
 const { createStepLibrary } = createBdd(test);
 export const playgroundFixtureSteps = createStepLibrary();
+
+playgroundFixtureSteps.then(
+  /^the order total for (.+) keyboards is (.+)$/,
+  async ({}, qty: string, total: string) => {},
+);

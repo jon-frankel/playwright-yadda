@@ -6,6 +6,9 @@ import { inventorySteps } from "./inventory.js";
 import { orderSteps } from "./orders.js";
 import { playgroundBoundSteps } from "./playground/bound.js";
 import { playgroundFixtureSteps } from "./playground/fixtures.js";
+import { playgroundNamespacedSteps } from "./playground/namespaced.js";
+import { playgroundParamSteps } from "./playground/param.js";
+import { playgroundSharedSteps } from "./playground/shared.js";
 
 export const registry = createLibraryRegistry({
   common: commonSteps,
@@ -16,4 +19,7 @@ export const registry = createLibraryRegistry({
   // Empty, for ide-playground/create-step.feature
   fixtures: playgroundFixtureSteps,
   bound: playgroundBoundSteps,
+  namespaced: playgroundNamespacedSteps,
+  shared: playgroundSharedSteps,
+  param: playgroundParamSteps,
 });

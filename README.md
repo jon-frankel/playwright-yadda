@@ -147,6 +147,25 @@ A value that is not valid (`@timeout:soon`, `@retries:1.5`, `@mode:fast`) is ign
 
 ---
 
+### 6. Tags from path
+
+A directory or file name that starts with `@` tags every feature inside it, so a feature needs no tag line for what its location already says. Directories count from the `features` path given to `defineFeatureSuite`, and an `@name.feature` file name tags that file.
+
+```
+features/
+├── @storefront/          # loads the `storefront` library
+│   ├── cart.feature
+│   └── @smoke.feature    # also tagged @smoke
+└── @slow/@mode:serial/   # special tags work as directory names too
+    └── import.feature
+```
+
+- Where `:` is not allowed in file names (Windows), write `@timeout=5000/` and `@mode=serial/`: `=` means the same.
+- Path tags are added to the feature's tags, so they reach Playwright's `tag` list (`--grep @smoke`).
+- A path tag that names a registered library (case-insensitive) selects it, as if the feature said `@Libraries=storefront`. It counts as the feature's own, so a scenario's `@Libraries` merges with it, or replaces it with `libraryInheritance: "override"`.
+- A tag written in the file wins over a path tag of the same name: `@mode:parallel` in the file beats an `@mode:serial/` directory.
+- A single file passed as `features` only has its own `@` file name counted. `loadFeatureFile(file, parserType, language, root)` takes the root as its fourth argument.
+
 ## API Reference
 
 ### `createLibraryRegistry(libraries, options?)`
@@ -315,6 +334,14 @@ Stack traces hide frames from yadda and playwright-yadda so they start at your s
 
 ```ts
 reporter: [["playwright-yadda/reporter", { fullStackTrace: true }]],
+```
+
+The tags in effect are printed on one line, where they apply: a feature's after its title, and a scenario's other tags after the scenario's title. A tag a scenario overrides is printed on the scenario with its own value. They come from Playwright's `tag` (Playwright 1.42 or later). To turn them off, pass `{ tags: false }`:
+
+```
+features/@admin/@smoke.feature
+Feature: Admin smoke test @admin @smoke
+✓ Scenario: Administrator deletes product (113ms)
 ```
 
 ## IDE Support

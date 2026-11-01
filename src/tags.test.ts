@@ -3,7 +3,7 @@ import { defineFeature, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
 import { resolveTags } from "./tags.js";
-import { resetWarningsForTests } from "./warnings.js";
+import { FEATURE_TAGS_ANNOTATION, resetWarningsForTests } from "./warnings.js";
 
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => resetWarningsForTests());
@@ -255,7 +255,11 @@ Scenario: S
   it("passes every tag to Playwright as `tag`, when it takes test details", () => {
     const { calls } = run(feature("@smoke", "@area=cart"));
     const declaration = calls.find((c) => c[0] === "test");
-    expect(declaration?.[2]).toEqual({ tag: ["@smoke", "@area:cart"] });
+    expect(declaration?.[2]).toEqual({
+      tag: ["@smoke", "@area:cart"],
+      // the feature's own tags, which the reporter prints with the feature
+      annotation: { type: FEATURE_TAGS_ANNOTATION, description: "@smoke" },
+    });
   });
 
   it("configures the feature's @timeout, @retries and @mode on its describe", () => {

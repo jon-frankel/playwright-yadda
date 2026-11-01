@@ -10,11 +10,17 @@ import {
   usesFixturesMode,
   withScenarioFixtures,
 } from "./fixtures.js";
+import { extractLibraryNames } from "./annotations.js";
 import { createHooks, runAll, warnSuppressed, type Hooks } from "./hooks.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
-import { supportsTestDetails, warnOnce, WARNING_ANNOTATION } from "./warnings.js";
+import {
+  FEATURE_TAGS_ANNOTATION,
+  supportsTestDetails,
+  warnOnce,
+  WARNING_ANNOTATION,
+} from "./warnings.js";
 import type {
   DefaultScenarioContext,
   FeatureSuiteOptions,
@@ -62,15 +68,81 @@ export function parseFeature(
 }
 
 /**
- * Load and parse a feature from a local file
+ * Tags a feature file's path gives: every `@`-prefixed directory below `root`, and the file's own
+ * name when it starts with `@` (`@smoke.feature`, `@smoke.yadda.feature`). Returned without the `@`,
+ * outermost first, so `features/@game/@mode:serial/x.feature` gives `["game", "mode:serial"]`.
+ * Without a `root` only the file name counts.
+ */
+export function pathTagsOf(filepath: string, root?: string): string[] {
+  const absolute = path.resolve(filepath);
+  let relative = root ? path.relative(path.resolve(root), absolute) : path.basename(absolute);
+  // A file that is not under the root (or is on another drive) has no directories of the root's to count
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    relative = path.basename(absolute);
+  }
+  const segments = relative.split(path.sep).filter(Boolean);
+  const file = segments.pop();
+  const names = segments.filter((segment) => segment.startsWith("@"));
+  if (file?.startsWith("@")) {
+    names.push(file.replace(/(\.yadda)?\.(feature|md|markdown)$/i, ""));
+  }
+  const tags: string[] = [];
+  for (const name of names) {
+    const raw = name.slice(1).trim();
+    // Only the name is case-insensitive; a value keeps its case, as it does when written in the file
+    const split = raw.search(/[:=]/);
+    const tag =
+      split < 0 ? raw.toLowerCase() : raw.slice(0, split).toLowerCase() + raw.slice(split);
+    if (!tag) continue;
+    // Playwright's `--grep` cannot match a tag with a space in it
+    if (/\s/.test(tag)) {
+      // No scenario carries this warning, so only the loader can print it
+      warnOnce(`ignoring the path tag "@${tag}" (${filepath}): it has whitespace`, false);
+      continue;
+    }
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+
+/** The part of a tag before a `:` or `=`, which is what an explicit tag of the same name overrides */
+const tagName = (tag: string) => tag.split(/[:=]/)[0]!.trim().toLowerCase();
+
+/**
+ * Add path tags to a feature. A tag written in the file wins over a path tag of the same name
+ * (`@mode:parallel` in the file beats `@mode:serial/` in the path), and libraries from both are used.
+ */
+function applyPathTags(feature: ParsedFeature, tags: string[]): void {
+  if (tags.length === 0) return;
+  const annotations: Record<string, string | boolean | undefined> = { ...feature.annotations };
+  const explicit = new Set(Object.keys(annotations).map(tagName));
+  // Only the path tags the file does not override: a library it switches off is not loaded either
+  const kept = tags.filter((tag) => !explicit.has(tagName(tag)));
+  if (kept.length === 0) return;
+  feature.pathTags = kept;
+  for (const tag of kept) {
+    // `@timeout=5000/` is the spelling for systems that do not allow `:` in a file name
+    const equals = tag.indexOf("=");
+    if (equals > 0) annotations[tag.slice(0, equals).trim()] = tag.slice(equals + 1).trim() || true;
+    else annotations[tag] = true;
+  }
+  feature.annotations = annotations;
+}
+
+/**
+ * Load and parse a feature from a local file. With a `root`, the `@` directories between it and the
+ * file tag the feature, and so does an `@` file name; see `pathTagsOf`.
  */
 export function loadFeatureFile(
   filepath: string,
   parserType: "auto" | "gherkin" | "markdown" = "auto",
   language?: Yadda.Language,
+  root?: string,
 ): ParsedFeature {
   const content = fs.readFileSync(filepath, "utf8");
-  return parseFeature(content, parserType, filepath, language);
+  const feature = parseFeature(content, parserType, filepath, language);
+  applyPathTags(feature, pathTagsOf(filepath, root));
+  return feature;
 }
 
 /**
@@ -183,6 +255,31 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
 
   /**
+   * The feature's annotations, with the path tags that name a registered library added to its
+   * `@Libraries`. They count as the feature's own, so a scenario's `@Libraries` merges with them or,
+   * with `override` inheritance, replaces them.
+   */
+  const annotationsOf = (parsedFeature: ParsedFeature) => {
+    const named = (parsedFeature.pathTags ?? []).filter((tag) => registry.has(tag));
+    if (named.length === 0) return parsedFeature.annotations;
+    // The key `registry.resolve` reads: its own option, unless the suite overrides it
+    const key = String(
+      resolveOpts.annotationKey ?? (registry as any).options?.annotationKey ?? "libraries",
+    )
+      .trim()
+      .toLowerCase();
+    const annotations = { ...parsedFeature.annotations };
+    const existing = extractLibraryNames(annotations, key);
+    for (const name of named) if (!existing.includes(name)) existing.push(name);
+    for (const k of Object.keys(annotations))
+      if (k.trim().toLowerCase() === key) delete annotations[k];
+    annotations[key] = existing.join(", ");
+    return annotations;
+  };
+
+  const featureAnnotations = annotationsOf(feature);
+
+  /**
    * Fixtures to set up for a scenario: `page` and `context`, which the default scenario context is
    * made of, plus whatever the steps of the libraries it resolves destructure.
    */
@@ -197,7 +294,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     const warnings: string[] = [];
     try {
       const libraries = registry.resolve(
-        parsedFeature.annotations,
+        parsedFeature === feature ? featureAnnotations : annotationsOf(parsedFeature),
         scenario.annotations,
         resolveOpts,
       );
@@ -228,6 +325,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     where: `"${feature.title}"`,
   });
   const featureSettings = featureTags.feature;
+  // The tags of the feature alone, for the reporter to tell them from the scenario's own
+  const featureTagList = featureTags.scenario.playwrightTags.join(" ");
   // The reporter prints a warning from the scenarios that carry it; with none, nothing would
   if (feature.scenarios.length === 0) {
     for (const warning of featureTags.warnings) warnOnce(warning, false);
@@ -316,6 +415,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       const warnings = [...featureTags.warnings, ...tagWarnings, ...fixtureProblems];
       const annotations = [
         ...(attachFile ? [{ type: FEATURE_FILE_ANNOTATION, description: feature.filepath }] : []),
+        ...(featureTagList ? [{ type: FEATURE_TAGS_ANNOTATION, description: featureTagList }] : []),
         ...warnings.map((description) => ({ type: WARNING_ANNOTATION, description })),
       ];
       if (annotations.length > 0 && detailsSupported) {
@@ -342,7 +442,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 1. Resolve step libraries dynamically for this specific scenario
-        const libraries = registry.resolve(feature.annotations, scenario.annotations, resolveOpts);
+        const libraries = registry.resolve(featureAnnotations, scenario.annotations, resolveOpts);
 
         // 2. Build isolated Yadda runner instance
         const yadda = createScenarioYadda(libraries);
@@ -493,8 +593,10 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
         files.push(path.resolve(target));
       }
 
+      // A directory is the root `@` directories are counted from; for a single file only its name is
+      const root = fs.existsSync(target) && fs.statSync(target).isDirectory() ? target : undefined;
       for (const file of files) {
-        parsedFeatures.push(loadFeatureFile(file, parserType, language));
+        parsedFeatures.push(loadFeatureFile(file, parserType, language, root));
       }
     }
   }

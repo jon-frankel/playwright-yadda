@@ -1,6 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import Yadda from "yadda";
-import { defineFeature, defineFeatureSuite, parseFeature } from "./feature.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import {
+  defineFeature,
+  defineFeatureSuite,
+  loadFeatureFile,
+  parseFeature,
+  pathTagsOf,
+} from "./feature.js";
+import { resolveLibraryNames } from "./annotations.js";
 import { createLibraryRegistry } from "./registry.js";
 import { REPORTER_FLAG, resetWarningsForTests, WARNING_ANNOTATION } from "./warnings.js";
 
@@ -282,5 +292,225 @@ Feature: Pending Feature
       "Feature: Storefront Shopping",
       expect.any(Function),
     );
+  });
+
+  describe("tags from path", () => {
+    const root = path.join(path.sep, "proj", "features");
+    const at = (...parts: string[]) => path.join(root, ...parts);
+
+    it("takes @ directories below the root, outermost first", () => {
+      expect(pathTagsOf(at("@game", "@Slow", "plain", "x.feature"), root)).toEqual([
+        "game",
+        "slow",
+      ]);
+    });
+
+    it("ignores @ in directories above the root and in plain names", () => {
+      const nested = path.join(path.sep, "@outer", "features");
+      expect(pathTagsOf(path.join(nested, "a", "x.feature"), nested)).toEqual([]);
+    });
+
+    it("takes special tags written as directory names", () => {
+      expect(pathTagsOf(at("@mode:serial", "@timeout:5000", "x.feature"), root)).toEqual([
+        "mode:serial",
+        "timeout:5000",
+      ]);
+    });
+
+    it("counts only the file name for a file outside the root", () => {
+      const other = path.join(path.sep, "elsewhere");
+      expect(pathTagsOf(path.join(path.sep, "a", "@x", "y.feature"), other)).toEqual([]);
+      expect(pathTagsOf(path.join(path.sep, "a", "@x", "@y.feature"), other)).toEqual(["y"]);
+    });
+
+    it("keeps dots in the name of an @ file", () => {
+      expect(pathTagsOf(at("@v1.2.feature"), root)).toEqual(["v1.2"]);
+    });
+
+    it("takes an @name.feature file name, without its extensions", () => {
+      expect(pathTagsOf(at("@storefront.feature"), root)).toEqual(["storefront"]);
+      expect(pathTagsOf(at("a", "@smoke.yadda.feature"), root)).toEqual(["smoke"]);
+      expect(pathTagsOf(at("a", "@smoke.md"), undefined)).toEqual(["smoke"]);
+    });
+
+    it("counts only the file name without a root", () => {
+      expect(pathTagsOf(at("@game", "x.feature"))).toEqual([]);
+    });
+
+    describe("loaded features", () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yadda-path-tags-"));
+      const body = (head = "") => `${head}Feature: F\n  Scenario: S\n    Given a step\n`;
+      const write = (rel: string, head?: string) => {
+        const file = path.join(dir, rel);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, body(head));
+        return file;
+      };
+
+      it("adds path tags to the annotations", () => {
+        const feature = loadFeatureFile(
+          write("@game/@slow/x.feature", "@Libraries=auth\n"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.pathTags).toEqual(["game", "slow"]);
+        expect(feature.annotations).toEqual({ libraries: "auth", game: true, slow: true });
+      });
+
+      it("lets a tag written in the file win over the same path tag", () => {
+        const feature = loadFeatureFile(
+          write("@mode:serial/y.feature", "@mode:parallel\n"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.annotations).toEqual({ "mode:parallel": true });
+      });
+
+      it("reads name=value path tags, for systems without ':' in file names", () => {
+        const feature = loadFeatureFile(
+          write("@timeout=5000/@mode=serial/v.feature", "@mode=parallel\n"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.annotations).toEqual({ timeout: "5000", mode: "parallel" });
+      });
+
+      it("does not load a library the file switches off", () => {
+        const feature = loadFeatureFile(
+          write("@storefront/off.feature", "@storefront=false\n"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.pathTags).toBeUndefined();
+        expect(feature.annotations).toEqual({ storefront: "false" });
+      });
+
+      it("keeps the case of a value and ignores names with whitespace", () => {
+        resetWarningsForTests();
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const feature = loadFeatureFile(
+          write("@Env=Staging/@two words/c.feature"),
+          "auto",
+          undefined,
+          dir,
+        );
+        expect(feature.annotations).toEqual({ env: "Staging" });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining("whitespace"));
+        warn.mockRestore();
+      });
+
+      it("adds nothing without a root or an @ name", () => {
+        const feature = loadFeatureFile(write("@game/z.feature"));
+        expect(feature.pathTags).toBeUndefined();
+        expect(feature.annotations).toEqual({});
+      });
+
+      it("finds the root of a suite from its directory", () => {
+        write("@storefront/s.feature");
+        const resolve = vi.fn<(...args: any[]) => any[]>(() => []);
+        const registry: any = {
+          resolve,
+          getAvailableKeys: () => ["common", "storefront"],
+          has: (n: string) => ["common", "storefront"].includes(n),
+          get: () => undefined,
+        };
+        const mockTest: any = Object.assign(vi.fn<() => void>(), {
+          describe: (_: string, fn: any) => fn(),
+          step: vi.fn<() => void>(),
+        });
+        defineFeatureSuite({ test: mockTest, registry, features: path.join(dir, "@storefront") });
+        // the target directory is the root, so its own name is not a tag
+        expect(mockTest).toHaveBeenCalledWith(
+          "Scenario: S",
+          expect.not.objectContaining({ tag: expect.anything() }),
+          expect.any(Function),
+        );
+      });
+    });
+
+    describe("library resolution", () => {
+      const run = (
+        path_: string,
+        extra?: { head?: string; inheritance?: "merge" | "override"; scenario?: string },
+      ) => {
+        const feature = parseFeature(
+          `${extra?.head ?? ""}Feature: F\n  ${extra?.scenario ?? ""}Scenario: S\n    Given a step\n`,
+          "gherkin",
+        );
+        feature.pathTags = pathTagsOf(path_, root);
+        const registry = createLibraryRegistry({
+          common: new Yadda.Library(),
+          storefront: new Yadda.Library(),
+          admin: new Yadda.Library(),
+        });
+        const resolve = vi.spyOn(registry, "resolve");
+        const mockTest: any = Object.assign(vi.fn<() => void>(), {
+          describe: (_: string, fn: any) => fn(),
+          step: vi.fn<() => void>(),
+        });
+        defineFeature(feature, {
+          test: mockTest,
+          registry,
+          libraryInheritance: extra?.inheritance,
+        });
+        const [featureAnnotations, scenarioAnnotations, options] = resolve.mock.calls[0]!;
+        return resolveLibraryNames(featureAnnotations, scenarioAnnotations, options);
+      };
+
+      it("loads a library named by a nested directory", () => {
+        expect(run(at("@storefront", "deep", "x.feature"))).toEqual(["common", "storefront"]);
+      });
+
+      it("loads a library named by an @name.feature file", () => {
+        expect(run(at("@storefront.feature"))).toEqual(["common", "storefront"]);
+      });
+
+      it("honours a custom annotationKey of the registry", () => {
+        const feature = parseFeature("Feature: F\n  Scenario: S\n    Given a step\n", "gherkin");
+        feature.pathTags = ["storefront"];
+        const registry = createLibraryRegistry(
+          { common: new Yadda.Library(), storefront: new Yadda.Library() },
+          { annotationKey: "Steps" },
+        );
+        const resolve = vi.spyOn(registry, "resolve");
+        const mockTest: any = Object.assign(vi.fn<() => void>(), {
+          describe: (_: string, fn: any) => fn(),
+          step: vi.fn<() => void>(),
+        });
+        defineFeature(feature, { test: mockTest, registry });
+        const [featureAnnotations, scenarioAnnotations, options] = resolve.mock.calls[0]!;
+        expect(
+          resolveLibraryNames(featureAnnotations, scenarioAnnotations, {
+            ...registry.options,
+            ...options,
+          }),
+        ).toEqual(["common", "storefront"]);
+      });
+
+      it("ignores path tags that name no library", () => {
+        expect(run(at("@smoke", "x.feature"))).toEqual(["common"]);
+      });
+
+      it("merges with explicit @Libraries", () => {
+        expect(run(at("@storefront", "x.feature"), { head: "@Libraries=admin\n" })).toEqual([
+          "common",
+          "admin",
+          "storefront",
+        ]);
+      });
+
+      it("lets a scenario's @Libraries replace them with override inheritance", () => {
+        expect(
+          run(at("@storefront", "x.feature"), {
+            inheritance: "override",
+            scenario: "@Libraries=admin\n  ",
+          }),
+        ).toEqual(["common", "admin"]);
+      });
+    });
   });
 });

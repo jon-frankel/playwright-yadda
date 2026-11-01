@@ -77,5 +77,6 @@ export {
   defineFeatureSuite,
   findFeatureFiles,
   loadFeatureFile,
+  pathTagsOf,
   parseFeature,
 } from "./feature.js";

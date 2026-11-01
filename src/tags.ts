@@ -172,10 +172,19 @@ export function resolveTags(
   }
   const merged = new Map([...featureTags, ...scenarioTags]);
 
-  // `@skip`, `@pending` and `@fixme` all skip a scenario; `@fixme` only differs in how Playwright reports it
-  const skipped = (name: string) => isSet(merged.get(name));
-  const skip: ScenarioTags["skip"] =
-    skipped("skip") || skipped("pending") ? "skip" : skipped("fixme") ? "fixme" : undefined;
+  // `@skip`, `@pending` and `@fixme` all skip a scenario; `@fixme` only differs in how Playwright
+  // reports it. They are aliases, so a scenario that names any of them, even to switch it off with
+  // `=false`, decides for all of them, in place of its feature's.
+  const SKIPS = ["skip", "pending", "fixme"];
+  const skipOf = (tags: Map<string, string | true>): ScenarioTags["skip"] =>
+    isSet(tags.get("skip")) || isSet(tags.get("pending"))
+      ? "skip"
+      : isSet(tags.get("fixme"))
+        ? "fixme"
+        : undefined;
+  const skip = SKIPS.some((name) => scenarioTags.has(name))
+    ? skipOf(scenarioTags)
+    : skipOf(featureTags);
   const effective = { ...feature, ...own };
 
   const scenario: ScenarioTags = {

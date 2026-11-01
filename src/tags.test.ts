@@ -44,6 +44,14 @@ describe("resolveTags", () => {
     });
   });
 
+  it("lets =false on any of the skip aliases cancel the others, which are aliases", () => {
+    expect(resolveTags({ pending: true }, { skip: "false" }).scenario.skip).toBeUndefined();
+    expect(resolveTags({ skip: true }, { pending: "false" }).scenario.skip).toBeUndefined();
+    expect(resolveTags({ skip: true }, { fixme: true }).scenario.skip).toBe("fixme");
+    expect(resolveTags({ fixme: true }, { skip: true }).scenario.skip).toBe("skip");
+    expect(resolveTags({ skip: true }, { slow: true }).scenario.skip).toBe("skip");
+  });
+
   it("lets @skip=false on a scenario turn off the feature's @skip", () => {
     expect(resolveTags({ skip: true }, { skip: "false" }).scenario.skip).toBeUndefined();
   });

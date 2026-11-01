@@ -27,16 +27,9 @@ function indent(text: string, pad: string): string {
     .join("\n");
 }
 
-const INTERNAL_FRAME = /node_modules[\\/](playwright-)?yadda[\\/]/;
-
 function formatError(error: TestError): string {
   const text = error.stack ?? error.message ?? String(error.value ?? "Unknown error");
-  const plain = useColor ? text : stripAnsi(text);
-  // Drop frames inside the yadda and playwright-yadda packages so the trace starts at the user's step code
-  const cleaned = plain
-    .split("\n")
-    .filter((line) => !INTERNAL_FRAME.test(line))
-    .join("\n");
+  const cleaned = useColor ? text : stripAnsi(text);
   // Playwright's stack already begins with the message; append snippet when present
   return error.snippet && !cleaned.includes(error.snippet)
     ? `${cleaned}\n${useColor ? error.snippet : stripAnsi(error.snippet)}`

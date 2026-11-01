@@ -23,11 +23,14 @@ The step libraries are the layer the features talk to. Selectors and Playwright 
 
 | Library        | Steps for                                                                   |
 | -------------- | --------------------------------------------------------------------------- |
-| `common`       | the demo budget, navigation, filtering and right-clicking lists, assertions |
+| `session`      | the demo budget, as a Playwright fixture (`fixtures` mode, `createBdd`)     |
+| `common`       | navigation, filtering and right-clicking lists, assertions                  |
 | `rules`        | the rule editor: conditions, actions, splits                                |
 | `transactions` | adding a transaction and checking the transaction list                      |
 
-`@Libraries=rules, transactions` on a feature adds those to `common`, which every scenario gets.
+`common` and `session` are defaults every scenario gets. `rules` and `transactions` are selected by path tags: `features/@rules/@transactions/` loads both for the features inside, and `features/@smoke/` tags the payees feature `@smoke` (`playwright test --grep @smoke`).
+
+Other package features used: `Background:`, `Examples:` with `[name]` placeholders (payees), `createHooks` (`steps/hooks.ts`: an `AfterStep` that screenshots a failed step), `@slow` and `@fixme`.
 
 ## Pilot: rules and payees
 
@@ -38,7 +41,7 @@ The step libraries are the layer the features talk to. Selectors and Playwright 
 
 Not ported: the two "checks the page visuals" tests. They only compare screenshots, and in Actual's own suite the screenshot assertion is a no-op outside its visual-regression mode.
 
-Also different from the originals: "is shown" checks use the first match instead of requiring exactly one, and Actual's animation-disabling trick is applied in `onBeforeScenario` instead of a fixture.
+Also different from the originals: "is shown" checks use the first match instead of requiring exactly one, and Actual's animation-disabling trick is applied by the `budget` fixture.
 
 ### Numbers so far
 

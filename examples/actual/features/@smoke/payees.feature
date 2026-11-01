@@ -5,14 +5,14 @@ Feature: Payees
     Given the demo budget is open
     And the Payees page is open
 
-  Scenario: Payees are listed by name
+  Scenario: [payee] is listed
     When the user filters the list for "[payee]"
     Then "[payee]" is shown
 
     Examples:
       payee
       Fast Internet
-      Ikea
+      Starting Balance
       Deposit
 
   Scenario: A payee offers to create a rule

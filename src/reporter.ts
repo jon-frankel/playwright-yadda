@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import path from "node:path";
 import type {
   FullResult,
@@ -27,27 +28,49 @@ function indent(text: string, pad: string): string {
     .join("\n");
 }
 
-// Frames inside the yadda and playwright-yadda packages
-const INTERNAL_FRAME = /node_modules[\\/](playwright-)?yadda[\\/]/;
-
 export interface YaddaReporterOptions {
   /** Keep yadda and playwright-yadda frames in stack traces. Default: false. */
   fullStackTrace?: boolean;
 }
 
-function formatError(error: TestError, fullStackTrace: boolean): string {
-  const text = error.stack ?? error.message ?? String(error.value ?? "Unknown error");
-  const plain = useColor ? text : stripAnsi(text);
-  const cleaned = fullStackTrace
-    ? plain
-    : plain
+const NODE_MODULES_FRAME = /node_modules[\\/](playwright-)?yadda[\\/]/;
+const STACK_FRAME = /^\s+at /;
+
+/** Real directories of the yadda and playwright-yadda packages, as seen from the user's project. */
+function packageDirs(): string[] {
+  const require = createRequire(path.join(process.cwd(), "noop.js"));
+  const dirs: string[] = [];
+  for (const name of ["playwright-yadda", "yadda"]) {
+    try {
+      dirs.push(path.dirname(require.resolve(`${name}/package.json`)) + path.sep);
+    } catch {
+      // Not resolvable from here; the node_modules pattern still applies
+    }
+  }
+  return dirs;
+}
+
+function makeInternalFrameTest(): (line: string) => boolean {
+  const dirs = packageDirs();
+  return (line) =>
+    STACK_FRAME.test(line) && (NODE_MODULES_FRAME.test(line) || dirs.some((d) => line.includes(d)));
+}
+
+function formatError(
+  error: TestError,
+  isInternalFrame: ((line: string) => boolean) | undefined,
+): string {
+  const clean = (t: string) => (useColor ? t : stripAnsi(t));
+  const text = clean(error.stack ?? error.message ?? String(error.value ?? "Unknown error"));
+  const snippet = error.snippet ? clean(error.snippet) : undefined;
+  const body = isInternalFrame
+    ? text
         .split("\n")
-        .filter((line) => !INTERNAL_FRAME.test(line))
-        .join("\n");
-  // Playwright's stack already begins with the message; append snippet when present
-  return error.snippet && !cleaned.includes(error.snippet)
-    ? `${cleaned}\n${useColor ? error.snippet : stripAnsi(error.snippet)}`
-    : cleaned;
+        .filter((line) => !isInternalFrame(line))
+        .join("\n")
+    : text;
+  // Playwright's stack already begins with the message; append the code snippet when it isn't there
+  return snippet && !text.includes(snippet) ? `${body}\n${snippet}` : body;
 }
 
 /**
@@ -66,10 +89,11 @@ export default class YaddaReporter implements Reporter {
   private flaky = 0;
   private failures: string[] = [];
   private currentFeature: string | undefined;
-  private fullStackTrace: boolean;
+  private isInternalFrame: ((line: string) => boolean) | undefined;
 
-  constructor(options: YaddaReporterOptions = {}) {
-    this.fullStackTrace = options.fullStackTrace ?? false;
+  constructor(options?: YaddaReporterOptions | null) {
+    const full = typeof options === "object" && options !== null && options.fullStackTrace === true;
+    this.isInternalFrame = full ? undefined : makeInternalFrameTest();
   }
 
   printsToStdio(): boolean {
@@ -118,7 +142,7 @@ export default class YaddaReporter implements Reporter {
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
       if (failedStep) {
         errorShown = true;
-        lines.push(indent(red(formatError(step.error!, this.fullStackTrace)), "        "));
+        lines.push(indent(red(formatError(step.error!, this.isInternalFrame)), "        "));
       }
     }
 
@@ -126,7 +150,7 @@ export default class YaddaReporter implements Reporter {
     const errors = result.errors?.length ? result.errors : result.error ? [result.error] : [];
     if (!ok && !skipped && !errorShown) {
       for (const err of errors)
-        lines.push(indent(red(formatError(err, this.fullStackTrace)), "    "));
+        lines.push(indent(red(formatError(err, this.isInternalFrame)), "    "));
     }
 
     const block = lines.join("\n") + "\n\n";

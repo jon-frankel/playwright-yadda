@@ -9,6 +9,7 @@ import {
   type FixtureCollector,
   createFixtureTestBody,
   TEST_INFO_KEY,
+  usesFixturesMode,
   withScenarioFixtures,
 } from "./fixtures.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
@@ -112,6 +113,9 @@ function supportsTestDetails(): boolean {
   }
 }
 
+/** Problems already warned about by this process, so each is reported once */
+const warned = new Set<string>();
+
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -167,6 +171,11 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
    * made of, plus whatever the steps of the libraries it resolves destructure.
    */
   const collectFixtures = fixtureCollector ?? createFixtureCollector();
+  const usesFixtures = () =>
+    registry.getAvailableKeys().some((key) => {
+      const library = registry.get(key);
+      return library !== undefined && usesFixturesMode(library);
+    });
   const scenarioFixtureNames = (parsedFeature: ParsedFeature, scenario: ParsedScenario) => {
     const names = new Set<string>(BASE_FIXTURE_NAMES);
     try {
@@ -177,13 +186,21 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       );
       for (const name of collectFixtures(libraries, scenario.steps)) names.add(name);
     } catch (error) {
-      // The scenario fails with this same error when it runs; this says why its fixtures are only
-      // the base ones, which would otherwise show up as a confusing "fixture not found" first
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `playwright-yadda: could not work out the fixtures for "${parsedFeature.title}" > ` +
-          `"${scenario.title}", so only ${BASE_FIXTURE_NAMES.join(" and ")} are set up for it: ${reason}`,
-      );
+      // The scenario fails with this same error when it runs. Say why its fixtures are only the
+      // base ones, which would otherwise show up as a confusing "fixture not found" first. Only
+      // suites that use fixtures mode need telling, and once per problem: every Playwright process
+      // that loads the spec declares every scenario.
+      if (usesFixtures()) {
+        const reason = error instanceof Error ? error.message : String(error);
+        if (!warned.has(reason)) {
+          warned.add(reason);
+          console.warn(
+            `playwright-yadda: could not work out the fixtures for "${parsedFeature.title}" > ` +
+              `"${scenario.title}" (nor any other scenario with this problem), so only ` +
+              `${BASE_FIXTURE_NAMES.join(" and ")} are set up for them: ${reason}`,
+          );
+        }
+      }
     }
     return [...names];
   };

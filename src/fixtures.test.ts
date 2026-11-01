@@ -234,6 +234,17 @@ describe("fixtures mode step libraries", () => {
     interpreter.mockRestore();
   });
 
+  it("does not mistake one multi-line step for two steps in a row", () => {
+    const steps = createStepLibrary(undefined, "fixtures");
+    steps.given(/^a step\nGiven b step$/, async ({ multi }) => multi);
+    steps.given("a step", async ({ one }) => one);
+    steps.given("b step", async ({ two }) => two);
+
+    const collect = createFixtureCollector();
+    expect(collect([steps], ["Given a step\nGiven b step"])).toEqual(["multi"]);
+    expect(collect([steps], ["Given a step", "Given b step"])).toEqual(["one", "two"]);
+  });
+
   it("does not remember lookups between collectors, so steps defined later are seen", () => {
     const steps = createStepLibrary(undefined, "fixtures");
     // a recorded definition, so the first collector really looks "a late step" up (and finds nothing)
@@ -575,12 +586,13 @@ describe("defineFeature with fixtures", () => {
     expect(seen).toEqual([{ page: "P", context: "C", account: "A", testInfo: "INFO" }]);
   });
 
-  it("warns about an unknown library when declared, and fails the scenario when it runs", async () => {
+  it("warns about an unknown library when a fixtures library is in use, and fails when it runs", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const uses = createStepLibrary(undefined, "fixtures");
     const { test, declared } = fakeTest();
     defineFeature(feature("missing", ["Given a thing"]), {
       test,
-      registry: createLibraryRegistry({}, { defaultLibraries: [] }),
+      registry: createLibraryRegistry({ uses }, { defaultLibraries: [] }),
     });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0]?.[0]).toMatch(
@@ -592,6 +604,37 @@ describe("defineFeature with fixtures", () => {
     await expect(declared[0]!.fn({ page: "P", context: "C" }, {})).rejects.toThrow(
       /Unknown step library "missing"/,
     );
+  });
+
+  it("says nothing about an unknown library to a suite with no fixtures library", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bound = createStepLibrary();
+    const { test } = fakeTest();
+    defineFeature(feature("missing", ["Given a thing"]), {
+      test,
+      registry: createLibraryRegistry({ bound }, { defaultLibraries: [] }),
+    });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("warns once per problem, not once per scenario", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const uses = createStepLibrary(undefined, "fixtures");
+    const { test } = fakeTest();
+    const scenarios = ["One", "Two", "Three"]
+      .map((title) => `  Scenario: ${title}\n    Given a thing\n`)
+      .join("");
+    const registry = createLibraryRegistry({ uses }, { defaultLibraries: [] });
+    for (const title of ["Alpha", "Beta"]) {
+      defineFeature(parseFeature(`@Libraries=gone\nFeature: ${title}\n${scenarios}`), {
+        test,
+        registry,
+      });
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/Unknown step library "gone"/);
+    warn.mockRestore();
   });
 });
 
@@ -627,6 +670,38 @@ describe("defineFeatureSuite with fixtures", () => {
       expect(parseFixtureNames(fn)).toEqual(["page", "context", "account"]);
     }
     expect(lookups).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("the types of createBdd and createStepLibrary", () => {
+  const withAccount = base.extend<{ account: string }>({
+    // oxlint-disable-next-line no-empty-pattern
+    account: async ({}, use) => use("alice"),
+  });
+
+  it("types custom and built-in fixtures, and rejects ones the test does not have", () => {
+    const { createStepLibrary: create } = createBdd(withAccount);
+    const steps = create();
+    steps.given("typed fixtures", async ({ account, browserName, $testInfo }, extra: string) => {
+      const asString: string = account;
+      // @ts-expect-error account is a string
+      const asNumber: number = account;
+      const name: string = browserName;
+      const title: string = $testInfo.title;
+      return [asString, asNumber, name, title, extra];
+    });
+    // @ts-expect-error the test has no fixture called nope
+    steps.given("untyped fixture", async ({ nope }) => nope);
+    expect(() =>
+      // @ts-expect-error testInfo is $testInfo here
+      steps.given("test info", async ({ testInfo }) => testInfo),
+    ).toThrow(/\$testInfo/);
+    expect(steps).toBeDefined();
+  });
+
+  it("accepts a mode that is only known at run time", () => {
+    const mode = ["bound", "param", "fixtures"][0] as "bound" | "param" | "fixtures";
+    expect(createStepLibrary(undefined, mode)).toBeDefined();
   });
 });
 

@@ -306,7 +306,8 @@ export function createFixtureCollector(): FixtureCollector {
       })
       .join(",") +
     "\n" +
-    steps.join("\n");
+    // JSON, not a join: a multi-line step must not read as two steps
+    JSON.stringify(steps);
   const cached = (library: StepLibrary, step: string): unknown[] => {
     let byStep = matches.get(library);
     if (!byStep) matches.set(library, (byStep = new Map()));
@@ -357,6 +358,16 @@ export function createFixtureCollector(): FixtureCollector {
     sequences.set(key, [...names]);
     return [...names];
   };
+}
+
+/** Note that `library` was made in fixtures mode, whether or not it has any steps yet */
+export function markFixturesLibrary(library: object): void {
+  if (!declaredFixtures.has(library)) declaredFixtures.set(library, new Map());
+}
+
+/** Whether `library` was made in fixtures mode */
+export function usesFixturesMode(library: object): boolean {
+  return declaredFixtures.has(library);
 }
 
 /** What {@link createFixtureCollector} returns */

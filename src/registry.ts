@@ -3,6 +3,7 @@ import Yadda from "yadda";
 import { resolveLibraryNames } from "./annotations.js";
 import {
   bindFixtureStep,
+  markFixturesLibrary,
   parseFixtureNames,
   recordStepFixtures,
   type FixtureStepLibrary,
@@ -42,6 +43,11 @@ export function createStepLibrary(
   language?: Yadda.Language,
 ): FixtureStepLibrary<Record<string, any>>;
 export function createStepLibrary(
+  dictionary: Yadda.Dictionary | undefined,
+  mode: "bound" | "param" | "fixtures",
+  language?: Yadda.Language,
+): Yadda.Library | FixtureStepLibrary<Record<string, any>>;
+export function createStepLibrary(
   dictionary?: Yadda.Dictionary,
   mode: "bound" | "param" | "fixtures" = "bound",
   language: Yadda.Language = Yadda.localisation.English,
@@ -52,6 +58,7 @@ export function createStepLibrary(
       : new Yadda.ContextParamLibrary(dictionary);
 
   if (mode === "fixtures") {
+    markFixturesLibrary(base);
     const define = base.define.bind(base);
     base.define = (signatures, fn, macroContext, options) => {
       if (!fn) return define(signatures, fn, macroContext, options);

@@ -27,9 +27,23 @@ function indent(text: string, pad: string): string {
     .join("\n");
 }
 
-function formatError(error: TestError): string {
+// Frames inside the yadda and playwright-yadda packages
+const INTERNAL_FRAME = /node_modules[\\/](playwright-)?yadda[\\/]/;
+
+export interface YaddaReporterOptions {
+  /** Keep yadda and playwright-yadda frames in stack traces. Default: false. */
+  fullStackTrace?: boolean;
+}
+
+function formatError(error: TestError, fullStackTrace: boolean): string {
   const text = error.stack ?? error.message ?? String(error.value ?? "Unknown error");
-  const cleaned = useColor ? text : stripAnsi(text);
+  const plain = useColor ? text : stripAnsi(text);
+  const cleaned = fullStackTrace
+    ? plain
+    : plain
+        .split("\n")
+        .filter((line) => !INTERNAL_FRAME.test(line))
+        .join("\n");
   // Playwright's stack already begins with the message; append snippet when present
   return error.snippet && !cleaned.includes(error.snippet)
     ? `${cleaned}\n${useColor ? error.snippet : stripAnsi(error.snippet)}`
@@ -41,6 +55,9 @@ function formatError(error: TestError): string {
  * every step and the stack trace of the failing step below it.
  *
  * Usage: `reporter: [["playwright-yadda/reporter"]]`
+ *
+ * Frames from yadda and playwright-yadda are hidden from stack traces so they start at your
+ * step code; pass `{ fullStackTrace: true }` to keep them.
  */
 export default class YaddaReporter implements Reporter {
   private passed = 0;
@@ -49,6 +66,11 @@ export default class YaddaReporter implements Reporter {
   private flaky = 0;
   private failures: string[] = [];
   private currentFeature: string | undefined;
+  private fullStackTrace: boolean;
+
+  constructor(options: YaddaReporterOptions = {}) {
+    this.fullStackTrace = options.fullStackTrace ?? false;
+  }
 
   printsToStdio(): boolean {
     return true;
@@ -96,14 +118,15 @@ export default class YaddaReporter implements Reporter {
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
       if (failedStep) {
         errorShown = true;
-        lines.push(indent(red(formatError(step.error!)), "        "));
+        lines.push(indent(red(formatError(step.error!, this.fullStackTrace)), "        "));
       }
     }
 
     // Failure outside any step (fixtures, hooks, timeouts)
     const errors = result.errors?.length ? result.errors : result.error ? [result.error] : [];
     if (!ok && !skipped && !errorShown) {
-      for (const err of errors) lines.push(indent(red(formatError(err)), "    "));
+      for (const err of errors)
+        lines.push(indent(red(formatError(err, this.fullStackTrace)), "    "));
     }
 
     const block = lines.join("\n") + "\n\n";

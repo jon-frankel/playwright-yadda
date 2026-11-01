@@ -166,6 +166,12 @@ export default defineConfig({
 });
 ```
 
+Stack traces hide frames from yadda and playwright-yadda so they start at your step code. To keep them, pass `{ fullStackTrace: true }`:
+
+```ts
+reporter: [["playwright-yadda/reporter", { fullStackTrace: true }]],
+```
+
 ## IDE Support
 
 ### WebStorm and other JetBrains IDEs

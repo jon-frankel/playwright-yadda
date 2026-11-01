@@ -4,6 +4,8 @@ import { storefrontSteps } from "./storefront.js";
 import { adminSteps } from "./admin.js";
 import { inventorySteps } from "./inventory.js";
 import { orderSteps } from "./orders.js";
+import { playgroundBoundSteps } from "./playground/bound.js";
+import { playgroundFixtureSteps } from "./playground/fixtures.js";
 
 export const registry = createLibraryRegistry({
   common: commonSteps,
@@ -11,4 +13,7 @@ export const registry = createLibraryRegistry({
   admin: adminSteps,
   orders: orderSteps,
   inventory: inventorySteps,
+  // Empty, for ide-playground/create-step.feature
+  fixtures: playgroundFixtureSteps,
+  bound: playgroundBoundSteps,
 });

@@ -38,7 +38,7 @@ export function parseTagExpression(source: string): TagExpression {
   const fail = (what: string): never => {
     const at = tokens[pos];
     throw new Error(
-      `Invalid tag expression "${source}": expected ${what}, got ${at ? `"${at.kind === "tag" ? "@" + at.name.slice(1) : at.kind}"` : "the end"}`,
+      `Invalid tag expression "${source}": expected ${what}, got ${at ? `"${at.kind === "tag" ? at.name : at.kind}"` : "the end"}`,
     );
   };
 

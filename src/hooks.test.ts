@@ -162,6 +162,43 @@ describe("hooks", () => {
     warn.mockRestore();
   });
 
+  it("warns about After hook errors after the first, and does not blame a hook for a rethrown step error", async () => {
+    const hooks = createHooks();
+    const { tests } = setup(hooks);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    hooks.AfterScenario(() => {
+      throw new Error("first");
+    });
+    hooks.AfterScenario(() => {
+      throw new Error("second");
+    });
+    await expect(tests["Scenario: Slow mobile"]({ page: {}, context: {} })).rejects.toThrow(
+      /second/,
+    );
+    // After hooks run in reverse, so "second" ran first and is the one reported
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain("first");
+
+    const rethrow = createHooks();
+    const other = setup(rethrow);
+    rethrow.AfterStep(({ error }) => {
+      if (error) throw error;
+    });
+    await expect(other.tests["Scenario: Plain"]({ page: {}, context: {} })).rejects.toThrow(
+      /^boom$/,
+    );
+    warn.mockRestore();
+  });
+
+  it("names default hooks by their position within their kind", () => {
+    const hooks = createHooks();
+    hooks.BeforeScenario(() => {});
+    hooks.AfterScenario(() => {
+      throw new Error("x");
+    });
+    expect(hooks.select("AfterScenario", [])[0]?.name).toBe("AfterScenario #1");
+  });
+
   it("copes with an error whose message is read-only", async () => {
     const hooks = createHooks();
     const { log, tests } = setup(hooks);

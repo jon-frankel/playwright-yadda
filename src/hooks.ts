@@ -93,6 +93,7 @@ export interface HookRunner {
 export function createHooks(): Hooks {
   const entries: Entry[] = [];
   let seq = 0;
+  const perKind = new Map<HookKind, number>();
 
   const register =
     <F extends (args: any) => any>(kind: HookKind): Register<F> =>
@@ -104,7 +105,8 @@ export function createHooks(): Hooks {
       entries.push({
         kind,
         fn,
-        name: options.name ?? `${kind} #${seq + 1}`,
+        name:
+          options.name ?? `${kind} #${perKind.set(kind, (perKind.get(kind) ?? 0) + 1).get(kind)}`,
         order: options.order ?? 0,
         seq: seq++,
         matches,
@@ -128,6 +130,12 @@ export function createHooks(): Hooks {
   };
 }
 
+/** A hook error that is not the one reported, because another had already failed */
+export function warnSuppressed(where: string, error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error);
+  console.warn(`playwright-yadda: ${where} failed too, and is not reported: ${reason}`);
+}
+
 /** Run every hook, even after one throws; throws the first error afterwards */
 export async function runAll(
   hooks: HookRunner[],
@@ -139,13 +147,16 @@ export async function runAll(
     try {
       await hook.run(args);
     } catch (error) {
-      if (error instanceof Error && !error.message.includes(hook.name)) {
+      const given = (args as { error?: unknown } | undefined)?.error;
+      // Not an error the hook was handed (AfterStep's `error`) and rethrew: that one is not its own
+      if (error instanceof Error && error !== given && !error.message.includes(hook.name)) {
         try {
           error.message = `${hook.name} failed: ${error.message}`;
         } catch {
           // a read-only message (a DOMException, a frozen error): report it as it is
         }
       }
+      if (failure) warnSuppressed(hook.name, error);
       failure ??= { error };
       if (stopOnError) break;
     }

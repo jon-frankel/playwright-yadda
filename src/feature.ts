@@ -11,7 +11,7 @@ import {
   usesFixturesMode,
   withScenarioFixtures,
 } from "./fixtures.js";
-import { createHooks, runAll, type Hooks } from "./hooks.js";
+import { createHooks, runAll, warnSuppressed, type Hooks } from "./hooks.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
@@ -125,14 +125,6 @@ function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
 
-/** A hook error that is not the one reported, because a step or scenario had already failed */
-export function warnSuppressed(where: string, title: string, error: unknown): void {
-  const reason = error instanceof Error ? error.message : String(error);
-  console.warn(
-    `playwright-yadda: ${where} hook failed after "${title}" had already failed: ${reason}`,
-  );
-}
-
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -147,7 +139,12 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     defaultLibraries?: (K | string)[];
     libraryInheritance?: "merge" | "override";
     createContext?: (fixtures: any) => Promise<TCtx> | TCtx;
+    /** @deprecated Use `hooks.BeforeScenario`. Kept working as it was. */
     onBeforeScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+    /**
+     * @deprecated Use `hooks.AfterScenario`, which also runs when the scenario fails. This one
+     * does not.
+     */
     onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
     /** Tag-filtered scenario, step and worker hooks, from `createHooks()` */
     hooks?: Hooks;
@@ -335,7 +332,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
                   runAll(afterStepHooks, { ...hookArgs, step, error }).catch((hookError) => {
                     // the step's own error is the one reported
                     if (error === undefined) throw hookError;
-                    warnSuppressed("AfterStep", step, hookError);
+                    warnSuppressed("AfterStep", hookError);
                   }),
               }
             : undefined;
@@ -363,7 +360,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         try {
           await runAll(afterScenarioHooks, hookArgs);
         } catch (error) {
-          if (failure) warnSuppressed("AfterScenario", scenario.title, error);
+          if (failure) warnSuppressed("AfterScenario", error);
           failure ??= { error };
         }
         if (failure) throw failure.error;

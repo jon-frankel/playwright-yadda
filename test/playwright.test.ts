@@ -253,7 +253,7 @@ describe("hooks with the real Playwright", () => {
   });
 
   it("runs AfterStep and AfterScenario when a step fails", () => {
-    // Playwright may run `beforeAll` again around a scenario that has a describe of its own
+    // Playwright copies annotations added in `beforeAll` onto the other tests of the worker
     expect(ran("Fails")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
       "BeforeScenario 1",
       "BeforeStep Given a step that fails",

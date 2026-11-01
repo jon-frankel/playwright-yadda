@@ -9,7 +9,7 @@ import type {
   TestResult,
 } from "@playwright/test/reporter";
 import type { YaddaReporterOptions } from "./types.js";
-import { REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
+import { FEATURE_TAGS_ANNOTATION, REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
 
 // Same rules as Playwright's own reporters: FORCE_COLOR=0/false disables, any other value forces
 const forceColor = process.env.FORCE_COLOR;
@@ -20,6 +20,7 @@ const green = (t: string) => paint(32, t);
 const red = (t: string) => paint(31, t);
 const yellow = (t: string) => paint(33, t);
 const dim = (t: string) => paint(2, t);
+const cyan = (t: string) => paint(36, t);
 const bold = (t: string) => paint(1, t);
 
 // eslint-disable-next-line no-control-regex
@@ -98,9 +99,11 @@ export default class YaddaReporter implements Reporter {
   // Feature title -> file, so a scenario that fails before its annotation exists still groups
   private fileByFeature = new Map<string, string>();
   private isInternalFrame: ((line: string) => boolean) | undefined;
+  private showTags: boolean;
 
   constructor(options?: YaddaReporterOptions | null) {
     const full = typeof options === "object" && options !== null && options.fullStackTrace === true;
+    this.showTags = !(typeof options === "object" && options !== null && options.tags === false);
     this.isInternalFrame = full ? undefined : makeInternalFrameTest();
     // Playwright makes the reporters before it loads the specs. The loader stays quiet about how
     // scenarios are declared, because onBegin prints it, for the scenarios that are in the run.
@@ -146,6 +149,15 @@ export default class YaddaReporter implements Reporter {
     const retry = result.retry > 0 ? dim(` (retry #${result.retry})`) : "";
     const duration = dim(` (${result.duration}ms)`);
     const mark = ok ? green("✓") : skipped ? yellow("-") : red("✗");
+    // The feature's tags go with the feature, the scenario's others with the scenario
+    const featureTags = this.showTags
+      ? (test.annotations.find((a) => a.type === FEATURE_TAGS_ANNOTATION)?.description ?? "")
+          .split(" ")
+          .filter(Boolean)
+      : [];
+    const ownTags = this.showTags
+      ? (test.tags ?? []).filter((tag) => !featureTags.includes(tag))
+      : [];
     // Print the feature (and its file) once, before its first scenario
     const featureTitle = heading.length > 1 ? heading.slice(0, -1).join(" › ") : "";
     const annotatedFile = test.annotations.find((a) => a.type === "feature-file")?.description;
@@ -155,9 +167,15 @@ export default class YaddaReporter implements Reporter {
     if (featureKey !== this.currentFeature) {
       this.currentFeature = featureKey;
       if (featureFile) lines.push(bold(path.relative(process.cwd(), featureFile)));
-      if (featureTitle) lines.push(featureFile ? dim(featureTitle) : bold(featureTitle));
+      if (featureTitle) {
+        const title = featureFile ? dim(featureTitle) : bold(featureTitle);
+        lines.push(featureTags.length ? `${title} ${cyan(featureTags.join(" "))}` : title);
+      }
     }
-    lines.push(`${mark} ${bold(heading[heading.length - 1] ?? test.title)}${retry}${duration}`);
+    const tagText = ownTags.length ? ` ${cyan(ownTags.join(" "))}` : "";
+    lines.push(
+      `${mark} ${bold(heading[heading.length - 1] ?? test.title)}${tagText}${retry}${duration}`,
+    );
 
     const steps = result.steps.filter((s) => s.category === "test.step");
     // Playwright sets no error on a step still running when the test times out, is interrupted

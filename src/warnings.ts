@@ -7,6 +7,12 @@ import { createRequire } from "node:module";
  */
 export const WARNING_ANNOTATION = "_playwright-yadda-warning";
 
+/**
+ * Test annotation carrying the tags the scenario's feature has, space separated, so the reporter can
+ * print them with the feature and the rest with the scenario. The leading `_` hides it from the HTML report.
+ */
+export const FEATURE_TAGS_ANNOTATION = "_playwright-yadda-feature-tags";
+
 /** Set on `globalThis` by the yadda reporter, which then prints the warnings in place of the loader */
 export const REPORTER_FLAG = Symbol.for("playwright-yadda.reporter");
 

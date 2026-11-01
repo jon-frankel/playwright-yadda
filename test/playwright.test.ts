@@ -37,7 +37,7 @@ type Spec = {
     expectedStatus: string;
     status: string;
     timeout: number;
-    results: { status: string }[];
+    results: { status: string; errors?: { message: string }[] }[];
   }[];
 };
 
@@ -275,6 +275,13 @@ describe("hooks with the real Playwright", () => {
       "AfterScenario 2",
       "AfterScenario 1",
     ]);
+  });
+
+  it("reports only the timeout for a body that resumes during teardown", () => {
+    const errors = specs.find((spec) => spec.title === "Scenario: Hangs until teardown")?.tests[0]
+      ?.results[0]?.errors;
+    expect(errors).toHaveLength(1);
+    expect(errors?.[0]?.message).toContain("timeout");
   });
 
   it("runs AfterStep and AfterScenario when a step fails", () => {

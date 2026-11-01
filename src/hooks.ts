@@ -140,10 +140,11 @@ export function warnSuppressed(where: string, error: unknown): void {
 export async function runAll(
   hooks: HookRunner[],
   args: unknown,
-  { stopOnError = false }: { stopOnError?: boolean } = {},
+  { stopOnError = false, stopWhen }: { stopOnError?: boolean; stopWhen?: () => boolean } = {},
 ): Promise<void> {
   let failure: { error: unknown } | undefined;
   for (const hook of hooks) {
+    if (stopWhen?.()) break;
     try {
       await hook.run(args);
     } catch (error) {

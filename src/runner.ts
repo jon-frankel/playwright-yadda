@@ -55,6 +55,8 @@ export async function runScenarioSteps(
   context: unknown,
   testStep?: TestStepWrapper,
   stepHooks?: StepHooks,
+  /** Asked before each step: true once the test is over, so that no further step starts */
+  stopped?: () => boolean,
 ): Promise<void> {
   const execute = async (stepText: string) => {
     if (!stepHooks) return runStep(yadda, stepText, context);
@@ -63,6 +65,7 @@ export async function runScenarioSteps(
     let failed = false;
     try {
       await stepHooks.before(stepText);
+      if (stopped?.()) return;
       await runStep(yadda, stepText, context);
     } catch (e) {
       failed = true;
@@ -72,6 +75,7 @@ export async function runScenarioSteps(
     if (failed) throw error;
   };
   for (const stepText of steps) {
+    if (stopped?.()) return;
     if (testStep) {
       await testStep(stepText, () => execute(stepText));
     } else {

@@ -125,8 +125,6 @@ function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
 
-const testOver = () => new Error("The test is over (it timed out); its steps are not run any more");
-
 /** What a running scenario still owes its After hooks if Playwright abandons its body */
 interface OwedHooks {
   args: Record<string, unknown>;
@@ -261,7 +259,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         // One-way hand-off: whichever of this and the body gets here first runs the After hooks
         if (!state || state.started || state.over) return;
         state.over = true;
-        const timeout = testInfo.error ?? new Error("The test did not finish (timed out)");
+        const timeout =
+          testInfo.error ?? new Error("The test did not finish (it timed out or was interrupted)");
         try {
           if (state.step !== undefined) {
             await runAll(state.afterStep, { ...state.args, step: state.step, error: timeout });
@@ -376,12 +375,19 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
           beforeStepHooks.length > 0 || afterStepHooks.length > 0
             ? {
                 before: (step: string) => {
-                  if (state.over) throw testOver();
                   state.step = step;
-                  return runAll(beforeStepHooks, { ...hookArgs, step }, { stopOnError: true });
+                  return runAll(
+                    beforeStepHooks,
+                    { ...hookArgs, step },
+                    { stopOnError: true, stopWhen: () => !!state.over },
+                  );
                 },
                 after: async (step: string, error?: unknown) => {
-                  if (state.over) throw error ?? testOver();
+                  // `afterEach` has done this already; the step's own error is still reported
+                  if (state.over) {
+                    if (error !== undefined) throw error;
+                    return;
+                  }
                   state.step = undefined;
                   try {
                     await runAll(afterStepHooks, { ...hookArgs, step, error });
@@ -400,32 +406,28 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
           if (onBeforeScenario) {
             await onBeforeScenario(scenario, ctx);
           }
-          await runAll(beforeScenarioHooks, hookArgs, { stopOnError: true });
+          await runAll(beforeScenarioHooks, hookArgs, {
+            stopOnError: true,
+            stopWhen: () => !!state.over,
+          });
 
           // 5. Execute steps wrapped in test.step()
           await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
-            runScenarioSteps(
-              yadda,
-              scenario.steps,
-              ctx,
-              (title, body) =>
-                test.step(title, async () => {
-                  if (state.over) throw testOver();
-                  return body();
-                }),
-              stepHooks,
-            ),
+            runScenarioSteps(yadda, scenario.steps, ctx, test.step, stepHooks, () => !!state.over),
           );
 
           // 6. Lifecycle after hook (only after a scenario that passed)
-          if (onAfterScenario) {
+          if (onAfterScenario && !state.over) {
             await onAfterScenario(scenario, ctx);
           }
         } catch (error) {
           failure = { error };
         }
         // `afterEach` has already run them if the test timed out while this body was still going
-        if (state.over) throw failure?.error ?? testOver();
+        if (state.over) {
+          if (failure) throw failure.error;
+          return;
+        }
         state.started = true;
         try {
           await runAll(afterScenarioHooks, hookArgs);

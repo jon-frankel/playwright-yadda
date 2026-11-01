@@ -246,6 +246,42 @@ describe("hooks", () => {
       expect(log.filter((entry) => entry === "afterScenario")).toHaveLength(1);
     });
 
+    it("a resumed body stays quiet: no error, no onAfterScenario, no later steps", async () => {
+      const hooks = createHooks();
+      const log: string[] = [];
+      const made = setup(hooks, {
+        onAfterScenario: () => void log.push("legacy after"),
+      });
+      hooks.AfterScenario(() => void log.push("afterScenario"));
+      const body = made.tests["Scenario: Late"]({ page: {}, context: {} }, info);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await made.afterEaches[0]({}, info);
+      made.release();
+      await expect(body).resolves.toBeUndefined();
+      expect(log).toEqual(["afterScenario"]);
+      expect(made.log).not.toContain("step");
+    });
+
+    it("does not start the next Before hook once the test is over", async () => {
+      const hooks = createHooks();
+      const log: string[] = [];
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      hooks.BeforeScenario(async () => {
+        log.push("before 1");
+        await gate;
+      });
+      hooks.BeforeScenario(() => void log.push("before 2"));
+      hooks.AfterScenario(() => void log.push("after"));
+      const made = setup(hooks);
+      const body = made.tests["Scenario: Late"]({ page: {}, context: {} }, info);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      await made.afterEaches[0]({}, info);
+      release();
+      await body;
+      expect(log).toEqual(["before 1", "after"]);
+    });
+
     it("only warns when a hook fails there", async () => {
       const hooks = createHooks();
       const { tests, afterEaches } = setup(hooks);

@@ -109,6 +109,40 @@ Run tests with standard Playwright CLI:
 pnpm playwright test
 ```
 
+### 5. Special tags
+
+Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`; the last two mean the same.
+
+| Tag                                               | What it does                                                                                                                                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@only`                                           | `test.only`                                                                                                                                                                                                      |
+| `@skip`, `@pending`                               | `test.skip`. The two are aliases.                                                                                                                                                                                |
+| `@fixme`                                          | `test.fixme`: skipped, and reported as a fixme. `@skip` or `@pending` wins if both are given.                                                                                                                    |
+| `@fail`                                           | `test.fail()`: the scenario is expected to fail                                                                                                                                                                  |
+| `@slow`                                           | `test.slow()`: triples the timeout                                                                                                                                                                               |
+| `@timeout:N`                                      | `test.setTimeout(N)`, in milliseconds. On a feature: `test.describe.configure({ timeout: N })`.                                                                                                                  |
+| `@retries:N`                                      | `test.describe.configure({ retries: N })`. On a scenario it gets a describe of its own, as Playwright has no per-test form ([microsoft/playwright#10825](https://github.com/microsoft/playwright/issues/10825)). |
+| `@mode:parallel`, `@mode:serial`, `@mode:default` | `test.describe.configure({ mode })`                                                                                                                                                                              |
+
+```gherkin
+@retries:2
+@mode:serial
+Feature: Checkout
+
+  @slow
+  @timeout:60000
+  Scenario: Pays by card
+    ...
+
+  @fixme
+  Scenario: Applies a gift card
+    ...
+```
+
+Every tag is also passed to Playwright as the test's `tag` (Playwright 1.42 or later), so `--grep` and `--grep-invert` select by them: `playwright test --grep @smoke`, `playwright test --grep-invert @slow`. A tag with a value is passed as `@name:value` (`@timeout=5000` becomes `@timeout:5000`); one whose value has spaces, such as `@Libraries=auth, catalog`, is passed as `@name`. Yadda lowercases tag names, so `@Smoke` is `@smoke` to `--grep`.
+
+A value that is not valid (`@timeout:soon`, `@mode:fast`) is ignored with a warning. Any other tag does nothing but get passed to Playwright. `@lock` is not handled yet.
+
 ---
 
 ## API Reference

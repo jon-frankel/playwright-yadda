@@ -15,10 +15,10 @@ function cleanEnv() {
 }
 
 /** Run one spec of test/playwright with the real Playwright CLI and read its JSON report */
-function runPlaywright(spec: string) {
+function runPlaywright(spec: string, extraArgs: string[] = []) {
   const run = spawnSync(
     path.join(root, "node_modules", ".bin", "playwright"),
-    ["test", spec, "--config", path.join(project, "playwright.config.ts")],
+    ["test", spec, "--config", path.join(project, "playwright.config.ts"), ...extraArgs],
     { cwd: project, encoding: "utf8", env: cleanEnv() },
   );
   let report: any;
@@ -32,7 +32,13 @@ function runPlaywright(spec: string) {
 
 type Spec = {
   title: string;
-  tests: { annotations: { type: string; description?: string }[]; results: { status: string }[] }[];
+  tests: {
+    annotations: { type: string; description?: string }[];
+    expectedStatus: string;
+    status: string;
+    timeout: number;
+    results: { status: string }[];
+  }[];
 };
 
 /** The specs of a JSON report, flattened */
@@ -86,4 +92,88 @@ describe("a fixture the test does not have", () => {
     const messages = (report?.errors ?? []).map((error: { message: string }) => error.message);
     expect(messages.join("\n")).toMatch(/unknown parameter "pgae"/);
   }, 60_000);
+});
+
+describe("special tags with the real Playwright", () => {
+  let specs: Spec[] = [];
+  beforeAll(() => {
+    const run = runPlaywright("tags.spec.ts");
+    specs = run.report ? specsOf(run.report) : [];
+  }, 60_000);
+
+  const test = (title: string) =>
+    specs.find((spec) => spec.title === `Scenario: ${title}`)?.tests[0];
+
+  it("expects a @fail scenario to fail, and so passes it when it does", () => {
+    expect(test("Expected to fail")).toMatchObject({
+      expectedStatus: "failed",
+      status: "expected",
+    });
+  });
+
+  it("skips @fixme, @skip and @pending scenarios", () => {
+    for (const title of ["Fixme", "Skipped", "Pending"]) {
+      expect(test(title)).toMatchObject({ expectedStatus: "skipped", status: "skipped" });
+    }
+  });
+
+  it("triples the timeout of a @slow scenario", () => {
+    expect(test("Plain")?.timeout).toBe(30_000);
+    expect(test("Slow")?.timeout).toBe(90_000);
+  });
+
+  it("times a scenario out after its own @timeout, and a feature's @timeout applies to all of it", () => {
+    expect(test("Times out")?.results[0]?.status).toBe("timedOut");
+    expect(test("Times out from the feature's tag")?.results[0]?.status).toBe("timedOut");
+    expect(test("Overrides the feature's timeout")?.results[0]?.status).toBe("passed");
+  });
+
+  it("runs a feature's @mode:serial scenarios in serial, skipping what follows a failure", () => {
+    expect(
+      test("Is skipped, as serial mode skips what follows a failure")?.results[0]?.status,
+    ).toBe("skipped");
+  });
+
+  it("retries as the feature's @retries asks, unless the scenario's @retries says otherwise", () => {
+    expect(test("Retried once, from the feature")?.results.map((r) => r.status)).toEqual([
+      "failed",
+      "passed",
+    ]);
+    expect(test("Retries nothing")?.results.map((r) => r.status)).toEqual(["failed"]);
+  });
+
+  it("changes nothing for tags it does not know", () => {
+    expect(test("Unknown tags change nothing")).toMatchObject({
+      expectedStatus: "passed",
+      status: "expected",
+    });
+  });
+
+  describe("--grep", () => {
+    const titles = (extraArgs: string[]) => {
+      const { report } = runPlaywright("tags.spec.ts", ["--list", ...extraArgs]);
+      return report ? specsOf(report).map((spec) => spec.title.replace("Scenario: ", "")) : [];
+    };
+
+    it("selects scenarios by their own tags", () => {
+      expect(titles(["--grep", "@slow"])).toEqual(["Slow"]);
+      expect(titles(["--grep", "@unknown-tag"])).toEqual(["Unknown tags change nothing"]);
+    });
+
+    it("selects scenarios by their feature's tags", () => {
+      expect(titles(["--grep", "@mode:serial"])).toEqual([
+        "Overrides the feature's timeout",
+        "Times out from the feature's tag",
+        "Is skipped, as serial mode skips what follows a failure",
+      ]);
+      expect(titles(["--grep", "@smoke"])).toHaveLength(10);
+    });
+
+    it("leaves scenarios out with --grep-invert", () => {
+      const all = titles([]);
+      expect(all).toHaveLength(13);
+      expect(titles(["--grep-invert", "@smoke|@mode:serial"])).toEqual([]);
+      expect(titles(["--grep-invert", "@fail|@fixme|@skip|@pending"])).toHaveLength(9);
+    });
+  });
 });

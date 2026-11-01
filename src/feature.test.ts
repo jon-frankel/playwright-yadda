@@ -12,6 +12,7 @@ import {
 } from "./feature.js";
 import { resolveLibraryNames } from "./annotations.js";
 import { createLibraryRegistry } from "./registry.js";
+import { REPORTER_FLAG, resetWarningsForTests, WARNING_ANNOTATION } from "./warnings.js";
 
 describe("feature", () => {
   const gherkinText = `
@@ -201,6 +202,69 @@ Feature: Pending Feature
       { annotation: { type: "feature-file", description: feature.filepath } },
       expect.any(Function),
     );
+  });
+
+  it("puts the warnings about a scenario's tags on it as annotations, a feature's on all of them", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const feature = parseFeature(
+      "@timeout:soon\nFeature: Warned\n  @mode:serial\n  Scenario: With a warning\n    Given step one\n\n  Scenario: Without\n    Given step one\n",
+      "gherkin",
+      "features/warned.feature",
+    );
+    const mockTest: any = Object.assign(vi.fn<() => void>(), {
+      describe: (_: string, fn: any) => fn(),
+      skip: vi.fn<() => void>(),
+      only: vi.fn<() => void>(),
+      step: vi.fn<() => void>(),
+    });
+
+    defineFeature(feature, {
+      test: mockTest,
+      registry: createLibraryRegistry({ common: new Yadda.Library() }),
+    });
+
+    const warningsOf = (title: string) => {
+      const details = mockTest.mock.calls.find((call: unknown[]) => call[0] === title)?.[1];
+      return [details.annotation].flat().filter((a: any) => a.type === WARNING_ANNOTATION);
+    };
+    expect(warningsOf("Scenario: With a warning").map((a: any) => a.description)).toEqual([
+      expect.stringContaining("ignoring @timeout"),
+      expect.stringContaining("ignoring @mode on a scenario"),
+    ]);
+    expect(warningsOf("Scenario: Without").map((a: any) => a.description)).toEqual([
+      expect.stringContaining("ignoring @timeout"),
+    ]);
+  });
+
+  it("still warns about a feature's tags when it has no scenario to carry the warning, with the reporter in use", () => {
+    resetWarningsForTests();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    (globalThis as Record<symbol, unknown>)[REPORTER_FLAG] = true;
+    try {
+      const mockTest: any = Object.assign(vi.fn<() => void>(), {
+        describe: (_: string, fn: any) => fn(),
+        skip: vi.fn<() => void>(),
+        only: vi.fn<() => void>(),
+        step: vi.fn<() => void>(),
+      });
+      const registry = createLibraryRegistry({ common: new Yadda.Library() });
+      // Yadda refuses to parse a feature without scenarios, so only one built by hand has none
+      const empty = { title: "Empty", annotations: { "timeout:soon": true }, scenarios: [] };
+      defineFeature(empty as any, { test: mockTest, registry });
+      expect(warn).toHaveBeenCalledOnce();
+      expect(warn.mock.calls[0]?.[0]).toContain("ignoring @timeout, which needs a whole number");
+
+      // with a scenario to carry it, the reporter has it and the loader stays quiet
+      warn.mockClear();
+      resetWarningsForTests();
+      defineFeature(
+        parseFeature("@timeout:soon\nFeature: Full\n  Scenario: S\n    Given step one\n"),
+        { test: mockTest, registry },
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      delete (globalThis as Record<symbol, unknown>)[REPORTER_FLAG];
+    }
   });
 
   it("should run through defineFeatureSuite with pre-parsed features", async () => {

@@ -1,6 +1,7 @@
 import type { TestCase, TestError, TestResult, TestStep } from "@playwright/test/reporter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import YaddaReporter from "./reporter.js";
+import { REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
 
 // eslint-disable-next-line no-control-regex
 const stripAnsi = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
@@ -23,6 +24,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  delete (globalThis as Record<symbol, unknown>)[REPORTER_FLAG];
 });
 
 const stdout = () => stripAnsi(out.join(""));
@@ -69,6 +71,43 @@ const boom: TestError = {
 };
 
 describe("YaddaReporter", () => {
+  const warned = (scenario: string, ...warnings: string[]) =>
+    Object.assign(makeTest(scenario), {
+      annotations: [
+        { type: "feature-file", description: `${process.cwd()}/features/a.feature` },
+        ...warnings.map((description) => ({ type: WARNING_ANNOTATION, description })),
+      ],
+    });
+
+  it("prints the warnings of the scenarios in the run once each, before the first scenario", () => {
+    const reporter = new YaddaReporter();
+    const tests = [
+      warned("One", "ignoring @mode on a scenario", "ignoring @timeout"),
+      warned("Two", "ignoring @timeout"),
+      makeTest("Clean"),
+    ];
+    // a second project declares the same scenarios again
+    reporter.onBegin({}, { allTests: () => [...tests, ...tests] });
+
+    const printed = stripAnsi(err.join(""));
+    expect(printed).toBe(
+      "playwright-yadda: ignoring @mode on a scenario\nplaywright-yadda: ignoring @timeout\n",
+    );
+    expect(stdout()).toBe("Running 6 scenarios\n\n");
+  });
+
+  it("prints nothing extra when no scenario in the run has a warning", () => {
+    const reporter = new YaddaReporter();
+    reporter.onBegin({}, { allTests: () => [makeTest("Clean")] });
+    expect(err).toEqual([]);
+  });
+
+  it("tells the loader to leave the warnings to it", () => {
+    expect((globalThis as Record<symbol, unknown>)[REPORTER_FLAG]).toBeUndefined();
+    new YaddaReporter();
+    expect((globalThis as Record<symbol, unknown>)[REPORTER_FLAG]).toBe(true);
+  });
+
   it("prints errors raised outside tests (onError)", () => {
     const reporter = new YaddaReporter();
     expect(typeof (reporter as any).onError).toBe("function");

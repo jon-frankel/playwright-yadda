@@ -143,7 +143,7 @@ A scenario with `@fail`, `@slow`, `@timeout` or `@retries` is declared in a desc
 
 Every tag is also passed to Playwright as the test's `tag` (Playwright 1.42 or later), so `--grep` and `--grep-invert` select by them: `playwright test --grep @smoke`, `playwright test --grep-invert @slow`. A tag with a value is passed as `@name:value` (`@timeout=5000` becomes `@timeout:5000`); one whose value has spaces, such as `@Libraries=auth, catalog`, is passed as `@name`. A tag switched off with `=false` is not passed. Where a scenario overrides a feature's tag, the scenario's value is the one passed. Yadda lowercases the names of tags, and for the `@name:value` spelling the value too, so `@Smoke` is `@smoke` to `--grep` and `@Area:Cart` is `@area:cart`. Only the tags in the table treat the two spellings alike: `@Libraries:auth` does not load a library.
 
-A value that is not valid (`@timeout:soon`, `@retries:1.5`, `@mode:fast`) is ignored with a warning. Any other tag does nothing but get passed to Playwright. `@lock` is not handled yet.
+A value that is not valid (`@timeout:soon`, `@retries:1.5`, `@mode:fast`) is ignored with a warning. Each warning is printed once per run, not once per worker. With `playwright-yadda/reporter` it is printed before the first scenario, and only when a scenario it is about is in the run, so `--grep` and the IDE's run icon do not bring up warnings about scenarios that are not running; with another reporter, it is printed by the main Playwright process whichever scenarios are selected. The warning is also on its scenarios as a test annotation, `_playwright-yadda-warning`, which Playwright's HTML report hides and its JSON report lists. Any other tag does nothing but get passed to Playwright. `@lock` is not handled yet.
 
 ---
 
@@ -277,7 +277,7 @@ Limits of reading the pattern from the step definition:
 - **Define every step library before the suite is declared.** The fixtures are collected when `defineFeatureSuite` runs. A step defined later fails when it runs with an error naming the fixture it did not get, instead of receiving `undefined`.
 - **Names starting with `$`** are fixtures too, except `$testInfo`.
 - **Declaring the suite does the matching up front.** Each distinct step line is matched against the patterns of the libraries its scenario enables, once per suite; repeated lines and repeated sequences cost nothing more. A scenario that enables no `'fixtures'`-mode library costs nothing; once it enables one, all of its enabled libraries are matched, because Yadda ranks across them, so keep fixtures libraries out of `defaultLibraries` unless every scenario needs them. With every line distinct, 16,000 lines against 500 patterns in one library takes about 5 seconds, and Playwright loads the spec in the runner and in each worker, so split large libraries by `@Libraries` to keep what each scenario matches small.
-- **Unknown libraries** fail the scenario with `UnknownLibraryError` when it runs. If the registry has a `'fixtures'`-mode library, a warning is also logged when the suite is declared, once per problem in each process, saying that only `page` and `context` are set up for those scenarios.
+- **Unknown libraries** fail the scenario with `UnknownLibraryError` when it runs. If the registry has a `'fixtures'`-mode library, a warning is also logged when the suite is declared (once per run, like the warnings about special tags), saying that only `page` and `context` are set up for those scenarios.
 
 ### The scenario context in `'fixtures'` steps
 

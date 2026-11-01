@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defineFeature, parseFeature } from "./feature.js";
 import { createLibraryRegistry } from "./registry.js";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
-import { resetWarningsForTests, resolveTags } from "./tags.js";
+import { resolveTags } from "./tags.js";
+import { resetWarningsForTests } from "./warnings.js";
 
 afterEach(() => vi.restoreAllMocks());
 beforeEach(() => resetWarningsForTests());
@@ -161,6 +162,23 @@ describe("resolveTags", () => {
       resolveTags({ "timeout:soon": true });
       expect(warn).toHaveBeenCalledTimes(3);
     });
+  });
+
+  it("returns the warnings it gives, with where they are about, even when asked to be quiet", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { warnings } = resolveTags(
+      { "timeout:soon": true },
+      { "mode:serial": true },
+      {
+        quiet: true,
+        where: '"F" > "S"',
+      },
+    );
+    expect(warn).not.toHaveBeenCalled();
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toContain('(got soon) ("F" > "S")');
+    expect(warnings[1]).toContain("ignoring @mode on a scenario");
+    expect(resolveTags({ slow: true }).warnings).toEqual([]);
   });
 
   it("leaves unknown tags inert", () => {

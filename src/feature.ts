@@ -11,6 +11,7 @@ import {
   usesFixturesMode,
   withScenarioFixtures,
 } from "./fixtures.js";
+import { extractLibraryNames } from "./annotations.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
@@ -61,15 +62,59 @@ export function parseFeature(
 }
 
 /**
- * Load and parse a feature from a local file
+ * Tags a feature file's path gives: every `@`-prefixed directory below `root`, and the file's own
+ * name when it starts with `@` (`@smoke.feature`, `@smoke.yadda.feature`). Returned without the `@`,
+ * outermost first, so `features/@game/@mode:serial/x.feature` gives `["game", "mode:serial"]`.
+ * Without a `root` only the file name counts.
+ */
+export function pathTagsOf(filepath: string, root?: string): string[] {
+  const absolute = path.resolve(filepath);
+  const relative = root ? path.relative(path.resolve(root), absolute) : path.basename(absolute);
+  const segments = relative.split(path.sep).filter((segment) => segment && segment !== "..");
+  const file = segments.pop();
+  const names = segments.filter((segment) => segment.startsWith("@"));
+  if (file?.startsWith("@"))
+    names.push(file.slice(0, file.indexOf(".") < 0 ? undefined : file.indexOf(".")));
+  const tags: string[] = [];
+  for (const name of names) {
+    const tag = name.slice(1).trim().toLowerCase();
+    if (tag && !tags.includes(tag)) tags.push(tag);
+  }
+  return tags;
+}
+
+/** The part of a tag before a `:`, which is what an explicit tag of the same name overrides */
+const tagName = (tag: string) => tag.split(":")[0]!.trim().toLowerCase();
+
+/**
+ * Add path tags to a feature. A tag written in the file wins over a path tag of the same name
+ * (`@mode:parallel` in the file beats `@mode:serial/` in the path), and libraries from both are used.
+ */
+function applyPathTags(feature: ParsedFeature, tags: string[]): void {
+  if (tags.length === 0) return;
+  feature.pathTags = tags;
+  const annotations: Record<string, string | boolean | undefined> = { ...feature.annotations };
+  const explicit = new Set(Object.keys(annotations).map(tagName));
+  for (const tag of tags) {
+    if (!explicit.has(tagName(tag))) annotations[tag] = true;
+  }
+  feature.annotations = annotations;
+}
+
+/**
+ * Load and parse a feature from a local file. With a `root`, the `@` directories between it and the
+ * file tag the feature, and so does an `@` file name; see `pathTagsOf`.
  */
 export function loadFeatureFile(
   filepath: string,
   parserType: "auto" | "gherkin" | "markdown" = "auto",
   language?: Yadda.Language,
+  root?: string,
 ): ParsedFeature {
   const content = fs.readFileSync(filepath, "utf8");
-  return parseFeature(content, parserType, filepath, language);
+  const feature = parseFeature(content, parserType, filepath, language);
+  applyPathTags(feature, pathTagsOf(filepath, root));
+  return feature;
 }
 
 /**
@@ -170,9 +215,29 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
 
   const detailsSupported = supportsTestDetails();
 
+  /**
+   * The feature's annotations, with the path tags that name a registered library added to its
+   * `@Libraries`. They count as the feature's own, so a scenario's `@Libraries` merges with them or,
+   * with `override` inheritance, replaces them.
+   */
+  const annotationsOf = (parsedFeature: ParsedFeature) => {
+    const named = (parsedFeature.pathTags ?? []).filter((tag) => registry.has(tag));
+    if (named.length === 0) return parsedFeature.annotations;
+    const key = resolveOpts.annotationKey ?? "libraries";
+    const annotations = { ...parsedFeature.annotations };
+    const existing = extractLibraryNames(annotations, key);
+    for (const name of named) if (!existing.includes(name)) existing.push(name);
+    for (const k of Object.keys(annotations))
+      if (k.trim().toLowerCase() === key) delete annotations[k];
+    annotations[key] = existing.join(", ");
+    return annotations;
+  };
+
   const resolveOpts: ResolveLibrariesOptions<K> = {};
   if (defaultLibraries !== undefined) resolveOpts.defaultLibraries = defaultLibraries;
   if (libraryInheritance !== undefined) resolveOpts.inheritance = libraryInheritance;
+
+  const featureAnnotations = annotationsOf(feature);
 
   /**
    * Fixtures to set up for a scenario: `page` and `context`, which the default scenario context is
@@ -188,7 +253,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     const names = new Set<string>(BASE_FIXTURE_NAMES);
     try {
       const libraries = registry.resolve(
-        parsedFeature.annotations,
+        parsedFeature === feature ? featureAnnotations : annotationsOf(parsedFeature),
         scenario.annotations,
         resolveOpts,
       );
@@ -268,7 +333,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
 
         // 1. Resolve step libraries dynamically for this specific scenario
-        const libraries = registry.resolve(feature.annotations, scenario.annotations, resolveOpts);
+        const libraries = registry.resolve(featureAnnotations, scenario.annotations, resolveOpts);
 
         // 2. Build isolated Yadda runner instance
         const yadda = createScenarioYadda(libraries);
@@ -349,8 +414,10 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
         files.push(path.resolve(target));
       }
 
+      // A directory is the root `@` directories are counted from; for a single file only its name is
+      const root = fs.existsSync(target) && fs.statSync(target).isDirectory() ? target : undefined;
       for (const file of files) {
-        parsedFeatures.push(loadFeatureFile(file, parserType, language));
+        parsedFeatures.push(loadFeatureFile(file, parserType, language, root));
       }
     }
   }

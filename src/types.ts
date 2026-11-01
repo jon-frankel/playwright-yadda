@@ -90,6 +90,11 @@ export interface ParsedFeature {
   /** Path of the file the feature was loaded from, when it came from one */
   filepath?: string;
   annotations?: AnnotationRecord;
+  /**
+   * Tags taken from `@`-prefixed directory and file names in the feature's path (without the `@`).
+   * Those that name a registered library also select it.
+   */
+  pathTags?: string[];
   description?: string[];
   scenarios: ParsedScenario[];
   rules?: unknown[];

@@ -126,8 +126,8 @@ features/
     └── wip.feature          # tag: skip
 ```
 
-- Every tag is added to the feature's annotations as a flag, like a bare `@tag` written in the file, and to each scenario's Playwright tags as `@tag`, so `playwright test --grep @slow` and `--tag` find them. A file name loses its extensions: `@admin.yadda.feature` is `@admin`. Names are not case-sensitive in annotations.
-- A tag that is a key in your registry loads that library, as `@Libraries=storefront` would: `features/@storefront/cart.feature` runs with `common` and `storefront`. Tags that name no library, like `@slow`, are left as tags.
+- Every tag is added to the feature's annotations as a flag, like a bare `@tag` written in the file, and to each scenario's Playwright tags as `@tag`, so `playwright test --grep @slow` (or `--grep-invert`) finds them. This needs Playwright 1.42 or later; on older versions the tags are not sent. A file name loses its extension: `@admin.yadda.feature` is `@admin`. Names are not case-sensitive in annotations.
+- A tag that is a key in your registry loads that library, as `@Libraries=storefront` would (under the registry's `annotationKey`, if you set one): `features/@storefront/cart.feature` runs with `common` and `storefront`. Tags that name no library, like `@slow`, are left as tags.
 - Special tags work as directory names too: `@skip/` and `@pending/` skip the scenarios inside, `@only/` runs only them.
 - Only the part of the path below the directory you give counts, so an `@` further up (a checkout under `~/@work/`) tags nothing. A single file path counts only its own name.
 

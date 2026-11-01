@@ -28,6 +28,8 @@ export interface ILibraryRegistryManager<K extends string = string> {
     scenarioAnnotations?: AnnotationRecord,
     options?: ResolveLibrariesOptions<K>,
   ): StepLibrary[];
+  /** Options the registry resolves with, when it keeps any (`LibraryRegistryManager` does) */
+  readonly options?: ResolveLibrariesOptions<K>;
   getAvailableKeys(): string[];
   has(name: string): boolean;
   get(name: string): StepLibrary | undefined;

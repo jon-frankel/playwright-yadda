@@ -29,15 +29,23 @@ describe("tagsFromPath", () => {
     expect(tagsFromPath(at("@admin", "@orders.md"), root)).toEqual(["admin", "orders"]);
   });
 
-  it("keeps special tags such as @mode:serial and the case", () => {
-    expect(tagsFromPath(at("@mode:serial", "@Slow", "a.feature"), root)).toEqual([
-      "mode:serial",
-      "Slow",
-    ]);
+  it("keeps the case and dots in directory names", () => {
+    expect(tagsFromPath(at("@v1.2", "@Slow", "a.feature"), root)).toEqual(["v1.2", "Slow"]);
   });
 
-  it("lists a repeated tag once", () => {
+  it("drops only a feature file's extension, so dots in the name stay", () => {
+    expect(tagsFromPath(at("@v1.2.feature"), root)).toEqual(["v1.2"]);
+    expect(tagsFromPath(at("@v1.2.markdown"), root)).toEqual(["v1.2"]);
+    expect(tagsFromPath(at("@v1.2.yadda.feature"), root)).toEqual(["v1.2"]);
+  });
+
+  it("lists a repeated tag once, whatever its case", () => {
     expect(tagsFromPath(at("@game", "@game.feature"), root)).toEqual(["game"]);
+    expect(tagsFromPath(at("@Game", "@game.feature"), root)).toEqual(["Game"]);
+  });
+
+  it("does not take a directory named like '..foo' for one outside the root", () => {
+    expect(tagsFromPath(at("..foo", "@x", "a.feature"), root)).toEqual(["x"]);
   });
 
   it("ignores a bare @ and the root's own name", () => {
@@ -105,19 +113,25 @@ describe("path tags in a loaded feature", () => {
     expect(loaded.pathTags).toEqual(["game"]);
   });
 
-  it("finds features through defineFeatureSuite, relative to the directory given", () => {
+  it("finds features through defineFeatureSuite, relative to the directory given", async () => {
     // The directory given has an @ in its own name, which must not count
     const outer = path.join(dir, "@outer");
     write("@outer/@storefront/a.feature", feature());
     write("@outer/plain/b.feature", feature());
     const test = mockTest();
+    const ran: string[] = [];
     const registry = createLibraryRegistry({
-      common: new Yadda.Library().define("a step", () => {}),
-      storefront: new Yadda.Library(),
+      common: new Yadda.Library(),
+      storefront: new Yadda.Library().define("a step", () => {
+        ran.push("storefront");
+      }),
     });
     defineFeatureSuite({ test, registry, features: outer });
     const tags = test.mock.calls.map((call: any[]) => call[1].tag);
     expect(tags).toEqual([["@storefront"], undefined]);
+    // and the library the tag names is the one that runs
+    await test.mock.calls[0][2]({ page: {}, context: {} });
+    expect(ran).toEqual(["storefront"]);
   });
 
   describe("defineFeature", () => {
@@ -200,13 +214,14 @@ describe("path tags in a loaded feature", () => {
     });
 
     it("lets a scenario's @Libraries replace path libraries under override", async () => {
-      const text2 = `Feature: F\n  @Libraries=admin\n  Scenario: S\n    Given admin step\n`;
+      // `storefront step` is only in a library the path loaded, which override drops
+      const text2 = `Feature: F\n  @Libraries=admin\n  Scenario: S\n    Given admin step\n    And storefront step\n`;
       const { ran, body } = await run({
         file: "@storefront/a.feature",
         text: text2,
         libraryInheritance: "override",
       });
-      await body[0][1]({ page: {}, context: {} });
+      await expect(body[0][1]({ page: {}, context: {} })).rejects.toThrow(/storefront step/);
       expect(ran).toEqual(["admin"]);
     });
 
@@ -239,6 +254,35 @@ describe("path tags in a loaded feature", () => {
         expect.anything(),
         expect.any(Function),
       );
+    });
+
+    it("treats @pending and @only directories like the explicit annotations", async () => {
+      const pending = await run({ file: "@pending/a.feature", text: text() });
+      expect(pending.test.skip).toHaveBeenCalled();
+      const only = await run({ file: "@only/a.feature", text: text() });
+      expect(only.test.only).toHaveBeenCalled();
+    });
+
+    it("loads path libraries under the registry's own annotation key", async () => {
+      const ran: string[] = [];
+      const common = new Yadda.Library();
+      const storefront = new Yadda.Library();
+      steps(common, "common", ran);
+      steps(storefront, "storefront", ran);
+      const file = write(
+        "@storefront/a.feature",
+        "@libraries=common\nFeature: F\n  @steps=common\n  Scenario: S\n    Given common step\n    And storefront step\n",
+      );
+      const loaded = loadFeatureFile(file, "auto", undefined, dir);
+      const body: any[] = [];
+      const test = mockTest();
+      test.mockImplementation((_title: string, ...rest: any[]) => body.push(rest));
+      defineFeature(loaded, {
+        test,
+        registry: createLibraryRegistry({ common, storefront }, { annotationKey: "steps" }),
+      });
+      await body[0][1]({ page: {}, context: {} });
+      expect(ran).toEqual(["common", "storefront"]);
     });
   });
 });

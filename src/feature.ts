@@ -126,9 +126,6 @@ function supportsTestDetails(): boolean {
   }
 }
 
-/** Annotation naming a feature's step libraries */
-const LIBRARIES_KEY = "libraries";
-
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
 
@@ -182,17 +179,19 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   // A path tag that names a library in the registry loads it, as `@Libraries=name` would. Added
   // after the feature's own `@Libraries`, so those keep their order, and treated as the feature's
   // own: with "override", a scenario's `@Libraries` replaces it too.
+  // under the annotation key the registry reads (`libraries` unless it was made with another)
+  const librariesKey = (registry.options?.annotationKey ?? "libraries").trim().toLowerCase();
   const libraryTags = pathTags.filter((tag) => registry.has(tag));
   const featureAnnotations: AnnotationRecord | undefined =
     libraryTags.length > 0
       ? {
           ...Object.fromEntries(
             Object.entries(feature.annotations ?? {}).filter(
-              ([key]) => key.trim().toLowerCase() !== LIBRARIES_KEY,
+              ([key]) => key.trim().toLowerCase() !== librariesKey,
             ),
           ),
-          [LIBRARIES_KEY]: [
-            ...extractLibraryNames(feature.annotations, LIBRARIES_KEY),
+          [librariesKey]: [
+            ...extractLibraryNames(feature.annotations, librariesKey),
             ...libraryTags,
           ].join(", "),
         }
@@ -336,11 +335,9 @@ export function defineFeatureSuite<TCtx = DefaultScenarioContext, K extends stri
         files.push(path.resolve(target));
       }
 
+      // Path tags are relative to the directory given, or to the folder of a single file
+      const root = fs.statSync(target).isDirectory() ? target : path.dirname(path.resolve(target));
       for (const file of files) {
-        // Path tags are relative to the directory given, or to the folder of a single file
-        const root = fs.statSync(target).isDirectory()
-          ? target
-          : path.dirname(path.resolve(target));
         parsedFeatures.push(loadFeatureFile(file, parserType, language, root));
       }
     }

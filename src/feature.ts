@@ -167,8 +167,14 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         resolveOpts,
       );
       for (const name of collectScenarioFixtures(libraries, scenario.steps)) names.add(name);
-    } catch {
-      // An unknown library is reported when the scenario runs, as it always has been
+    } catch (error) {
+      // The scenario fails with this same error when it runs; this says why its fixtures are only
+      // the base ones, which would otherwise show up as a confusing "fixture not found" first
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `playwright-yadda: could not work out the fixtures for "${parsedFeature.title}" > ` +
+          `"${scenario.title}", so only ${BASE_FIXTURE_NAMES.join(" and ")} are set up for it: ${reason}`,
+      );
     }
     return [...names];
   };

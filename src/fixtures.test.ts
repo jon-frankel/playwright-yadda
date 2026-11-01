@@ -1,6 +1,6 @@
 /* oxlint-disable no-empty-pattern -- Playwright needs a destructuring pattern, even an empty one */
 import { test as base } from "@playwright/test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Yadda from "yadda";
 import { defineFeature, parseFeature } from "./feature.js";
 import {
@@ -316,12 +316,18 @@ describe("defineFeature with fixtures", () => {
     expect(seen).toEqual([{ page: "P", context: "C", account: "A", testInfo: "INFO" }]);
   });
 
-  it("still reports an unknown library when the scenario runs, not when it is declared", async () => {
+  it("warns about an unknown library when declared, and fails the scenario when it runs", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const { test, declared } = fakeTest();
     defineFeature(feature("missing", ["Given a thing"]), {
       test,
       registry: createLibraryRegistry({}, { defaultLibraries: [] }),
     });
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toMatch(
+      /"F" > "S".*page and context.*Unknown step library "missing"/,
+    );
+    warn.mockRestore();
 
     expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
     await expect(declared[0]!.fn({ page: "P", context: "C" }, {})).rejects.toThrow(

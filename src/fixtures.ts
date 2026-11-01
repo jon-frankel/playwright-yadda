@@ -50,6 +50,14 @@ export class FixtureDeclarationError extends Error {
 }
 
 // -- Reading the fixture names a step function destructures -----------------------------------
+//
+// This is not a JavaScript parser. Playwright decides what to set up by reading the text of the
+// test function's first parameter (`fixtureParameterNames`, which is not exported), and a step
+// has to be read the same way, since its destructuring is what names the fixtures. The helpers
+// below do just enough for that: cut out comments, find the parameter list, and split it and the
+// `{ a, b: c, d = 1 }` pattern on commas, skipping commas inside nested brackets and strings.
+// They never evaluate or interpret the code. Anything they cannot read (a rest property, a
+// parameter that is not destructured) is an error rather than a guess.
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 

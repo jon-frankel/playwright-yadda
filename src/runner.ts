@@ -54,14 +54,38 @@ export async function runScenarioSteps(
   steps: string[],
   context: unknown,
   testStep?: TestStepWrapper,
+  stepHooks?: StepHooks,
 ): Promise<void> {
+  const execute = async (stepText: string) => {
+    if (!stepHooks) return runStep(yadda, stepText, context);
+    // A failing `before` hook fails the step; `after` runs either way and sees the error
+    let error: unknown;
+    let failed = false;
+    try {
+      await stepHooks.before(stepText);
+      await runStep(yadda, stepText, context);
+    } catch (e) {
+      failed = true;
+      error = e;
+    }
+    try {
+      await stepHooks.after(stepText, failed ? error : undefined);
+    } catch (e) {
+      if (!failed) throw e;
+    }
+    if (failed) throw error;
+  };
   for (const stepText of steps) {
     if (testStep) {
-      await testStep(stepText, async () => {
-        await runStep(yadda, stepText, context);
-      });
+      await testStep(stepText, () => execute(stepText));
     } else {
-      await runStep(yadda, stepText, context);
+      await execute(stepText);
     }
   }
+}
+
+/** Called around each step: `after` is given what the step threw, if it failed */
+export interface StepHooks {
+  before(step: string): Promise<void>;
+  after(step: string, error?: unknown): Promise<void>;
 }

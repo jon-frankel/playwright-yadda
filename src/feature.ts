@@ -11,6 +11,7 @@ import {
   usesFixturesMode,
   withScenarioFixtures,
 } from "./fixtures.js";
+import { createHooks, runAll, type Hooks } from "./hooks.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
 import { resolveTags, type ResolvedTags } from "./tags.js";
@@ -140,6 +141,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext?: (fixtures: any) => Promise<TCtx> | TCtx;
     onBeforeScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
     onAfterScenario?: (scenario: ParsedScenario, context: TCtx) => Promise<void> | void;
+    /** Tag-filtered scenario, step and worker hooks, from `createHooks()` */
+    hooks?: Hooks;
     /**
      * Works out which fixtures a scenario's steps use. `defineFeatureSuite` makes one and shares it
      * between its features, so a step line is matched once for the suite; pass one when defining
@@ -156,6 +159,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     createContext,
     onBeforeScenario,
     onAfterScenario,
+    hooks = createHooks(),
     fixtureCollector,
   } = options;
 
@@ -220,6 +224,30 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
   test.describe(`Feature: ${feature.title}`, () => {
     configureDescribe(test, featureSettings);
 
+    // Worker hooks: `beforeAll`/`afterAll` of the feature's describe, when the feature's tags select them
+    const featureTags = resolveTags(feature.annotations, undefined, {
+      where: `"${feature.title}"`,
+      featureWarnings: false,
+    }).scenario.playwrightTags;
+    const workerArgs = (fixtures: any, testInfo: any) => ({
+      feature,
+      tags: featureTags,
+      fixtures: { ...fixtures, testInfo },
+      testInfo,
+    });
+    const beforeWorker = hooks.select("BeforeWorker", featureTags);
+    const afterWorker = hooks.select("AfterWorker", featureTags);
+    if (beforeWorker.length > 0 && typeof test.beforeAll === "function") {
+      test.beforeAll(async (fixtures: any, testInfo: any) =>
+        runAll(beforeWorker, workerArgs(fixtures, testInfo), { stopOnError: true }),
+      );
+    }
+    if (afterWorker.length > 0 && typeof test.afterAll === "function") {
+      test.afterAll(async (fixtures: any, testInfo: any) =>
+        runAll(afterWorker, workerArgs(fixtures, testInfo)),
+      );
+    }
+
     for (const scenario of feature.scenarios) {
       const { scenario: tags, own } = resolveTags(feature.annotations, scenario.annotations, {
         where: `"${feature.title}" > "${scenario.title}"`,
@@ -282,20 +310,54 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
               testInfo,
             } as unknown as TCtx);
 
-        // 4. Lifecycle before hook
-        if (onBeforeScenario) {
-          await onBeforeScenario(scenario, ctx);
-        }
+        // 4. Lifecycle before hooks
+        const hookArgs = {
+          feature,
+          scenario,
+          ctx,
+          fixtures,
+          tags: tags.playwrightTags,
+        };
+        const beforeScenarioHooks = hooks.select("BeforeScenario", tags.playwrightTags);
+        const afterScenarioHooks = hooks.select("AfterScenario", tags.playwrightTags);
+        const beforeStepHooks = hooks.select("BeforeStep", tags.playwrightTags);
+        const afterStepHooks = hooks.select("AfterStep", tags.playwrightTags);
+        const stepHooks =
+          beforeStepHooks.length > 0 || afterStepHooks.length > 0
+            ? {
+                before: (step: string) =>
+                  runAll(beforeStepHooks, { ...hookArgs, step }, { stopOnError: true }),
+                after: (step: string, error?: unknown) =>
+                  runAll(afterStepHooks, { ...hookArgs, step, error }),
+              }
+            : undefined;
 
-        // 5. Execute steps wrapped in test.step()
-        await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
-          runScenarioSteps(yadda, scenario.steps, ctx, test.step),
-        );
+        // `AfterScenario` hooks run once the scenario has started, even when it fails
+        let failure: { error: unknown } | undefined;
+        try {
+          if (onBeforeScenario) {
+            await onBeforeScenario(scenario, ctx);
+          }
+          await runAll(beforeScenarioHooks, hookArgs, { stopOnError: true });
 
-        // 6. Lifecycle after hook
-        if (onAfterScenario) {
-          await onAfterScenario(scenario, ctx);
+          // 5. Execute steps wrapped in test.step()
+          await withScenarioFixtures({ ...stepFixtures, [TEST_INFO_KEY]: testInfo }, () =>
+            runScenarioSteps(yadda, scenario.steps, ctx, test.step, stepHooks),
+          );
+
+          // 6. Lifecycle after hook (only after a scenario that passed)
+          if (onAfterScenario) {
+            await onAfterScenario(scenario, ctx);
+          }
+        } catch (error) {
+          failure = { error };
         }
+        try {
+          await runAll(afterScenarioHooks, hookArgs);
+        } catch (error) {
+          failure ??= { error };
+        }
+        if (failure) throw failure.error;
       };
 
       const declareScenario = () =>

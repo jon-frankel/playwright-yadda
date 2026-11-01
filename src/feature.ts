@@ -90,12 +90,8 @@ export function pathTagsOf(filepath: string, root?: string): string[] {
     if (!tag) continue;
     // Playwright's `--grep` cannot match a tag with a space in it
     if (/\s/.test(tag)) {
-      if (!warned.has(tag)) {
-        warned.add(tag);
-        console.warn(
-          `playwright-yadda: ignoring the path tag "@${tag}" (${filepath}): it has whitespace`,
-        );
-      }
+      // No scenario carries this warning, so only the loader can print it
+      warnOnce(`ignoring the path tag "@${tag}" (${filepath}): it has whitespace`, false);
       continue;
     }
     if (!tags.includes(tag)) tags.push(tag);

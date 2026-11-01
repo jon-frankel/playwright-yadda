@@ -390,6 +390,7 @@ Feature: Pending Feature
       });
 
       it("keeps the case of a value and ignores names with whitespace", () => {
+        resetWarningsForTests();
         const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
         const feature = loadFeatureFile(
           write("@Env=Staging/@two words/c.feature"),

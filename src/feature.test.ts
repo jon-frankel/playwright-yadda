@@ -135,6 +135,31 @@ Feature: Pending Feature
     expect(mockTest.skip).toHaveBeenCalledWith("Scenario: Pending Scenario", expect.any(Function));
   });
 
+  it("should attach the feature file to a pending scenario, whose body never runs", () => {
+    const feature = parseFeature(
+      "Feature: Pending Feature\n  @Pending\n  Scenario: Pending Scenario\n    Given step one\n",
+      "gherkin",
+      "features/pending.feature",
+    );
+    const mockTest: any = Object.assign(vi.fn<() => void>(), {
+      describe: (_: string, fn: any) => fn(),
+      skip: vi.fn<() => void>(),
+      only: vi.fn<() => void>(),
+      step: vi.fn<() => void>(),
+    });
+
+    defineFeature(feature, {
+      test: mockTest,
+      registry: createLibraryRegistry({ common: new Yadda.Library() }),
+    });
+
+    expect(mockTest.skip).toHaveBeenCalledWith(
+      "Scenario: Pending Scenario",
+      { annotation: { type: "feature-file", description: feature.filepath } },
+      expect.any(Function),
+    );
+  });
+
   it("should run through defineFeatureSuite with pre-parsed features", async () => {
     const feature = parseFeature(gherkinText);
     const mockTest: any = Object.assign(vi.fn<() => void>(), {

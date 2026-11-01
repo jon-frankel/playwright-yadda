@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
 import { isScenarioOnly, isScenarioPending } from "./annotations.js";
@@ -89,6 +90,20 @@ export function findFeatureFiles(targetPath: string): string[] {
   return files.sort();
 }
 
+/**
+ * Whether the installed Playwright accepts a details object (`{ annotation }`) in `test(title, details, fn)`,
+ * which it has done since 1.42.
+ */
+function supportsTestDetails(): boolean {
+  try {
+    const { version } = createRequire(import.meta.url)("@playwright/test/package.json");
+    const [major = 0, minor = 0] = String(version).split(".").map(Number);
+    return major > 1 || (major === 1 && minor >= 42);
+  } catch {
+    return false;
+  }
+}
+
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -126,6 +141,8 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
           inheritance: libraryInheritance,
         });
 
+  const detailsSupported = supportsTestDetails();
+
   test.describe(`Feature: ${feature.title}`, () => {
     for (const scenario of feature.scenarios) {
       const isPending = isScenarioPending(feature.annotations, scenario.annotations);
@@ -134,6 +151,15 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       let testFn = test;
       if (isPending) {
         testFn = test.skip;
+        // A skipped scenario's body never runs, so its feature file has to be attached up front
+        if (feature.filepath && detailsSupported) {
+          testFn = (title: string, body: unknown) =>
+            test.skip(
+              title,
+              { annotation: { type: FEATURE_FILE_ANNOTATION, description: feature.filepath } },
+              body,
+            );
+        }
       } else if (isOnly) {
         testFn = test.only;
       }

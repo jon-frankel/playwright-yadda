@@ -131,19 +131,16 @@ export default class YaddaReporter implements Reporter {
     lines.push(`${mark} ${bold(heading[heading.length - 1] ?? test.title)}${retry}${duration}`);
 
     const steps = result.steps.filter((s) => s.category === "test.step");
-    // Playwright sets no error on the step still running when the test times out or is interrupted
+    // Playwright sets no error on the step still running when the test times out or is
+    // interrupted; such a step has not ended, which it reports as a negative duration
     const cutShort = status === "timedOut" || status === "interrupted";
-    const cutShortStep =
-      cutShort && !steps.some((s) => s.error) ? steps[steps.length - 1] : undefined;
     let errorShown = false;
     for (const step of steps) {
-      const failedStep = !!step.error || step === cutShortStep;
+      const failedStep = !!step.error || (cutShort && step.duration < 0);
       lines.push(`    ${failedStep ? red("✗") : green("✓")} ${step.title}`);
-      if (failedStep) {
-        if (step.error) {
-          errorShown = true;
-          lines.push(indent(red(formatError(step.error, this.isInternalFrame)), "        "));
-        }
+      if (step.error) {
+        errorShown = true;
+        lines.push(indent(red(formatError(step.error, this.isInternalFrame)), "        "));
       }
     }
 

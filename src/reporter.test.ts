@@ -43,8 +43,8 @@ function makeTest(scenario: string, retries = 0): TestCase {
   } as unknown as TestCase;
 }
 
-function makeStep(title: string, error?: TestError): TestStep {
-  return { title, category: "test.step", error, steps: [] } as unknown as TestStep;
+function makeStep(title: string, error?: TestError, duration = 4): TestStep {
+  return { title, category: "test.step", error, duration, steps: [] } as unknown as TestStep;
 }
 
 function makeResult(
@@ -135,7 +135,7 @@ describe("YaddaReporter", () => {
       makeResult(
         "timedOut",
         0,
-        [makeStep("Given a good step"), makeStep("When a step never resolves")],
+        [makeStep("Given a good step"), makeStep("When a step never resolves", undefined, -1)],
         [timeout],
       ),
     );
@@ -143,5 +143,21 @@ describe("YaddaReporter", () => {
     const lines = stdout().split("\n");
     expect(lines).toContain("    ✓ Given a good step");
     expect(lines).toContain("    ✗ When a step never resolves");
+  });
+
+  it("leaves every step ✓ when the test times out after the steps finished", () => {
+    const reporter = new YaddaReporter();
+    const timeout: TestError = { message: "Test timeout of 1000ms exceeded." };
+
+    // e.g. a hook after the steps hangs: all steps ended, so none reports a negative duration
+    reporter.onTestEnd(
+      makeTest("Hangs after"),
+      makeResult("timedOut", 0, [makeStep("Given a good step")], [timeout]),
+    );
+
+    const lines = stdout().split("\n");
+    expect(lines).toContain("    ✓ Given a good step");
+    expect(lines.some((l) => l.includes("✗ Given"))).toBe(false);
+    expect(stdout()).toContain("Test timeout of 1000ms exceeded.");
   });
 });

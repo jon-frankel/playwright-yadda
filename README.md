@@ -209,7 +209,7 @@ A fixture none of those steps destructures is not set up, so an expensive fixtur
 
 ### When fixtures are set up
 
-Playwright sets up a test's fixtures before its first step runs and tears them down after its last, as for any test. So every fixture the scenario's steps use, including those of `Background:` steps, exists for the whole scenario, even if only the final step uses it. A fixture that throws while being set up fails the scenario before any step runs, and the failure is not tied to a step. Fixtures a step uses are set up in the order Playwright resolves their dependencies, not the order the steps use them. `page` and `context` are always set up, so a scenario that only needs `request` still launches a browser.
+Playwright sets up a test's fixtures before its first step runs and tears them down after its last, as for any test. So every fixture the scenario's steps use, including those of `Background:` steps, exists for the whole scenario, even if only the final step uses it. A fixture that throws while being set up fails the scenario before any step runs, and the failure is not tied to a step. They are set up in the order the scenario's steps first use them (after `page` and `context`), with a fixture's own dependencies first. `page` and `context` are always set up, so a scenario that only needs `request` still launches a browser.
 
 Limits of reading the pattern from the step definition:
 
@@ -218,11 +218,11 @@ Limits of reading the pattern from the step definition:
 - **Pass the function you wrote.** The names are read from `fn.toString()`. A wrapped or `.bind()`-ed function hides its parameters, and so would a bundler that rewrites destructuring (a minifier keeps the property names, which is all that is read).
 - **Plain identifiers.** Fixture names like `"my-fixture"` cannot be destructured this way; Playwright reads them the same way.
 - **Step styles are Yadda's own.** A step may be sync, return a promise, or take a trailing `next` callback; the first argument is just replaced by the fixtures.
-- **A fixture the `test` does not have stops the whole run.** Playwright rejects a test that names an unknown fixture when it loads the spec file, so one typo in one step means no tests run. The message is only `Test has unknown parameter "pgae"`: it names no file, scenario or step, so search the step libraries for the name. `testInfo` is the common one: the `TestInfo` is `$testInfo` here, and `testInfo` throws when the step is defined.
+- **A fixture the `test` does not have stops the whole run.** Playwright rejects a test that names an unknown fixture when it loads the spec file, so one typo in one step means no tests run. The message is `Test has unknown parameter "pgae"`, shown at a line inside playwright-yadda (`src/feature.ts`), not at your step, scenario or feature file, so search your step libraries for the name. `testInfo` is the common one: the `TestInfo` is `$testInfo` here, and `testInfo` throws when the step is defined.
 - **Define every step library before the suite is declared.** The fixtures are collected when `defineFeatureSuite` runs. A step defined later fails when it runs with an error naming the fixture it did not get, instead of receiving `undefined`.
 - **Names starting with `$`** are fixtures too, except `$testInfo`.
 - **Declaring the suite does the matching up front.** Each distinct step line is matched against the patterns of the libraries its scenario enables, once per suite; repeated lines and repeated sequences cost nothing more. A scenario that enables no `'fixtures'`-mode library costs nothing; once it enables one, all of its enabled libraries are matched, because Yadda ranks across them, so keep fixtures libraries out of `defaultLibraries` unless every scenario needs them. With every line distinct, 16,000 lines against 500 patterns in one library takes about 5 seconds, and Playwright loads the spec in the runner and in each worker, so split large libraries by `@Libraries` to keep what each scenario matches small.
-- **Unknown libraries** log a warning when the suite is declared (only `page` and `context` are set up for that scenario), and the scenario fails with `UnknownLibraryError` when it runs.
+- **Unknown libraries** fail the scenario with `UnknownLibraryError` when it runs. If the registry has a `'fixtures'`-mode library, a warning is also logged when the suite is declared, once per problem in each process, saying that only `page` and `context` are set up for those scenarios.
 
 ### The scenario context in `'fixtures'` steps
 

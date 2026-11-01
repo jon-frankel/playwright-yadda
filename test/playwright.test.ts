@@ -1,17 +1,25 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const project = path.join(root, "test", "playwright");
+
+/** This process's environment without anything that would move Playwright's JSON report off stdout */
+function cleanEnv() {
+  const env = { ...process.env, FORCE_COLOR: "0" };
+  for (const name of Object.keys(env))
+    if (name.startsWith("PLAYWRIGHT_JSON_OUTPUT")) delete env[name];
+  return env;
+}
 
 /** Run one spec of test/playwright with the real Playwright CLI and read its JSON report */
 function runPlaywright(spec: string) {
   const run = spawnSync(
     path.join(root, "node_modules", ".bin", "playwright"),
     ["test", spec, "--config", path.join(project, "playwright.config.ts")],
-    { cwd: project, encoding: "utf8", env: { ...process.env, FORCE_COLOR: "0" } },
+    { cwd: project, encoding: "utf8", env: cleanEnv() },
   );
   let report: any;
   try {
@@ -35,8 +43,14 @@ function specsOf(suite: { specs?: Spec[]; suites?: any[] }): Spec[] {
 describe("fixtures with the real Playwright", () => {
   // Playwright reads each generated test callback itself, so this is the proof that its own parser
   // accepts what is generated and sets up exactly what the scenario's steps destructure
-  const { report, status } = runPlaywright("fixtures.spec.ts");
-  const specs = report ? specsOf(report) : [];
+  let status: number | null;
+  let specs: Spec[] = [];
+  beforeAll(() => {
+    const run = runPlaywright("fixtures.spec.ts");
+    status = run.status;
+    specs = run.report ? specsOf(run.report) : [];
+  }, 60_000);
+
   const setUps = (title: string) =>
     specs
       .find((spec) => spec.title === `Scenario: ${title}`)
@@ -45,7 +59,7 @@ describe("fixtures with the real Playwright", () => {
 
   it("runs every scenario to a pass", () => {
     expect(status).toBe(0);
-    expect(specs).toHaveLength(4);
+    expect(specs).toHaveLength(5);
     for (const spec of specs) expect(spec.tests[0]?.results[0]?.status).toBe("passed");
   });
 
@@ -58,6 +72,10 @@ describe("fixtures with the real Playwright", () => {
     expect(setUps("Uses a worker fixture")).toEqual([]);
     expect(setUps("Uses no custom fixture")).toEqual([]);
   });
+
+  it("sets up the fixtures of a scenario in the order its steps first use them", () => {
+    expect(setUps("Uses two custom fixtures")).toEqual(["expensive", "account"]);
+  });
 });
 
 describe("a fixture the test does not have", () => {
@@ -67,5 +85,5 @@ describe("a fixture the test does not have", () => {
     expect(report?.stats?.expected ?? 0).toBe(0);
     const messages = (report?.errors ?? []).map((error: { message: string }) => error.message);
     expect(messages.join("\n")).toMatch(/unknown parameter "pgae"/);
-  });
+  }, 60_000);
 });

@@ -64,6 +64,10 @@ Feature: Fixtures
 
   Scenario: Uses another custom fixture
     Then an expensive thing is checked
+
+  Scenario: Uses two custom fixtures
+    Then an expensive thing is checked
+    And a signed-in user
 `);
 
 defineFeatureSuite({

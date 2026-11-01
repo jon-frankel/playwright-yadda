@@ -590,19 +590,19 @@ describe("defineFeature with fixtures", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const uses = createStepLibrary(undefined, "fixtures");
     const { test, declared } = fakeTest();
-    defineFeature(feature("missing", ["Given a thing"]), {
+    defineFeature(feature("missing-in-warning-test", ["Given a thing"]), {
       test,
       registry: createLibraryRegistry({ uses }, { defaultLibraries: [] }),
     });
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0]?.[0]).toMatch(
-      /"F" > "S".*page and context.*Unknown step library "missing"/,
+      /"F" > "S".*page and context.*Unknown step library "missing-in-warning-test"/,
     );
     warn.mockRestore();
 
     expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
     await expect(declared[0]!.fn({ page: "P", context: "C" }, {})).rejects.toThrow(
-      /Unknown step library "missing"/,
+      /Unknown step library "missing-in-warning-test"/,
     );
   });
 

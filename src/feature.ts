@@ -125,6 +125,17 @@ function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
 
+/** What a running scenario still owes its After hooks if Playwright abandons its body */
+interface OwedHooks {
+  args: Record<string, unknown>;
+  afterScenario: ReturnType<Hooks["select"]>;
+  afterStep: ReturnType<Hooks["select"]>;
+  /** The step in progress, if any */
+  step?: string | undefined;
+  /** The body has reached its own After hooks, so `afterEach` leaves them to it */
+  started: boolean;
+}
+
 /** Test annotation type carrying the path of the feature file a scenario came from */
 export const FEATURE_FILE_ANNOTATION = "feature-file";
 
@@ -235,6 +246,31 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
       featureWarnings: false,
     }).scenario.playwrightTags;
     const workerArgs = (testInfo: any) => ({ feature, tags: featureTags, testInfo });
+    // Playwright abandons a test's body when it times out, so its own `finally` never runs. What
+    // each running scenario still owes is kept here for `afterEach`, which Playwright does run.
+    const owed = new Map<string, OwedHooks>();
+    if (typeof test.afterEach === "function") {
+      // oxlint-disable-next-line no-empty-pattern
+      test.afterEach(async ({}: any, testInfo: any) => {
+        const state = owed.get(testInfo.testId);
+        owed.delete(testInfo.testId);
+        if (!state || state.started) return;
+        const timeout = testInfo.error ?? new Error("The test did not finish (timed out)");
+        try {
+          if (state.step !== undefined) {
+            await runAll(state.afterStep, { ...state.args, step: state.step, error: timeout });
+          }
+        } catch (error) {
+          warnSuppressed("AfterStep", error);
+        }
+        try {
+          await runAll(state.afterScenario, state.args);
+        } catch (error) {
+          warnSuppressed("AfterScenario", error);
+        }
+      });
+    }
+
     const beforeWorker = hooks.select("BeforeWorker", featureTags);
     const afterWorker = hooks.select("AfterWorker", featureTags);
     if (beforeWorker.length > 0 && typeof test.beforeAll === "function") {
@@ -323,17 +359,31 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         const afterScenarioHooks = hooks.select("AfterScenario", tags.playwrightTags);
         const beforeStepHooks = hooks.select("BeforeStep", tags.playwrightTags);
         const afterStepHooks = hooks.select("AfterStep", tags.playwrightTags);
+        const state: OwedHooks = {
+          args: hookArgs,
+          afterScenario: afterScenarioHooks,
+          afterStep: afterStepHooks,
+          started: false,
+        };
+        if (testInfo?.testId !== undefined) owed.set(testInfo.testId, state);
         const stepHooks =
           beforeStepHooks.length > 0 || afterStepHooks.length > 0
             ? {
-                before: (step: string) =>
-                  runAll(beforeStepHooks, { ...hookArgs, step }, { stopOnError: true }),
-                after: (step: string, error?: unknown) =>
-                  runAll(afterStepHooks, { ...hookArgs, step, error }).catch((hookError) => {
+                before: (step: string) => {
+                  state.step = step;
+                  return runAll(beforeStepHooks, { ...hookArgs, step }, { stopOnError: true });
+                },
+                after: async (step: string, error?: unknown) => {
+                  try {
+                    await runAll(afterStepHooks, { ...hookArgs, step, error });
+                  } catch (hookError) {
                     // the step's own error is the one reported
                     if (error === undefined) throw hookError;
-                    warnSuppressed("AfterStep", hookError);
-                  }),
+                    if (hookError !== error) warnSuppressed("AfterStep", hookError);
+                  } finally {
+                    state.step = undefined;
+                  }
+                },
               }
             : undefined;
 
@@ -357,6 +407,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         } catch (error) {
           failure = { error };
         }
+        state.started = true;
         try {
           await runAll(afterScenarioHooks, hookArgs);
         } catch (error) {

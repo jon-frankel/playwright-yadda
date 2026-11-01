@@ -17,6 +17,9 @@ const test = base.extend({
 
 const steps = createStepLibrary();
 steps.given("a step that passes", async () => {});
+steps.given("a step that hangs", async () => {
+  await new Promise(() => {});
+});
 steps.given("a step that fails", async () => {
   throw new Error("step failed");
 });
@@ -45,6 +48,10 @@ Feature: Hooks
   @mobile
   Scenario: Tagged
     Given a step that passes
+
+  @timeout:1500
+  Scenario: Times out
+    Given a step that hangs
 
   @fail
   Scenario: Fails

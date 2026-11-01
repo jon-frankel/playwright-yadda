@@ -235,9 +235,13 @@ describe("hooks with the real Playwright", () => {
       ?.tests[0]?.annotations.filter((a) => a.type === "hook")
       .map((a) => a.description);
 
-  it("loads the spec and passes (the failing scenario is @fail)", () => {
-    expect(status).toBe(0);
-    expect(specs).toHaveLength(2);
+  it("loads the spec; only the scenario that times out fails the run", () => {
+    expect(status).toBe(1);
+    const results = specs.map((spec) => [spec.title, spec.tests[0]?.status]);
+    expect(results.filter(([, outcome]) => outcome === "unexpected")).toEqual([
+      ["Scenario: Times out", "unexpected"],
+    ]);
+    expect(specs).toHaveLength(3);
   });
 
   it("runs Before hooks in order, filtered by tag, and After hooks in reverse", () => {
@@ -247,6 +251,16 @@ describe("hooks with the real Playwright", () => {
       "BeforeScenario mobile",
       "BeforeStep Given a step that passes",
       "AfterStep Given a step that passes ok",
+      "AfterScenario 2",
+      "AfterScenario 1",
+    ]);
+  });
+
+  it("runs AfterStep and AfterScenario when the test times out", () => {
+    expect(ran("Times out")?.filter((hook) => hook !== "BeforeWorker")).toEqual([
+      "BeforeScenario 1",
+      "BeforeStep Given a step that hangs",
+      "AfterStep Given a step that hangs failed",
       "AfterScenario 2",
       "AfterScenario 1",
     ]);

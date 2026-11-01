@@ -156,7 +156,7 @@ export async function runAll(
           // a read-only message (a DOMException, a frozen error): report it as it is
         }
       }
-      if (failure) warnSuppressed(hook.name, error);
+      if (failure && error !== given) warnSuppressed(hook.name, error);
       failure ??= { error };
       if (stopOnError) break;
     }

@@ -187,6 +187,8 @@ describe("hooks", () => {
     await expect(other.tests["Scenario: Plain"]({ page: {}, context: {} })).rejects.toThrow(
       /^boom$/,
     );
+    // no new warning: the rethrown error is the step's own, and is the one reported
+    expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();
   });
 

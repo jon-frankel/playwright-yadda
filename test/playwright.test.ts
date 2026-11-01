@@ -15,10 +15,10 @@ function cleanEnv() {
 }
 
 /** Run one spec of test/playwright with the real Playwright CLI and read its JSON report */
-function runPlaywright(spec: string) {
+function runPlaywright(spec: string, extraArgs: string[] = []) {
   const run = spawnSync(
     path.join(root, "node_modules", ".bin", "playwright"),
-    ["test", spec, "--config", path.join(project, "playwright.config.ts")],
+    ["test", spec, "--config", path.join(project, "playwright.config.ts"), ...extraArgs],
     { cwd: project, encoding: "utf8", env: cleanEnv() },
   );
   let report: any;
@@ -32,7 +32,13 @@ function runPlaywright(spec: string) {
 
 type Spec = {
   title: string;
-  tests: { annotations: { type: string; description?: string }[]; results: { status: string }[] }[];
+  tests: {
+    annotations: { type: string; description?: string }[];
+    expectedStatus: string;
+    status: string;
+    timeout: number;
+    results: { status: string }[];
+  }[];
 };
 
 /** The specs of a JSON report, flattened */
@@ -86,4 +92,129 @@ describe("a fixture the test does not have", () => {
     const messages = (report?.errors ?? []).map((error: { message: string }) => error.message);
     expect(messages.join("\n")).toMatch(/unknown parameter "pgae"/);
   }, 60_000);
+});
+
+describe("special tags with the real Playwright", () => {
+  let specs: Spec[] = [];
+  beforeAll(() => {
+    const run = runPlaywright("tags.spec.ts");
+    specs = run.report ? specsOf(run.report) : [];
+  }, 60_000);
+
+  const test = (title: string) =>
+    specs.find((spec) => spec.title === `Scenario: ${title}`)?.tests[0];
+
+  it("expects a @fail scenario to fail, and so passes it when it does", () => {
+    expect(test("Expected to fail")).toMatchObject({
+      expectedStatus: "failed",
+      status: "expected",
+    });
+  });
+
+  it("skips @fixme, @skip and @pending scenarios", () => {
+    for (const title of ["Fixme", "Skipped", "Pending"]) {
+      expect(test(title)).toMatchObject({ expectedStatus: "skipped", status: "skipped" });
+    }
+  });
+
+  it("triples the timeout of a @slow scenario", () => {
+    expect(test("Plain")?.timeout).toBe(30_000);
+    expect(test("Slow")?.timeout).toBe(90_000);
+  });
+
+  it("times a scenario out after its own @timeout, and a feature's @timeout applies to all of it", () => {
+    expect(test("Times out")?.results[0]?.status).toBe("timedOut");
+    expect(test("Times out from the feature's tag")?.results[0]?.status).toBe("timedOut");
+    expect(test("Overrides the feature's timeout")?.results[0]?.status).toBe("passed");
+  });
+
+  it("runs a feature's @mode:serial scenarios in serial, skipping what follows a failure", () => {
+    expect(
+      test("Is skipped, as serial mode skips what follows a failure")?.results[0]?.status,
+    ).toBe("skipped");
+  });
+
+  it("retries as the feature's @retries asks, unless the scenario's @retries says otherwise", () => {
+    expect(test("Retried once, from the feature")?.results.map((r) => r.status)).toEqual([
+      "failed",
+      "passed",
+    ]);
+    expect(test("Retries nothing")?.results.map((r) => r.status)).toEqual(["failed"]);
+  });
+
+  describe("on the hooks that run before a scenario", () => {
+    let hooked: Spec[] = [];
+    beforeAll(() => {
+      const run = runPlaywright("tags-hooks.spec.ts");
+      hooked = run.report ? specsOf(run.report) : [];
+    }, 60_000);
+    const hook = (title: string) =>
+      hooked.find((spec) => spec.title === `Scenario: ${title}`)?.tests[0];
+
+    it("lets @fail expect a failing hook", () => {
+      expect(hook("Expected to fail, in a failing hook")).toMatchObject({ status: "expected" });
+    });
+
+    it("lets @slow triple the timeout for a slow hook, @timeout's included", () => {
+      expect(hook("Slow, in a slow hook")).toMatchObject({ status: "expected", timeout: 1500 });
+      expect(hook("Slow with its own timeout, in a slow hook")).toMatchObject({
+        status: "expected",
+        timeout: 1800,
+      });
+    });
+
+    it("times out a slow hook that @timeout allows too little for", () => {
+      expect(hook("Over the feature's timeout, in a slow hook")?.results[0]?.status).toBe(
+        "timedOut",
+      );
+    });
+  });
+
+  it("changes nothing for tags it does not know", () => {
+    expect(test("Unknown tags change nothing")).toMatchObject({
+      expectedStatus: "passed",
+      status: "expected",
+    });
+  });
+
+  describe("--grep", () => {
+    const titles = (extraArgs: string[]) => {
+      const { report } = runPlaywright("tags.spec.ts", ["--list", ...extraArgs]);
+      return report ? specsOf(report).map((spec) => spec.title.replace("Scenario: ", "")) : [];
+    };
+
+    // each of these starts the Playwright CLI, which can be slow to load TypeScript on a cold start
+    it("selects scenarios by their own tags", { timeout: 60_000 }, () => {
+      expect(titles(["--grep", "@slow"])).toEqual(["Slow"]);
+      expect(titles(["--grep", "@unknown-tag"])).toEqual(["Unknown tags change nothing"]);
+    });
+
+    it("selects scenarios by their feature's tags", { timeout: 60_000 }, () => {
+      // the report lists a nested describe's scenarios after the others, so compare them sorted
+      expect(titles(["--grep", "@mode:serial"]).sort()).toEqual([
+        "Is skipped, as serial mode skips what follows a failure",
+        "Overrides the feature's timeout",
+        "Times out from the feature's tag",
+      ]);
+      expect(titles(["--grep", "@smoke"])).toHaveLength(10);
+    });
+
+    it(
+      "selects one scenario with the end-anchored pattern the IDE plugin builds",
+      { timeout: 60_000 },
+      () => {
+        // Playwright matches a test's tags after its title, so the pattern allows them (PlaywrightGrep.kt)
+        expect(titles(["--grep", "Feature: Special tags Scenario: Slow(?: @\\S+)*$"])).toEqual([
+          "Slow",
+        ]);
+      },
+    );
+
+    it("leaves scenarios out with --grep-invert", { timeout: 60_000 }, () => {
+      const all = titles([]);
+      expect(all).toHaveLength(13);
+      expect(titles(["--grep-invert", "@smoke|@mode:serial"])).toEqual([]);
+      expect(titles(["--grep-invert", "@fail|@fixme|@skip|@pending"])).toHaveLength(9);
+    });
+  });
 });

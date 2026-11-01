@@ -2,7 +2,6 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import Yadda from "yadda";
-import { isScenarioOnly, isScenarioPending } from "./annotations.js";
 import {
   BASE_FIXTURE_NAMES,
   createFixtureCollector,
@@ -14,6 +13,7 @@ import {
 } from "./fixtures.js";
 import { createLibraryRegistry, LibraryRegistryManager } from "./registry.js";
 import { createScenarioYadda, runScenarioSteps } from "./runner.js";
+import { resolveTags, type ResolvedTags } from "./tags.js";
 import type {
   DefaultScenarioContext,
   FeatureSuiteOptions,
@@ -113,6 +113,14 @@ function supportsTestDetails(): boolean {
   }
 }
 
+/** Apply `@retries`, `@mode` and `@timeout` to the describe being declared */
+function configureDescribe(test: any, settings: ResolvedTags["feature"]): void {
+  const options = Object.fromEntries(
+    Object.entries(settings).filter(([, value]) => value !== undefined),
+  );
+  if (Object.keys(options).length > 0) test.describe.configure(options);
+}
+
 /** Problems already warned about by this process, so each is reported once */
 const warned = new Set<string>();
 
@@ -205,19 +213,40 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
     return [...names];
   };
 
-  test.describe(`Feature: ${feature.title}`, () => {
-    for (const scenario of feature.scenarios) {
-      const isPending = isScenarioPending(feature.annotations, scenario.annotations);
-      const isOnly = isScenarioOnly(feature.annotations, scenario.annotations);
+  const featureSettings = resolveTags(feature.annotations, undefined, {
+    where: `"${feature.title}"`,
+  }).feature;
 
-      const kind = isPending ? "skip" : isOnly ? "only" : undefined;
+  test.describe(`Feature: ${feature.title}`, () => {
+    configureDescribe(test, featureSettings);
+
+    for (const scenario of feature.scenarios) {
+      const { scenario: tags, own } = resolveTags(feature.annotations, scenario.annotations, {
+        where: `"${feature.title}" > "${scenario.title}"`,
+        featureWarnings: false,
+      });
+
+      // `@skip` and `@pending` skip, and win over `@fixme` (which only differs in how Playwright
+      // reports it) and `@only`
+      const kind = tags.skip
+        ? tags.skip === "fixme" && test.fixme
+          ? "fixme"
+          : "skip"
+        : tags.only
+          ? "only"
+          : undefined;
       const declare = (kind ? test[kind] : test) as (...args: unknown[]) => void;
       // Attached when the test is declared, so reporters still see it if a fixture or hook fails
       // before the body runs, and for skipped scenarios whose body never does
-      const attachUpFront = !!feature.filepath && detailsSupported;
-      const details = {
-        annotation: { type: FEATURE_FILE_ANNOTATION, description: feature.filepath },
-      };
+      const attachFile = !!feature.filepath;
+      const details: { annotation?: unknown; tag?: string[] } = {};
+      if (attachFile && detailsSupported) {
+        details.annotation = { type: FEATURE_FILE_ANNOTATION, description: feature.filepath };
+      }
+      // Every tag goes to Playwright, so `--grep @smoke` and `--grep-invert @slow` select by them
+      if (detailsSupported && tags.playwrightTags.length > 0) details.tag = tags.playwrightTags;
+      const attachUpFront = Object.keys(details).length > 0;
+      const attachLate = attachFile && !detailsSupported;
       const testFn = attachUpFront
         ? (title: string, body: unknown) => declare(title, details, body)
         : declare;
@@ -231,7 +260,7 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         const fixtures = { ...stepFixtures, testInfo };
 
         // Older Playwright cannot take it at declaration; this is the best it can do
-        if (feature.filepath && !attachUpFront) {
+        if (attachLate) {
           testInfo?.annotations?.push({
             type: FEATURE_FILE_ANNOTATION,
             description: feature.filepath,
@@ -269,10 +298,30 @@ export function defineFeature<TCtx = DefaultScenarioContext, K extends string = 
         }
       };
 
-      testFn(
-        `Scenario: ${scenario.title}`,
-        createFixtureTestBody(fixtureNames, runScenario) as unknown,
-      );
+      const declareScenario = () =>
+        testFn(
+          `Scenario: ${scenario.title}`,
+          createFixtureTestBody(fixtureNames, runScenario) as unknown,
+        );
+
+      // `@fail`, `@slow`, `@timeout` and `@retries` are given to Playwright in a describe of the
+      // scenario's own, with no title (microsoft/playwright#10825). Calling `test.fail()` or
+      // `test.slow()` in the running test would be too late for its fixtures and `beforeEach`
+      // hooks, which Playwright has set up by then, and a describe's settings cover them. A
+      // feature's `@timeout` and `@retries` are on the feature's describe, which this one inherits.
+      if (
+        !tags.skip &&
+        (tags.fail || tags.slow || own.timeout !== undefined || own.retries !== undefined)
+      ) {
+        test.describe(() => {
+          configureDescribe(test, { timeout: own.timeout, retries: own.retries });
+          if (tags.fail) test.fail();
+          if (tags.slow) test.slow();
+          declareScenario();
+        });
+      } else {
+        declareScenario();
+      }
     }
   });
 }

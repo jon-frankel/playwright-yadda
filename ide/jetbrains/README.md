@@ -89,13 +89,13 @@ If every candidate would be ruled out, because the step is defined but not for t
 
 The icon creates a Playwright run configuration for the spec file that calls `defineFeatureSuite`, with `--grep` set from the test names playwright-yadda generates (`Feature: <title>` and `Scenario: <title>`, see `src/feature.ts`):
 
-| Icon on          | Runs                                           |
-| ---------------- | ---------------------------------------------- |
-| `Scenario:` line | that scenario only (`Feature: … Scenario: …$`) |
-| `Feature:` line  | every scenario of the feature                  |
-| a step           | the scenario it is in                          |
+| Icon on          | Runs                                                     |
+| ---------------- | -------------------------------------------------------- |
+| `Scenario:` line | that scenario only (`Feature: … Scenario: …(?: @\S+)*$`) |
+| `Feature:` line  | every scenario of the feature                            |
+| a step           | the scenario it is in                                    |
 
-It runs from the nearest directory above the spec that has a `playwright.config.*`, or else a `package.json`, so a monorepo with one Playwright project per package works. If the project has several specs that call `defineFeatureSuite`, the one whose path is nearest to the feature file is used, because the features directory a spec reads is computed at runtime and can't be read reliably. A scenario outline runs by name without the end anchor, so its examples are included.
+It runs from the nearest directory above the spec that has a `playwright.config.*`, or else a `package.json`, so a monorepo with one Playwright project per package works. If the project has several specs that call `defineFeatureSuite`, the one whose path is nearest to the feature file is used, because the features directory a spec reads is computed at runtime and can't be read reliably. The scenario pattern allows the scenario's tags after its title, because Playwright 1.42 and later match a test's tags there. A scenario outline runs by name without the end anchor, so its examples are included. Run configurations saved before the pattern allowed tags select nothing for a tagged scenario: delete them and use the icon again.
 
 ## Limitations
 

@@ -76,9 +76,10 @@ Feature: Storefront Shopping
     let scenarioFn: any = null;
 
     const mockTest: any = Object.assign(
-      (title: string, fn: any) => {
+      (title: string, ...rest: any[]) => {
         scenarioTitle = title;
-        scenarioFn = fn;
+        // after the details object, which carries the scenario's tags, when there is one
+        scenarioFn = rest.at(-1);
       },
       {
         describe: (title: string, fn: any) => {
@@ -132,7 +133,11 @@ Feature: Pending Feature
       registry,
     });
 
-    expect(mockTest.skip).toHaveBeenCalledWith("Scenario: Pending Scenario", expect.any(Function));
+    expect(mockTest.skip).toHaveBeenCalledWith(
+      "Scenario: Pending Scenario",
+      { tag: ["@pending"] },
+      expect.any(Function),
+    );
   });
 
   it("should attach the feature file to a pending scenario, whose body never runs", () => {
@@ -155,7 +160,10 @@ Feature: Pending Feature
 
     expect(mockTest.skip).toHaveBeenCalledWith(
       "Scenario: Pending Scenario",
-      { annotation: { type: "feature-file", description: feature.filepath } },
+      {
+        annotation: { type: "feature-file", description: feature.filepath },
+        tag: ["@pending"],
+      },
       expect.any(Function),
     );
   });

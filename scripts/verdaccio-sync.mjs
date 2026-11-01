@@ -10,16 +10,13 @@ const examplesDir = path.join(rootDir, "examples");
 function parseCommandLineArgs() {
   const args = process.argv.slice(2);
   const isDryRun = args.includes("--dry-run") || args.includes("-n");
-  const forceAll =
-    args.includes("--all") ||
-    args.includes("-a") ||
-    args.includes("--force-bump") ||
-    args.includes("-b");
+  // Bumping is the default now. --all, -a, --force-bump and -b are accepted and mean nothing.
+  const noBump = args.includes("--no-bump");
   const skipBuild = args.includes("--skip-build");
   const skipExamples = args.includes("--skip-examples");
   const registryFlagIndex = args.indexOf("--registry");
   const customRegistry = registryFlagIndex !== -1 ? args[registryFlagIndex + 1] : undefined;
-  return { isDryRun, forceAll, skipBuild, skipExamples, customRegistry };
+  return { isDryRun, noBump, skipBuild, skipExamples, customRegistry };
 }
 
 function loadEnvConfiguration(customRegistry) {
@@ -127,23 +124,26 @@ function updateExampleApp(app, packageName, packageVersion) {
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
 
   if (deps[packageName]) {
-    try {
-      execSync(`pnpm add "${packageName}@${packageVersion}"`, {
-        cwd: app.path,
-        stdio: "inherit",
-      });
-    } catch {
-      execSync("pnpm install", { cwd: app.path, stdio: "inherit" });
+    // Pins the exact version in package.json, the lockfile and the release-age exclusions
+    execSync(`pnpm add "${packageName}@${packageVersion}"`, { cwd: app.path, stdio: "inherit" });
+    const installed = path.join(app.path, "node_modules", packageName, "package.json");
+    const installedVersion = fs.existsSync(installed)
+      ? JSON.parse(fs.readFileSync(installed, "utf8")).version
+      : undefined;
+    if (installedVersion !== packageVersion) {
+      throw new Error(`node_modules has ${installedVersion ?? "nothing"}, not ${packageVersion}`);
     }
   } else {
     execSync("pnpm install", { cwd: app.path, stdio: "inherit" });
   }
 }
 
+/** @returns the names of the examples that could not be updated */
 function syncExampleApps(packageName, packageVersion, isDryRun) {
   const exampleApps = getExampleAppDirectories();
-  if (exampleApps.length === 0) return;
+  if (exampleApps.length === 0) return [];
 
+  const failed = [];
   console.log("\n📥 Updating example applications with new versions from Verdaccio:");
   for (const app of exampleApps) {
     console.log(`  • Updating ${app.name} (${app.path})...`);
@@ -153,15 +153,17 @@ function syncExampleApps(packageName, packageVersion, isDryRun) {
     }
     try {
       updateExampleApp(app, packageName, packageVersion);
-      console.log(`    ✅ ${app.name} updated successfully.`);
+      console.log(`    ✅ ${app.name} is on ${packageVersion}.`);
     } catch (error) {
-      console.warn(`    ⚠️ Failed to update ${app.name}: ${error.message}`);
+      failed.push(app.name);
+      console.error(`    ❌ Failed to update ${app.name}: ${error.message}`);
     }
   }
+  return failed;
 }
 
 async function main() {
-  const { isDryRun, forceAll, skipBuild, skipExamples, customRegistry } = parseCommandLineArgs();
+  const { isDryRun, noBump, skipBuild, skipExamples, customRegistry } = parseCommandLineArgs();
   console.log("🚀 Starting Verdaccio package sync workflow...");
 
   const { registryUrl, authToken } = loadEnvConfiguration(customRegistry);
@@ -183,42 +185,21 @@ async function main() {
   const publishedVersions = Object.keys(registryData?.versions || {});
   const isAlreadyPublished = publishedVersions.includes(packageVersion);
 
-  let needsPublish = false;
-  let needsBump = false;
-
-  if (!isAlreadyPublished) {
-    needsPublish = true;
-    console.log(`📦 ${packageName}: ${packageVersion} (version not yet in registry)`);
-  } else if (forceAll) {
-    needsPublish = true;
-    needsBump = true;
-    console.log(`📦 ${packageName}: ${packageVersion} (forced update --all)`);
-  } else {
-    console.log(`📦 ${packageName}: ${packageVersion} is already published.`);
-    const answer = forceAll;
-    if (!answer) {
-      console.log("   Pass --all / -a to force bump patch version and publish.");
-    }
-  }
-
+  // Every run publishes a new version, past anything already in the registry, unless --no-bump
+  // asks to publish the version in package.json and that version is still free.
+  const needsBump = !noBump || isAlreadyPublished;
   if (needsBump) {
     let nextVersion = incrementPatchVersion(packageVersion);
     while (publishedVersions.includes(nextVersion)) {
       nextVersion = incrementPatchVersion(nextVersion);
     }
-    console.log(`  ➔ Bumping version: ${packageVersion} ➔ ${nextVersion}`);
+    console.log(`📦 ${packageName}: bumping ${packageVersion} ➔ ${nextVersion}`);
     if (!isDryRun) {
       writeUpdatedPackageVersion(pkgJsonPath, nextVersion);
     }
     packageVersion = nextVersion;
-  }
-
-  if (!needsPublish) {
-    if (!skipExamples) {
-      syncExampleApps(packageName, packageVersion, isDryRun);
-    }
-    console.log("\nDone!");
-    return;
+  } else {
+    console.log(`📦 ${packageName}: ${packageVersion} (not yet in the registry)`);
   }
 
   if (isDryRun) {
@@ -250,11 +231,13 @@ async function main() {
     env: { ...process.env, ...authEnvironment },
   });
 
-  if (!skipExamples) {
-    syncExampleApps(packageName, packageVersion, isDryRun);
-  }
+  const failed = skipExamples ? [] : syncExampleApps(packageName, packageVersion, isDryRun);
 
-  console.log(`\n🎉 Successfully published ${packageName}@${packageVersion}!`);
+  console.log(`\n🎉 Published ${packageName}@${packageVersion}.`);
+  if (failed.length > 0) {
+    console.error(`\n❌ These examples are not on ${packageVersion}: ${failed.join(", ")}`);
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {

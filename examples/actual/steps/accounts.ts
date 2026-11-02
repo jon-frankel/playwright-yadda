@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { createBdd } from "playwright-yadda";
 import { test } from "./test.js";
 import { indexOfOrdinal } from "./support/ordinal.js";
+import { TRANSACTION, transactionRow } from "./support/transaction-ref.js";
 
 const { createStepLibrary } = createBdd(test);
 
@@ -67,9 +68,9 @@ accountSteps.when(
 );
 
 accountSteps.when(
-  /^the user right-clicks the (\w+) transaction$/,
-  async ({ page }, ordinal: string) => {
-    await rowsOf(page).nth(indexOfOrdinal(ordinal)).click({ button: "right" });
+  new RegExp(`^the user right-clicks ${TRANSACTION}$`),
+  async ({ page }, transaction: string) => {
+    await transactionRow(page, transaction).click({ button: "right" });
   },
 );
 
@@ -83,31 +84,13 @@ accountSteps.then(
 
 // Selecting transactions
 
-accountSteps.then(/^the (\w+) transaction is listed$/, async ({ page }, ordinal: string) => {
-  await expect(rowsOf(page).nth(indexOfOrdinal(ordinal)).getByTestId("payee")).toBeVisible();
-});
-
-accountSteps.when(/^the user selects the (\w+) transaction$/, async ({ page }, ordinal: string) => {
-  // A row added a moment ago may still be mounting, and a click on it would not select anything.
-  const row = rowsOf(page).nth(indexOfOrdinal(ordinal));
-  await expect(row.getByTestId("payee")).toBeVisible();
-  await row.getByTestId("select").click();
-});
-
 accountSteps.when(
-  /^the user shift-selects the transaction with notes "([^"]+)"$/,
-  async ({ page }, notes: string) => {
-    await rowsOf(page)
-      .filter({ hasText: notes })
-      .getByTestId("select")
-      .click({ modifiers: ["Shift"] });
-  },
-);
-
-accountSteps.when(
-  /^the user selects the transaction with notes "([^"]+)"$/,
-  async ({ page }, notes: string) => {
-    await rowsOf(page).filter({ hasText: notes }).getByTestId("select").click();
+  new RegExp(`^the user (selects|shift-selects) ${TRANSACTION}$`),
+  async ({ page }, how: string, transaction: string) => {
+    // A row added a moment ago may still be mounting, and a click on it would not select anything.
+    const row = transactionRow(page, transaction);
+    await expect(row.getByTestId("payee")).toBeVisible();
+    await row.getByTestId("select").click({ modifiers: how === "shift-selects" ? ["Shift"] : [] });
   },
 );
 
@@ -127,11 +110,11 @@ accountSteps.then(/^the selection is "([^"]+)"$/, async ({ page }, text: string)
 });
 
 accountSteps.then(
-  /^the transaction with notes "([^"]+)" is (hidden|listed)$/,
-  async ({ page }, notes: string, state: string) => {
-    const row = rowsOf(page).filter({ hasText: notes });
+  new RegExp(`^${TRANSACTION} is (hidden|listed)$`),
+  async ({ page }, transaction: string, state: string) => {
+    const row = transactionRow(page, transaction);
     if (state === "hidden") await expect(row).not.toBeVisible();
-    else await expect(row.first()).toBeVisible();
+    else await expect(row.first().getByTestId("payee")).toBeVisible();
   },
 );
 
@@ -184,9 +167,9 @@ accountSteps.then(
 // Reconciling
 
 accountSteps.when(
-  /^the user marks the transaction with notes "([^"]+)" as cleared$/,
-  async ({ page }, notes: string) => {
-    await rowsOf(page).filter({ hasText: notes }).getByTestId("cleared").click();
+  new RegExp(`^the user marks ${TRANSACTION} as cleared$`),
+  async ({ page }, transaction: string) => {
+    await transactionRow(page, transaction).getByTestId("cleared").click();
   },
 );
 

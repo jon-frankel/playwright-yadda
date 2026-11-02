@@ -6,29 +6,29 @@ Feature: Transactions
     And the user opens the "Ally Savings" account
 
   Scenario: Transactions are filtered by category
-    When the user filters the transactions to the category "Clothing"
+    When the user filters the transactions where the category is "Clothing"
     Then the first 5 transactions all show category "Clothing"
 
   Scenario: Transactions are filtered by category group
     When the user opens the "Capital One Checking" account
-    And the user filters the transactions to the category group "Usual Expenses"
+    And the user filters the transactions where the category group is "Usual Expenses"
     Then the first 5 transactions all show category matching "^(Savings|Medical|Gift|General|Clothing|Entertainment|Restaurants|Food)$"
 
   Scenario: Transactions are filtered by payee
     When the user opens the "Capital One Checking" account
-    And the user filters the transactions to the payee "Kroger"
+    And the user filters the transactions where the payee is "Kroger"
     Then the first 10 transactions all show payee "Kroger"
 
-  Scenario: Transactions are filtered by payees that [operator] "[text]"
+  Scenario: Transactions are filtered by a payee that [operator] "[text]"
     When the user opens the "Capital One Checking" account
-    And the user filters the transactions to payees that [operator] "[text]"
+    And the user filters the transactions where the payee [operator] "[text]"
     Then [expectation]
 
     Examples:
       operator | text | expectation
-      contain | De | the first 9 transactions all show payee matching "^Deposit$"
-      contain | l | the first 2 transactions all show payee matching "l"
-      do not contain | l | none of the first 5 transactions show payee matching "l"
+      contains | De | the first 9 transactions all show payee matching "^Deposit$"
+      contains | l | the first 2 transactions all show payee matching "l"
+      does not contain | l | none of the first 5 transactions show payee matching "l"
 
   Scenario: A transaction is created
     When the user adds a transaction:

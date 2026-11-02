@@ -86,7 +86,7 @@ Feature: Accounts
 
   Scenario: Two transactions are made into a transfer
     When the user opens the "On budget" account
-    And the user filters the transactions to the note "Test Acc Transfer"
+    And the user filters the transactions where the note contains "Test Acc Transfer"
     And the user adds a transaction:
       ---
       | account      | notes             | category | debit |

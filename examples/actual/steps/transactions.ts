@@ -4,6 +4,7 @@ import { createBdd } from "playwright-yadda";
 import { test } from "./test.js";
 import { parseTable, requireBlock } from "./support/blocks.js";
 import { indexOfOrdinal } from "./support/ordinal.js";
+import { TRANSACTION, transactionRow } from "./support/transaction-ref.js";
 import {
   fillTransactionRow,
   finishEntry,
@@ -148,9 +149,9 @@ transactionSteps.when(
 );
 
 transactionSteps.when(
-  /^the user changes the (\w+) transaction's (debit|credit) to "([^"]+)"$/,
-  async ({ page }, ordinal: string, column: string, amount: string) => {
-    const cell = rowsOf(page).nth(indexOfOrdinal(ordinal)).getByTestId(column);
+  new RegExp(`^the user changes ${TRANSACTION}'s (debit|credit) to "([^"]+)"$`),
+  async ({ page }, transaction: string, column: string, amount: string) => {
+    const cell = transactionRow(page, transaction).getByTestId(column);
     await cell.click();
     const input = cell.getByRole("textbox");
     await input.selectText();
@@ -207,65 +208,60 @@ async function applyFilter(menu: Locator) {
   await expect(menu.page().getByRole("button", { name: "Delete filter" }).first()).toBeVisible();
 }
 
+/** Fields of the Filter menu, by the name a scenario uses, and how each picks its value. */
+const FILTER_FIELDS = {
+  category: { menu: "Category", pick: pickCategory },
+  "category group": { menu: "Category", pick: pickCategoryGroup },
+  payee: { menu: "Payee", pick: pickPayee },
+  note: { menu: "Note" },
+} as const;
+
+async function pickCategory(page: Page, _menu: Locator, category: string) {
+  await page.keyboard.type(category.slice(0, 1));
+  await pickItem(page, `${category}-category-item`);
+}
+
+async function pickCategoryGroup(page: Page, menu: Locator, group: string) {
+  await menu.getByRole("button", { name: "Category", exact: true }).click();
+  await page.getByRole("button", { name: "Category group", exact: true }).click();
+  await page.keyboard.type(group.slice(0, 1));
+  await pickItem(page, `${group}-category-group-item`);
+}
+
+async function pickPayee(page: Page, menu: Locator, payee: string) {
+  // Auto-open is broken for anything but "is not", so open the list by clicking.
+  await menu.getByLabel("Payee").click();
+  await pickItem(page, `${payee}-payee-item`);
+}
+
+/**
+ * One step for every filter in the Filter menu: `the user filters the transactions where the payee
+ * is "Kroger"`, `... where the category group is "Usual Expenses"`, `... where the payee does not
+ * contain "l"`, `... where the note contains "Transfer"`. A note filter starts out as "contains" and
+ * has no list to pick from; the other fields are lists, which "is" picks from.
+ */
 transactionSteps.when(
-  /^the user filters the transactions to the category "([^"]+)"$/,
-  async ({ page }, category: string) => {
-    const menu = await openFilter(page, "Category");
-    await page.keyboard.type(category.slice(0, 1));
-    await pickItem(page, `${category}-category-item`);
+  /^the user filters the transactions where the (category group|category|payee|note) (is|contains|does not contain) "([^"]+)"$/,
+  async ({ page }, field: keyof typeof FILTER_FIELDS, operator: string, value: string) => {
+    const menu = await openFilter(page, FILTER_FIELDS[field].menu);
+    if (field === "note") {
+      if (operator !== "contains") throw new Error(`A note filter only supports "contains"`);
+      await page.keyboard.type(value);
+    } else if (operator === "is") {
+      await FILTER_FIELDS[field].pick(page, menu, value);
+    } else if (field === "payee") {
+      await menu
+        .getByRole("button", { name: operator === "contains" ? "contains" : "does not contain" })
+        .click();
+      const input = menu.getByPlaceholder("nothing");
+      await input.fill(value);
+      await expect(input).toHaveValue(value);
+    } else {
+      throw new Error(`A ${field} filter only supports "is"`);
+    }
     await applyFilter(menu);
   },
 );
-
-transactionSteps.when(
-  /^the user filters the transactions to the category group "([^"]+)"$/,
-  async ({ page }, group: string) => {
-    const menu = await openFilter(page, "Category");
-    await menu.getByRole("button", { name: "Category", exact: true }).click();
-    await page.getByRole("button", { name: "Category group", exact: true }).click();
-    await page.keyboard.type(group.slice(0, 1));
-    await pickItem(page, `${group}-category-group-item`);
-    await applyFilter(menu);
-  },
-);
-
-transactionSteps.when(
-  /^the user filters the transactions to the payee "([^"]+)"$/,
-  async ({ page }, payee: string) => {
-    const menu = await openFilter(page, "Payee");
-    // Auto-open is broken for anything but "is not", so open the list by clicking.
-    await menu.getByLabel("Payee").click();
-    await pickItem(page, `${payee}-payee-item`);
-    await applyFilter(menu);
-  },
-);
-
-transactionSteps.when(
-  /^the user filters the transactions to payees that (contain|do not contain) "([^"]+)"$/,
-  async ({ page }, op: string, text: string) => {
-    const menu = await openFilter(page, "Payee");
-    await menu
-      .getByRole("button", { name: op === "contain" ? "contains" : "does not contain" })
-      .click();
-    const input = menu.getByPlaceholder("nothing");
-    await input.fill(text);
-    await expect(input).toHaveValue(text);
-    await applyFilter(menu);
-  },
-);
-
-transactionSteps.when(
-  /^the user filters the transactions to the note "([^"]+)"$/,
-  async ({ page }, note: string) => {
-    const menu = await openFilter(page, "Note");
-    await page.keyboard.type(note);
-    await applyFilter(menu);
-  },
-);
-
-transactionSteps.when("the user removes the first filter", async ({ page }) => {
-  await page.getByRole("button", { name: "Delete filter" }).first().click();
-});
 
 /** `the first 5 transactions all show category "Clothing"`, or `... category matching "^(A|B)$"`. */
 transactionSteps.then(

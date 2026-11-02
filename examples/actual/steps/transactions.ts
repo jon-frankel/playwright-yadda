@@ -192,7 +192,12 @@ async function openFilter(page: Page, field: string) {
   return page.getByTestId("filters-menu-tooltip");
 }
 
-const applyFilter = (menu: Locator) => menu.getByRole("button", { name: "Apply" }).click();
+/** Applies the filter and waits until the list shows it, so a check right after reads the filtered rows. */
+async function applyFilter(menu: Locator) {
+  await menu.getByRole("button", { name: "Apply" }).click();
+  await expect(menu).toBeHidden();
+  await expect(menu.page().getByRole("button", { name: "Delete filter" }).first()).toBeVisible();
+}
 
 transactionSteps.when(
   /^the user filters the transactions to the category "([^"]+)"$/,
@@ -234,7 +239,9 @@ transactionSteps.when(
     await menu
       .getByRole("button", { name: op === "contain" ? "contains" : "does not contain" })
       .click();
-    await menu.getByPlaceholder("nothing").fill(text);
+    const input = menu.getByPlaceholder("nothing");
+    await input.fill(text);
+    await expect(input).toHaveValue(text);
     await applyFilter(menu);
   },
 );

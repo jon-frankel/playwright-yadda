@@ -94,7 +94,7 @@ mobileSteps.then(
   },
 );
 
-mobileSteps.then(/^the page heading is "([^"]+)"$/, async (ctx: ActualContext, text) => {
+mobileSteps.then(/^the account shown is "([^"]+)"$/, async (ctx: ActualContext, text) => {
   await expect(ctx.page.getByRole("heading").first()).toHaveText(text as string);
 });
 

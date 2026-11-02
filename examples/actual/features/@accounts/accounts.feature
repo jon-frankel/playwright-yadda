@@ -14,9 +14,9 @@ Feature: Accounts
       New Account | 100 | 100.00
       Large Balance Account | 12345678.9 | 12,345,678.90
 
-  Scenario: An account register widens amount columns for large balances
+  Scenario: A large balance is shown in full in the register
     When the user creates an on-budget account "Large Balance Account" with a balance of "12345678.9"
-    Then the first transaction's credit column is wider than 100 pixels
+    Then the first transaction's credit is shown in full
 
   Scenario: An account can be closed
     When the user opens the "Roth IRA" account
@@ -40,9 +40,7 @@ Feature: Accounts
       | notes                | credit |
       | editable transaction | 10.00  |
       ---
-    And the user opens the table columns dialog
-    And the user shows the "Balance" column
-    And the user saves the table columns
+    And the user shows the "Balance" column in the transaction table
     Then the first transaction shows balance "10.00"
     When the user changes the first transaction's credit to "25.00"
     Then the first transaction shows balance "25.00"
@@ -52,8 +50,8 @@ Feature: Accounts
     And the user selects the first transaction
     And the user chooses "Date" for the selection
     Then a date picker is centred in the dialog
-    And every month of the date picker keeps its grid inside the dialog for the next 12 months
-    And the date picker dialog is at most 700 pixels wide on a 2560 pixel wide screen
+    And the date picker stays within the dialog for the next 12 months
+    And the date picker dialog does not stretch across an ultra-wide screen
 
   @slow
   Scenario: Shift-click selection skips hidden reconciled transactions
@@ -75,9 +73,7 @@ Feature: Accounts
       ---
     And the user marks the transaction with notes "range-two" as cleared
     And the user reconciles the account and locks the transactions
-    And the user opens the table columns dialog
-    And the user shows the "Balance" column
-    And the user saves the table columns
+    And the user shows the "Balance" column in the transaction table
     And the user hides the reconciled transactions
     Then the transaction with notes "range-two" is hidden
     When the user selects the transaction with notes "range-three"
@@ -86,7 +82,7 @@ Feature: Accounts
 
   Scenario: Two transactions are made into a transfer
     When the user opens the "On budget" account
-    And the user filters the transactions to the note "Test Acc Transfer"
+    And the user filters the transactions where the note contains "Test Acc Transfer"
     And the user adds a transaction:
       ---
       | account      | notes             | category | debit |

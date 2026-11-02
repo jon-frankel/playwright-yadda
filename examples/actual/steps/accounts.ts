@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { createBdd } from "playwright-yadda";
 import { test } from "./test.js";
-import { indexOfOrdinal } from "./support/ordinal.js";
+import { TRANSACTION, transactionRow } from "./support/transaction-ref.js";
 
 const { createStepLibrary } = createBdd(test);
 
@@ -67,47 +67,35 @@ accountSteps.when(
 );
 
 accountSteps.when(
-  /^the user right-clicks the (\w+) transaction$/,
-  async ({ page }, ordinal: string) => {
-    await rowsOf(page).nth(indexOfOrdinal(ordinal)).click({ button: "right" });
+  new RegExp(`^the user right-clicks ${TRANSACTION}$`),
+  async ({ page }, transaction: string) => {
+    await transactionRow(page, transaction).click({ button: "right" });
   },
 );
 
 accountSteps.then(
-  /^the (\w+) transaction's (credit|debit) column is wider than (\d+) pixels$/,
-  async ({ page }, ordinal: string, column: string, pixels: string) => {
-    const box = await rowsOf(page).nth(indexOfOrdinal(ordinal)).getByTestId(column).boundingBox();
-    expect(box?.width).toBeGreaterThan(Number(pixels));
+  new RegExp(`^${TRANSACTION}'s (credit|debit) is shown in full$`),
+  async ({ page }, transaction: string, column: string) => {
+    const cell = transactionRow(page, transaction).getByTestId(column);
+    await expect(cell).toHaveText(/\d/);
+    // A clipped amount ends in an ellipsis: something in the cell is wider than the room it has.
+    const clipped = () =>
+      cell.evaluate((el) =>
+        [el, ...el.querySelectorAll("*")].some((e) => e.scrollWidth > e.clientWidth),
+      );
+    await expect.poll(clipped).toBe(false);
   },
 );
 
 // Selecting transactions
 
-accountSteps.then(/^the (\w+) transaction is listed$/, async ({ page }, ordinal: string) => {
-  await expect(rowsOf(page).nth(indexOfOrdinal(ordinal)).getByTestId("payee")).toBeVisible();
-});
-
-accountSteps.when(/^the user selects the (\w+) transaction$/, async ({ page }, ordinal: string) => {
-  // A row added a moment ago may still be mounting, and a click on it would not select anything.
-  const row = rowsOf(page).nth(indexOfOrdinal(ordinal));
-  await expect(row.getByTestId("payee")).toBeVisible();
-  await row.getByTestId("select").click();
-});
-
 accountSteps.when(
-  /^the user shift-selects the transaction with notes "([^"]+)"$/,
-  async ({ page }, notes: string) => {
-    await rowsOf(page)
-      .filter({ hasText: notes })
-      .getByTestId("select")
-      .click({ modifiers: ["Shift"] });
-  },
-);
-
-accountSteps.when(
-  /^the user selects the transaction with notes "([^"]+)"$/,
-  async ({ page }, notes: string) => {
-    await rowsOf(page).filter({ hasText: notes }).getByTestId("select").click();
+  new RegExp(`^the user (selects|shift-selects) ${TRANSACTION}$`),
+  async ({ page }, how: string, transaction: string) => {
+    // A row added a moment ago may still be mounting, and a click on it would not select anything.
+    const row = transactionRow(page, transaction);
+    await expect(row.getByTestId("payee")).toBeVisible();
+    await row.getByTestId("select").click({ modifiers: how === "shift-selects" ? ["Shift"] : [] });
   },
 );
 
@@ -127,11 +115,11 @@ accountSteps.then(/^the selection is "([^"]+)"$/, async ({ page }, text: string)
 });
 
 accountSteps.then(
-  /^the transaction with notes "([^"]+)" is (hidden|listed)$/,
-  async ({ page }, notes: string, state: string) => {
-    const row = rowsOf(page).filter({ hasText: notes });
+  new RegExp(`^${TRANSACTION} is (hidden|listed)$`),
+  async ({ page }, transaction: string, state: string) => {
+    const row = transactionRow(page, transaction);
     if (state === "hidden") await expect(row).not.toBeVisible();
-    else await expect(row.first()).toBeVisible();
+    else await expect(row.first().getByTestId("payee")).toBeVisible();
   },
 );
 
@@ -147,7 +135,7 @@ accountSteps.then("a date picker is centred in the dialog", async ({ page }) => 
 });
 
 accountSteps.then(
-  /^every month of the date picker keeps its grid inside the dialog for the next (\d+) months$/,
+  /^the date picker stays within the dialog for the next (\d+) months$/,
   async ({ page }, months: string) => {
     // Actual's own test steps to April 2017, a six-row month relative to its pinned date. Any
     // run of months holds one, so the check is structural instead: whatever the month, the grid
@@ -173,20 +161,20 @@ accountSteps.then(
 );
 
 accountSteps.then(
-  /^the date picker dialog is at most (\d+) pixels wide on a (\d+) pixel wide screen$/,
-  async ({ page }, maximum: string, screen: string) => {
-    await page.setViewportSize({ width: Number(screen), height: 1080 });
+  "the date picker dialog does not stretch across an ultra-wide screen",
+  async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1080 });
     const box = (await page.getByRole("dialog").boundingBox())!;
-    expect(box.width).toBeLessThanOrEqual(Number(maximum));
+    expect(box.width).toBeLessThanOrEqual(700);
   },
 );
 
 // Reconciling
 
 accountSteps.when(
-  /^the user marks the transaction with notes "([^"]+)" as cleared$/,
-  async ({ page }, notes: string) => {
-    await rowsOf(page).filter({ hasText: notes }).getByTestId("cleared").click();
+  new RegExp(`^the user marks ${TRANSACTION} as cleared$`),
+  async ({ page }, transaction: string) => {
+    await transactionRow(page, transaction).getByTestId("cleared").click();
   },
 );
 

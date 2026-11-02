@@ -10,7 +10,7 @@ Feature: Accounts on a phone
 
   Scenario: Searching an account's transactions
     When the user opens the first account
-    Then the page heading is "Bank of America"
+    Then the account shown is "Bank of America"
     And the account lists transactions
     When the user searches for "nothing should be found"
     Then "No transactions" is shown

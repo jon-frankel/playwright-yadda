@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineFeatureSuite } from "playwright-yadda";
+import { createActualContext } from "../steps/context.js";
 import { hooks } from "../steps/hooks.js";
 import { registry } from "../steps/registry.js";
 import { test } from "../steps/test.js";
@@ -12,4 +13,5 @@ defineFeatureSuite({
   registry,
   features: path.resolve(__dirname, "../features"),
   hooks,
+  createContext: createActualContext,
 });

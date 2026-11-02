@@ -85,3 +85,23 @@ describe("warnOnce with a Playwright older than 1.42", () => {
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+describe("supportsStepLocation", () => {
+  afterEach(() => {
+    vi.doUnmock("node:module");
+    vi.resetModules();
+  });
+
+  const supportsWith = async (version: string) => {
+    vi.resetModules();
+    vi.doMock("node:module", () => ({ createRequire: () => () => ({ version }) }));
+    return (await import("./warnings.js")).supportsStepLocation();
+  };
+
+  it("needs Playwright 1.48, the first to take a location in the options of test.step", async () => {
+    expect(await supportsWith("1.47.2")).toBe(false);
+    expect(await supportsWith("1.48.0")).toBe(true);
+    expect(await supportsWith("1.64.1")).toBe(true);
+    expect(await supportsWith("2.0.0")).toBe(true);
+  });
+});

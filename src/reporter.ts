@@ -100,8 +100,14 @@ export default class YaddaReporter implements Reporter {
   private fileByFeature = new Map<string, string>();
   private isInternalFrame: ((line: string) => boolean) | undefined;
   private showTags: boolean;
+  // `playwright test --list` runs nothing, so there is a listing to print and no results to total
+  private listMode: boolean;
 
   constructor(options?: YaddaReporterOptions | null) {
+    // Playwright tells its own reporters, and passes us in the same options, whether this is a
+    // listing. It is not a documented option, so a Playwright that stops passing it prints what
+    // it printed before: a run of no tests.
+    this.listMode = (options as { _mode?: string } | null | undefined)?._mode === "list";
     const full = typeof options === "object" && options !== null && options.fullStackTrace === true;
     this.showTags = !(typeof options === "object" && options !== null && options.tags === false);
     this.isInternalFrame = full ? undefined : makeInternalFrameTest();
@@ -112,6 +118,60 @@ export default class YaddaReporter implements Reporter {
 
   printsToStdio(): boolean {
     return true;
+  }
+
+  /** The feature's tags, and the scenario's others, as the tests of a feature carry them */
+  private tagsOf(test: TestCase): { featureTags: string[]; ownTags: string[] } {
+    if (!this.showTags) return { featureTags: [], ownTags: [] };
+    const featureTags = (
+      test.annotations.find((a) => a.type === FEATURE_TAGS_ANNOTATION)?.description ?? ""
+    )
+      .split(" ")
+      .filter(Boolean);
+    return { featureTags, ownTags: (test.tags ?? []).filter((tag) => !featureTags.includes(tag)) };
+  }
+
+  /**
+   * What `--list` prints in place of a run: each feature file with its feature and scenarios, and
+   * the total. Playwright's own listing would show the line of this package that declares them.
+   */
+  private printListing(tests: TestCase[]): void {
+    const lines: string[] = [];
+    const features = new Set<string>();
+    let current: string | undefined;
+    for (const test of tests) {
+      const titles = test.titlePath().filter(Boolean);
+      const featureIdx = titles.findIndex((t) => t.startsWith("Feature:"));
+      const heading = featureIdx >= 0 ? titles.slice(featureIdx) : titles.slice(-1);
+      const featureTitle = heading.length > 1 ? heading.slice(0, -1).join(" › ") : "";
+      const file = test.annotations.find((a) => a.type === "feature-file")?.description;
+      // A project name is only there to tell the same scenario in two projects apart
+      const project = featureIdx > 1 ? titles[0] : undefined;
+      const key = `${project ?? ""}\0${file ?? featureTitle}`;
+      features.add(key);
+      const { featureTags, ownTags } = this.tagsOf(test);
+      if (key !== current) {
+        current = key;
+        if (lines.length) lines.push("");
+        if (file) lines.push(bold(path.relative(process.cwd(), file)));
+        const title = file ? dim(featureTitle) : bold(featureTitle);
+        const where = project ? `${dim(`[${project}]`)} ` : "";
+        if (featureTitle) {
+          lines.push(
+            `${where}${title}${featureTags.length ? ` ${cyan(featureTags.join(" "))}` : ""}`,
+          );
+        }
+      }
+      const tagText = ownTags.length ? ` ${cyan(ownTags.join(" "))}` : "";
+      lines.push(`  ${heading[heading.length - 1] ?? test.title}${tagText}`);
+    }
+    const n = tests.length;
+    const f = features.size;
+    lines.push(
+      "",
+      `Total: ${n} ${n === 1 ? "scenario" : "scenarios"} in ${f} ${f === 1 ? "feature" : "features"}`,
+    );
+    process.stdout.write(`${lines.join("\n")}\n`);
   }
 
   onBegin(_config: unknown, suite: { allTests(): TestCase[] }): void {
@@ -128,6 +188,7 @@ export default class YaddaReporter implements Reporter {
     for (const warning of warnings) {
       process.stderr.write(`${yellow(`playwright-yadda: ${warning}`)}\n`);
     }
+    if (this.listMode) return this.printListing(tests);
     const n = tests.length;
     process.stdout.write(`Running ${n} ${n === 1 ? "scenario" : "scenarios"}\n\n`);
   }
@@ -150,14 +211,7 @@ export default class YaddaReporter implements Reporter {
     const duration = dim(` (${result.duration}ms)`);
     const mark = ok ? green("✓") : skipped ? yellow("-") : red("✗");
     // The feature's tags go with the feature, the scenario's others with the scenario
-    const featureTags = this.showTags
-      ? (test.annotations.find((a) => a.type === FEATURE_TAGS_ANNOTATION)?.description ?? "")
-          .split(" ")
-          .filter(Boolean)
-      : [];
-    const ownTags = this.showTags
-      ? (test.tags ?? []).filter((tag) => !featureTags.includes(tag))
-      : [];
+    const { featureTags, ownTags } = this.tagsOf(test);
     // Print the feature (and its file) once, before its first scenario
     const featureTitle = heading.length > 1 ? heading.slice(0, -1).join(" › ") : "";
     const annotatedFile = test.annotations.find((a) => a.type === "feature-file")?.description;
@@ -229,6 +283,8 @@ export default class YaddaReporter implements Reporter {
   }
 
   onEnd(result: FullResult): void {
+    // Nothing ran, so there is no summary to print, and the listing has its own total
+    if (this.listMode) return;
     let passed = 0;
     let failed = 0;
     let skipped = 0;

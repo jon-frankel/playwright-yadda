@@ -1,7 +1,18 @@
 import Yadda from "yadda";
 import type { StepLibrary } from "./types.js";
 
-export type TestStepWrapper = <T>(title: string, body: () => Promise<T>) => Promise<T>;
+/** Where a step is written, for Playwright to show in its reports and trace viewer */
+export interface StepLocation {
+  file: string;
+  line: number;
+  column: number;
+}
+
+export type TestStepWrapper = <T>(
+  title: string,
+  body: () => Promise<T>,
+  options?: { location?: StepLocation },
+) => Promise<T>;
 
 let activeExecutionContext: Record<string, unknown> | null = null;
 
@@ -47,7 +58,9 @@ export function runStep(yadda: Yadda.Yadda, stepText: string, context: unknown):
 }
 
 /**
- * Execute an array of scenario steps, optionally wrapping each step with a Playwright `test.step` function
+ * Execute an array of scenario steps, optionally wrapping each step with a Playwright `test.step`
+ * function. With `locations` (one per step, in order) the wrapper is told where each step is
+ * written, so Playwright can show the feature file's line instead of this one's.
  */
 export async function runScenarioSteps(
   yadda: Yadda.Yadda,
@@ -57,6 +70,7 @@ export async function runScenarioSteps(
   stepHooks?: StepHooks,
   /** Asked before each step: true once the test is over, so that no further step starts */
   stopped?: () => boolean,
+  locations?: readonly (StepLocation | undefined)[],
 ): Promise<void> {
   const execute = async (stepText: string) => {
     if (!stepHooks) return runStep(yadda, stepText, context);
@@ -74,10 +88,14 @@ export async function runScenarioSteps(
     await stepHooks.after(stepText, failed ? error : undefined);
     if (failed) throw error;
   };
-  for (const stepText of steps) {
+  for (const [index, stepText] of steps.entries()) {
     if (stopped?.()) return;
     if (testStep) {
-      await testStep(stepText, () => execute(stepText));
+      const location = locations?.[index];
+      // Only given when there is one, as a wrapper of someone's own may not expect a third argument
+      await (location
+        ? testStep(stepText, () => execute(stepText), { location })
+        : testStep(stepText, () => execute(stepText)));
     } else {
       await execute(stepText);
     }

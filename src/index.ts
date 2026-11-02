@@ -68,6 +68,7 @@ export {
   runScenarioSteps,
   runStep,
   type StepHooks,
+  type StepLocation,
   type TestStepWrapper,
 } from "./runner.js";
 
@@ -80,3 +81,12 @@ export {
   pathTagsOf,
   parseFeature,
 } from "./feature.js";
+
+// Titles of the tests, and the `--grep` patterns that select them
+export {
+  featureTestTitle,
+  grepForFeature,
+  grepForScenario,
+  grepForScenarioOutline,
+  scenarioTestTitle,
+} from "./grep.js";

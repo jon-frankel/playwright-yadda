@@ -303,4 +303,71 @@ describe("YaddaReporter", () => {
       expect(run(undefined, [tagged("One", [], ["@smoke"])])).toContain("✓ Scenario: One @smoke");
     });
   });
+
+  describe("with --list", () => {
+    // Playwright passes a reporter `_mode: "list"` in its options when it only lists the tests
+    const listing = (tests: TestCase[], options: object = { _mode: "list" }) => {
+      const reporter = new YaddaReporter(options as never);
+      reporter.onBegin({}, { allTests: () => tests });
+      reporter.onEnd({ status: "passed" } as never);
+      return stdout();
+    };
+    const tagged = (scenario: string, feature: string, file: string, tags: string[] = []) =>
+      Object.assign(makeTest(scenario), {
+        titlePath: () => [
+          "",
+          "",
+          "features.spec.ts",
+          `Feature: ${feature}`,
+          `Scenario: ${scenario}`,
+        ],
+        annotations: [{ type: "feature-file", description: `${process.cwd()}/features/${file}` }],
+        tags,
+      });
+
+    it("lists the scenarios by feature file instead of printing a run that did not happen", () => {
+      const text = listing([
+        tagged("One", "Alpha", "a.feature", ["@smoke"]),
+        tagged("Two", "Alpha", "a.feature"),
+        tagged("Three", "Beta", "b.feature"),
+      ]);
+      expect(text).toBe(
+        [
+          "features/a.feature",
+          "Feature: Alpha",
+          "  Scenario: One @smoke",
+          "  Scenario: Two",
+          "",
+          "features/b.feature",
+          "Feature: Beta",
+          "  Scenario: Three",
+          "",
+          "Total: 3 scenarios in 2 features",
+          "",
+        ].join("\n"),
+      );
+      expect(text).not.toMatch(/Running|passed/);
+    });
+
+    it("says which project a scenario is in when there are several", () => {
+      const test = tagged("One", "Alpha", "a.feature");
+      test.titlePath = () => [
+        "",
+        "chromium",
+        "features.spec.ts",
+        "Feature: Alpha",
+        "Scenario: One",
+      ];
+      expect(listing([test])).toContain("[chromium] Feature: Alpha");
+    });
+
+    it("still prints the warnings of the scenarios", () => {
+      listing([warned("One", "a problem")]);
+      expect(err.join("")).toContain("a problem");
+    });
+
+    it("prints a run when Playwright does not say it is listing", () => {
+      expect(listing([tagged("One", "Alpha", "a.feature")], {})).toContain("Running 1 scenario");
+    });
+  });
 });

@@ -109,6 +109,23 @@ Run tests with standard Playwright CLI:
 pnpm playwright test
 ```
 
+A scenario is a test named `Scenario: <title>` in a describe named `Feature: <title>`, so one scenario or feature can be run with `--grep`. The package builds the pattern for you (it escapes the title, keeps "Clears cart" from also running "Clears cart twice", and allows for the tags Playwright adds to a title):
+
+```ts
+import { grepForFeature, grepForScenario, grepForScenarioOutline } from "playwright-yadda";
+
+grepForScenario("Storefront Shopping", "Customer clears cart");
+// Feature: Storefront Shopping Scenario: Customer clears cart(?: @\S+)*$
+grepForFeature("Storefront Shopping"); // every scenario of the feature
+grepForScenarioOutline("Order checkout", "A cart with [n] keyboards"); // every example of an outline
+```
+
+```bash
+pnpm playwright test e2e/features.spec.ts -g "<pattern>"
+```
+
+With Playwright 1.48 or later each step is reported at the line of the feature file it is written on (a step of a `Background:` at the line in the background, and the examples of an outline at the outline's lines), and Playwright shows a step at the location it is given in its reports and trace viewer. The scenario itself, and the test list, are still located at the spec file: Playwright has no way to set a test's location.
+
 ### 5. Special tags
 
 Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest, so `@skip=false` on a scenario runs it although its feature is `@skip`; `@skip`, `@pending` and `@fixme` count as one tag for this. `@timeout`, `@retries` and `@mode` take no `=false`: use `@retries:0`, or `@timeout:0` (no timeout at all), to override a feature's value. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`. For the tags in this table, the last two mean the same.

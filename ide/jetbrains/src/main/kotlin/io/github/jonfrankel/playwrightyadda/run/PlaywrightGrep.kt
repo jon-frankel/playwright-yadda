@@ -7,10 +7,13 @@ package io.github.jonfrankel.playwrightyadda.run
  * (`src/feature.ts`), and Playwright matches the pattern against the whole title path, so a pattern
  * is just those titles joined by a space. They are matched as a regular expression, so titles are
  * escaped, and anchored where a prefix of another title would otherwise match as well.
+ *
+ * `src/grep.ts` does the same in TypeScript. Both are checked against `src/grep.cases.json`
+ * (see `PlaywrightGrepTest`), so a change to a pattern is made in both places.
  */
 object PlaywrightGrep {
   /** Every scenario of the feature. The trailing `Scenario:` stops "Cart" from also matching "Cart Admin". */
-  fun forFeature(featureTitle: String): String = "Feature: ${escape(featureTitle)} Scenario: "
+  fun forFeature(featureTitle: String): String = "Feature: ${escape(featureTitle.trim())} Scenario: "
 
   /**
    * One scenario. Anchored at the end so "Clears cart" doesn't also run "Clears cart twice", but
@@ -19,13 +22,20 @@ object PlaywrightGrep {
    * of those may follow the title.
    */
   fun forScenario(featureTitle: String, scenarioTitle: String): String =
-    "Feature: ${escape(featureTitle)} Scenario: ${escape(scenarioTitle)}(?: @\\S+)*$"
+    "Feature: ${escape(featureTitle.trim())} Scenario: ${escape(scenarioTitle.trim())}(?: @\\S+)*$"
 
-  /** A scenario outline: its examples may be named after the outline, so only the start is fixed. */
-  fun forScenarioOutline(featureTitle: String, scenarioTitle: String): String =
-    "Feature: ${escape(featureTitle)} Scenario: ${escape(scenarioTitle)}"
+  /**
+   * A scenario outline. Its examples are named after it with each placeholder (`[n]`) replaced by the
+   * example's value, so a placeholder matches anything and the rest of the title is literal.
+   */
+  fun forScenarioOutline(featureTitle: String, scenarioTitle: String): String {
+    val title = PLACEHOLDER.split("Scenario: ${scenarioTitle.trim()}").joinToString(".*") { escape(it) }
+    return "Feature: ${escape(featureTitle.trim())} $title(?: @\\S+)*$"
+  }
+
+  private val PLACEHOLDER = Regex("""\[[^\]]*]""")
 
   private val SPECIAL = Regex("""[.*+?^${'$'}{}()|\[\]\\/]""")
 
-  private fun escape(text: String): String = SPECIAL.replace(text.trim()) { "\\${it.value}" }
+  private fun escape(text: String): String = SPECIAL.replace(text) { "\\${it.value}" }
 }

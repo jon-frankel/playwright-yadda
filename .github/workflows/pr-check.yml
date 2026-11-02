@@ -6,7 +6,8 @@ name: PR Check
 # What each suite depends on:
 #   unit tests       the library: src/, test/, package.json, the lockfile, and the root build and test config
 #   examples/<name>  that example, plus the library, which the example is run against
-#   JetBrains plugin ide/jetbrains/, plus examples/, whose feature files its tests open
+#   JetBrains plugin ide/jetbrains/, plus examples/, whose feature files its tests open, and
+#   src/grep.cases.json, which its grep tests share with the library
 # A change under .github/, or a pull request too large to list its files, runs everything, so a workflow change is exercised by the pull request that makes it.
 on:
   pull_request:
@@ -63,7 +64,7 @@ jobs:
           output example-basic "$library|^examples/basic/"
           output example-wordpress "$library|^examples/wordpress/"
           output example-actual "$library|^examples/actual/"
-          output jetbrains-plugin '^(ide/jetbrains/|examples/|scripts/ide-jetbrains-test\.sh$)'
+          output jetbrains-plugin '^(ide/jetbrains/|examples/|scripts/ide-jetbrains-test\.sh$|src/grep\.cases\.json$)'
 
   static-analysis:
     uses: ./.github/workflows/static-analysis.yml

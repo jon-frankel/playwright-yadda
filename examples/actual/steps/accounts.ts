@@ -2,7 +2,6 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { createBdd } from "playwright-yadda";
 import { test } from "./test.js";
-import { indexOfOrdinal } from "./support/ordinal.js";
 import { TRANSACTION, transactionRow } from "./support/transaction-ref.js";
 
 const { createStepLibrary } = createBdd(test);
@@ -75,10 +74,16 @@ accountSteps.when(
 );
 
 accountSteps.then(
-  /^the (\w+) transaction's (credit|debit) column is wider than (\d+) pixels$/,
-  async ({ page }, ordinal: string, column: string, pixels: string) => {
-    const box = await rowsOf(page).nth(indexOfOrdinal(ordinal)).getByTestId(column).boundingBox();
-    expect(box?.width).toBeGreaterThan(Number(pixels));
+  new RegExp(`^${TRANSACTION}'s (credit|debit) is shown in full$`),
+  async ({ page }, transaction: string, column: string) => {
+    const cell = transactionRow(page, transaction).getByTestId(column);
+    await expect(cell).toHaveText(/\d/);
+    // A clipped amount ends in an ellipsis: something in the cell is wider than the room it has.
+    const clipped = () =>
+      cell.evaluate((el) =>
+        [el, ...el.querySelectorAll("*")].some((e) => e.scrollWidth > e.clientWidth),
+      );
+    await expect.poll(clipped).toBe(false);
   },
 );
 
@@ -130,7 +135,7 @@ accountSteps.then("a date picker is centred in the dialog", async ({ page }) => 
 });
 
 accountSteps.then(
-  /^every month of the date picker keeps its grid inside the dialog for the next (\d+) months$/,
+  /^the date picker stays within the dialog for the next (\d+) months$/,
   async ({ page }, months: string) => {
     // Actual's own test steps to April 2017, a six-row month relative to its pinned date. Any
     // run of months holds one, so the check is structural instead: whatever the month, the grid
@@ -156,11 +161,11 @@ accountSteps.then(
 );
 
 accountSteps.then(
-  /^the date picker dialog is at most (\d+) pixels wide on a (\d+) pixel wide screen$/,
-  async ({ page }, maximum: string, screen: string) => {
-    await page.setViewportSize({ width: Number(screen), height: 1080 });
+  "the date picker dialog does not stretch across an ultra-wide screen",
+  async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1080 });
     const box = (await page.getByRole("dialog").boundingBox())!;
-    expect(box.width).toBeLessThanOrEqual(Number(maximum));
+    expect(box.width).toBeLessThanOrEqual(700);
   },
 );
 

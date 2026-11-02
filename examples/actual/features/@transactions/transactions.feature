@@ -12,7 +12,7 @@ Feature: Transactions
   Scenario: Transactions are filtered by category group
     When the user opens the "Capital One Checking" account
     And the user filters the transactions where the category group is "Usual Expenses"
-    Then the first 5 transactions all show category matching "^(Savings|Medical|Gift|General|Clothing|Entertainment|Restaurants|Food)$"
+    Then the first 5 transactions all show a category among "Savings, Medical, Gift, General, Clothing, Entertainment, Restaurants, Food"
 
   Scenario: Transactions are filtered by payee
     When the user opens the "Capital One Checking" account
@@ -26,9 +26,9 @@ Feature: Transactions
 
     Examples:
       operator | text | expectation
-      contains | De | the first 9 transactions all show payee matching "^Deposit$"
-      contains | l | the first 2 transactions all show payee matching "l"
-      does not contain | l | none of the first 5 transactions show payee matching "l"
+      contains | De | the first 9 transactions all show payee "Deposit"
+      contains | l | the first 2 transactions all show a payee containing "l"
+      does not contain | l | none of the first 5 transactions show a payee containing "l"
 
   Scenario: A transaction is created
     When the user adds a transaction:
@@ -84,23 +84,23 @@ Feature: Transactions
     Then a tooltip shows "deliberately long note about a grocery run" with the tag "#groceries"
 
   Scenario: Columns are hidden and reordered
-    Then the table header shows "Notes"
+    Then the transaction table has a "Notes" column
     When the user opens the table columns dialog
     And the user hides the "Notes" column
     And the user moves the "Category" column up 2 places
     And the user saves the table columns
-    Then the table header reads "DateCategoryPayeePaymentDeposit✓"
+    Then the transaction columns are "Date, Category, Payee, Payment, Deposit, Cleared"
     When the user opens the table columns dialog
     Then the "Notes" column is hidden in the table columns dialog
     When the user resets the columns to default
     And the user saves the table columns
-    Then the table header reads "DatePayeeNotesCategoryPaymentDeposit✓"
+    Then the transaction columns are "Date, Payee, Notes, Category, Payment, Deposit, Cleared"
 
   Scenario: Columns are applied to all transaction tables
     When the user opens the table columns dialog
     And the user hides the "Notes" column
     And the user applies the columns to all transaction tables
     And the user saves the table columns
-    Then the table header does not show "Notes"
+    Then the transaction table has no "Notes" column
     When the user opens the "Bank of America" account
-    Then the table header does not show "Notes"
+    Then the transaction table has no "Notes" column

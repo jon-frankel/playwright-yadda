@@ -263,27 +263,36 @@ transactionSteps.when(
   },
 );
 
-/** `the first 5 transactions all show category "Clothing"`, or `... category matching "^(A|B)$"`. */
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * `the first 5 transactions all show category "Clothing"` (exactly that), `... show a payee
+ * containing "l"`, or `... show a category among "Food, Gift"` (any one of those).
+ */
 transactionSteps.then(
-  /^the first (\d+) transactions all show (\w+) (matching )?"([^"]*)"$/,
+  /^the first (\d+) transactions all show (?:a )?(\w+) (containing |among )?"([^"]*)"$/,
   async (
     { page },
     count: string,
     column: string,
-    matching: string | undefined,
+    qualifier: string | undefined,
     expected: string,
   ) => {
+    const pattern =
+      qualifier === "containing "
+        ? escapeRegExp(expected)
+        : `^(?:${expected.split(", ").map(escapeRegExp).join("|")})$`;
     for (let i = 0; i < Number(count); i++) {
       await expect(rowsOf(page).nth(i).getByTestId(column)).toHaveText(
-        matching ? new RegExp(expected) : expected,
+        qualifier ? new RegExp(pattern) : expected,
       );
     }
   },
 );
 
 transactionSteps.then(
-  /^none of the first (\d+) transactions show (\w+) matching "([^"]*)"$/,
-  async ({ page }, count: string, column: string, pattern: string) => {
+  /^none of the first (\d+) transactions show a (\w+) containing "([^"]*)"$/,
+  async ({ page }, count: string, column: string, fragment: string) => {
     // Read the cells once they are rendered: an absent or still-empty row would pass a negated
     // check vacuously.
     const pick = () => rowsOf(page).getByTestId(column).allTextContents();
@@ -293,7 +302,7 @@ transactionSteps.then(
       expect(texts.every((text) => text !== "")).toBe(true);
     }).toPass();
     for (const text of (await pick()).slice(0, Number(count))) {
-      expect(text).not.toMatch(new RegExp(pattern));
+      expect(text).not.toContain(fragment);
     }
   },
 );
@@ -358,21 +367,42 @@ const columnsDialog = (page: Page) => page.getByTestId("transaction-table-column
 const toggleOf = (page: Page, column: string) =>
   columnsDialog(page).locator(`#toggle-column-${column.toLowerCase()}`);
 
-transactionSteps.when("the user opens the table columns dialog", async ({ page }) => {
+async function openColumns(page: Page) {
   await page.getByRole("button", { name: "Account menu" }).click();
   await page.getByRole("button", { name: "Manage table columns" }).click();
   await columnsDialog(page).waitFor();
+}
+
+async function setColumn(page: Page, column: string, action: string) {
+  const toggle = toggleOf(page, column);
+  if ((await toggle.isChecked()) !== (action === "shows")) {
+    await columnsDialog(page).locator(`label[for="toggle-column-${column.toLowerCase()}"]`).click();
+  }
+}
+
+async function saveColumns(page: Page) {
+  await columnsDialog(page).getByRole("button", { name: "Save", exact: true }).click();
+  await columnsDialog(page).waitFor({ state: "hidden" });
+}
+
+transactionSteps.when("the user opens the table columns dialog", async ({ page }) => {
+  await openColumns(page);
 });
 
 transactionSteps.when(
   /^the user (hides|shows) the "([^"]+)" column$/,
   async ({ page }, action: string, column: string) => {
-    const toggle = toggleOf(page, column);
-    if ((await toggle.isChecked()) !== (action === "shows")) {
-      await columnsDialog(page)
-        .locator(`label[for="toggle-column-${column.toLowerCase()}"]`)
-        .click();
-    }
+    await setColumn(page, column, action);
+  },
+);
+
+// For scenarios that only need a column, not the column manager itself.
+transactionSteps.when(
+  /^the user (hides|shows) the "([^"]+)" column in the transaction table$/,
+  async ({ page }, action: string, column: string) => {
+    await openColumns(page);
+    await setColumn(page, column, action);
+    await saveColumns(page);
   },
 );
 
@@ -401,20 +431,27 @@ transactionSteps.when("the user resets the columns to default", async ({ page })
 });
 
 transactionSteps.when("the user saves the table columns", async ({ page }) => {
-  await columnsDialog(page).getByRole("button", { name: "Save", exact: true }).click();
-  await columnsDialog(page).waitFor({ state: "hidden" });
+  await saveColumns(page);
 });
 
-transactionSteps.then(/^the table header reads "([^"]+)"$/, async ({ page }, text: string) => {
-  await expect(page.getByTestId("transaction-table-header")).toHaveText(text);
-});
+// The cleared column's header is a tick mark, which a scenario calls "Cleared".
+const headerOf = (column: string) => (column === "Cleared" ? "✓" : column);
 
 transactionSteps.then(
-  /^the table header (does not show|shows) "([^"]+)"$/,
-  async ({ page }, mode: string, text: string) => {
+  /^the transaction columns are "([^"]+)"$/,
+  async ({ page }, columns: string) => {
+    await expect(page.getByTestId("transaction-table-header")).toHaveText(
+      columns.split(", ").map(headerOf).join(""),
+    );
+  },
+);
+
+transactionSteps.then(
+  /^the transaction table (has a|has no) "([^"]+)" column$/,
+  async ({ page }, mode: string, column: string) => {
     const header = page.getByTestId("transaction-table-header");
-    if (mode === "shows") await expect(header).toContainText(text);
-    else await expect(header).not.toContainText(text);
+    if (mode === "has a") await expect(header).toContainText(column);
+    else await expect(header).not.toContainText(column);
   },
 );
 

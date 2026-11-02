@@ -16,7 +16,7 @@ ruleSteps.when("the user starts a new rule", async function (this: ActualContext
 ruleSteps.when(
   /^the rule applies when the (.+?) (is|is not|contains|does not contain|one of|matches) "([^"]+)"$/,
   async function (this: ActualContext, field: string, op: string, value: string) {
-    const editor = this.ruleEditor!;
+    const editor = this.ruleEditor;
     await fillEditorRow(
       {
         page: this.page,
@@ -32,7 +32,7 @@ ruleSteps.when(
 ruleSteps.when(
   /^the rule sets the (.+?) to "([^"]+)"$/,
   async function (this: ActualContext, field: string, value: string) {
-    const editor = this.ruleEditor!;
+    const editor = this.ruleEditor;
     await fillEditorRow(
       { page: this.page, root: modal(this).getByTestId("action-list"), index: editor.actions++ },
       { field, value },
@@ -47,7 +47,7 @@ async function addSplit(
   share: { field: string; value?: string },
   category: string,
 ) {
-  const editor = ctx.ruleEditor!;
+  const editor = ctx.ruleEditor;
   await modal(ctx).getByTestId("add-split-transactions").click();
   const group = modal(ctx)
     .getByTestId("action-list")
@@ -83,5 +83,15 @@ ruleSteps.then(
   async function (this: ActualContext, ordinal: string, part: string, text: string) {
     const row = this.page.getByTestId("table").getByTestId("row").nth(indexOfOrdinal(ordinal));
     await expect(row.getByTestId(part).locator(":scope > div")).toHaveText([text]);
+  },
+);
+
+ruleSteps.when(
+  /^the user deletes the rule "([^"]+)"$/,
+  async function (this: ActualContext, text: string) {
+    // Found by its text: the list reloads after a save, and the new rule isn't always first yet.
+    const row = this.page.getByTestId("table").getByTestId("row").filter({ hasText: text });
+    await row.first().click({ button: "right" });
+    await this.page.getByRole("menu").getByRole("button", { name: "Delete" }).click();
   },
 );

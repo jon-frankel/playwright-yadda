@@ -1,10 +1,11 @@
-@Libraries=rules, transactions
 Feature: Rules
   Rules change transactions as they are created.
 
-  Scenario: A rule is applied to a new transaction
+  Background:
     Given the demo budget is open
     And the Rules page is open
+
+  Scenario: A rule is applied to a new transaction
     When the user filters the list for "Fast Internet"
     And the user starts a new rule
     And the rule applies when the payee is "Fast Internet"
@@ -16,9 +17,8 @@ Feature: Rules
     And the user adds a debit of "12.34" paid to "Fast Internet"
     Then the first transaction shows payee "Fast Internet", category "General" and debit "12.34"
 
+  @slow
   Scenario: A rule splits a new transaction
-    Given the demo budget is open
-    And the Rules page is open
     When the user starts a new rule
     And the rule applies when the payee is "Ikea"
     And the rule sets the notes to "food / entertainment"
@@ -36,8 +36,15 @@ Feature: Rules
       ---
 
   Scenario: A rule has a context menu
-    Given the demo budget is open
-    And the Rules page is open
     When the user filters the list for "Fast Internet"
     And the user right-clicks the first row
     Then a context menu offers "Edit"
+
+  Scenario: A rule can be deleted
+    When the user starts a new rule
+    And the rule applies when the payee is "Ikea"
+    And the rule sets the category to "General"
+    And the user saves the rule
+    And the user deletes the rule "payee is Ikea"
+    And the user filters the list for "Ikea"
+    Then "No rules" is shown

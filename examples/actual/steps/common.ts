@@ -20,6 +20,9 @@ commonSteps.when(
   /^the user opens the "([^"]+)" account$/,
   async function (this: ActualContext, account: string) {
     await this.page.getByRole("link", { name: new RegExp(`^${account}`) }).click();
+    // Wait for the switch: a check made at once would read the account that was open before.
+    // Case-insensitive: the "On budget" group link heads its page "On Budget Accounts".
+    await expect(this.page.getByTestId("account-name")).toContainText(new RegExp(account, "i"));
   },
 );
 
@@ -45,6 +48,17 @@ commonSteps.when(
 commonSteps.then(/^"([^"]+)" is shown$/, async function (this: ActualContext, text: string) {
   await expect(this.page.getByText(text).first()).toBeVisible();
 });
+
+// The payee list is a table, so a filter that does nothing leaves many rows behind.
+commonSteps.then(
+  /^the payee list shows "([^"]+)"$/,
+  async function (this: ActualContext, payee: string) {
+    const rows = this.page.getByTestId("table").getByTestId("row");
+    await expect(rows.filter({ hasText: payee }).first()).toBeVisible();
+    // Unrelated payees are gone: only a handful of rows can match a name.
+    await expect.poll(() => rows.count()).toBeLessThanOrEqual(5);
+  },
+);
 
 commonSteps.then(
   /^a context menu offers "([^"]+)"$/,

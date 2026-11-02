@@ -15,7 +15,10 @@ const categoryRow = (page: Page, ordinal: string): Locator =>
 /** Money as whole cents, from the text of a balance cell. */
 async function balanceOf(row: Locator): Promise<number> {
   const text = await row.getByTestId("balance").textContent();
-  return Math.round(parseFloat((text ?? "").replace(/,/g, "")) * 100);
+  const cents = Math.round(parseFloat((text ?? "").replace(/,/g, "")) * 100);
+  // An empty cell is NaN, and NaN equals NaN: it must not read as a balance.
+  if (Number.isNaN(cents)) throw new Error(`No balance in the cell: "${text}"`);
+  return cents;
 }
 
 budgetingSteps.then(/^the budget summary shows "([^"]+)"$/, async ({ page }, label: string) => {
@@ -56,7 +59,9 @@ budgetingSteps.when(
 budgetingSteps.then(
   /^the (\w+) category's balance is what both categories held$/,
   async function (this: { balances?: Record<string, number> }, { page }, ordinal: string) {
-    const { from = 0, to = 0 } = this.balances ?? {};
+    const { from, to } = this.balances ?? {};
+    if (from === undefined || to === undefined)
+      throw new Error("The balances were not noted first");
     await expect.poll(() => balanceOf(categoryRow(page, ordinal))).toEqual(from + to);
   },
 );
@@ -69,7 +74,7 @@ budgetingSteps.when(
 );
 
 budgetingSteps.then(/^the transactions of "([^"]+)" are shown$/, async ({ page }, name: string) => {
-  expect(page.url()).toContain("/accounts");
+  await expect(page).toHaveURL(/\/accounts/);
   await expect(page.getByTestId("account-name")).toContainText(name);
 });
 

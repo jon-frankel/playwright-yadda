@@ -26,7 +26,7 @@ Feature: Transactions
 
     Examples:
       operator | text | expectation
-      contain | De | the first 9 transactions all show payee matching "Deposit"
+      contain | De | the first 9 transactions all show payee matching "^Deposit$"
       contain | l | the first 2 transactions all show payee matching "l"
       do not contain | l | none of the first 19 transactions show payee matching "l"
 

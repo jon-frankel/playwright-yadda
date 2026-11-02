@@ -41,6 +41,7 @@ Feature: Schedules
     And the second "Apple" schedule shows status "Due"
     When the user posts the second "Apple" schedule
     Then the second "Apple" schedule shows status "Paid"
+    And the first "Apple" schedule shows status "Paid"
     When the user opens the "HSBC" account
     Then the first transaction shows payee "Apple", category "Categorize", debit "5.00" and credit ""
     And the second transaction shows payee "Apple", category "Categorize", debit "5.00" and credit ""

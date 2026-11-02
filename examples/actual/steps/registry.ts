@@ -7,6 +7,7 @@ import { transactionSteps } from "./transactions.js";
 import { mobileSteps } from "./mobile.js";
 import { budgetingSteps } from "./budget.js";
 import { scheduleSteps } from "./schedules.js";
+import { inheritanceASteps, inheritanceBSteps } from "./inheritance.js";
 
 export const registry = createLibraryRegistry(
   {
@@ -18,6 +19,8 @@ export const registry = createLibraryRegistry(
     mobile: mobileSteps,
     budgeting: budgetingSteps,
     schedules: scheduleSteps,
+    inheritanceA: inheritanceASteps,
+    inheritanceB: inheritanceBSteps,
   },
   { defaultLibraries: ["common", "session"] },
 );

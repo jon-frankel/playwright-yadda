@@ -142,6 +142,41 @@ accountSteps.then("a date picker is centred in the dialog", async ({ page }) => 
   expect(Math.abs(leftGap - rightGap)).toBeLessThanOrEqual(2);
 });
 
+accountSteps.then(
+  /^every month of the date picker keeps its grid inside the dialog for the next (\d+) months$/,
+  async ({ page }, months: string) => {
+    // Actual's own test steps to April 2017, a six-row month relative to its pinned date. Any
+    // run of months holds one, so the check is structural instead: whatever the month, the grid
+    // is fully inside the dialog, and over the run a month with six week rows must occur.
+    const dialog = page.getByRole("dialog");
+    const grid = dialog.locator(".react-aria-CalendarGrid");
+    const title = dialog.locator(".calendar-header-title");
+    const weekRows = grid.locator("tbody tr");
+    let sixRowMonths = 0;
+    for (let month = 0; month <= Number(months); month++) {
+      if (month > 0) {
+        const previous = await title.textContent();
+        await dialog.getByRole("button", { name: "Next month" }).click();
+        await expect(title).not.toHaveText(previous!);
+      }
+      if ((await weekRows.count()) === 6) sixRowMonths++;
+      const dialogBox = (await dialog.boundingBox())!;
+      const gridBox = (await grid.boundingBox())!;
+      expect(gridBox.y + gridBox.height).toBeLessThanOrEqual(dialogBox.y + dialogBox.height);
+    }
+    expect(sixRowMonths, "no month with six week rows was visited").toBeGreaterThan(0);
+  },
+);
+
+accountSteps.then(
+  /^the date picker dialog is at most (\d+) pixels wide on a (\d+) pixel wide screen$/,
+  async ({ page }, maximum: string, screen: string) => {
+    await page.setViewportSize({ width: Number(screen), height: 1080 });
+    const box = (await page.getByRole("dialog").boundingBox())!;
+    expect(box.width).toBeLessThanOrEqual(Number(maximum));
+  },
+);
+
 // Reconciling
 
 accountSteps.when(
@@ -210,6 +245,15 @@ accountSteps.when("the user imports the transactions", async ({ page }) => {
   await button.click();
   await expect(button).not.toBeVisible();
 });
+
+accountSteps.then(
+  /^the import preview lists the categories "([^"]+)" and "([^"]+)"$/,
+  async ({ page }, first: string, second: string) => {
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText(first, { exact: true })).toBeVisible();
+    await expect(dialog.getByText(second, { exact: true })).toBeVisible();
+  },
+);
 
 accountSteps.when("the user closes the import", async ({ page }) => {
   await page.getByRole("button", { name: "Close" }).click();

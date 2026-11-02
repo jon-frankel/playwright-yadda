@@ -1,5 +1,3 @@
-@Libraries=transactions
-
 # Feature: Payees in Markdown
 
 The payees list of the demo budget, written as a Markdown document. GitHub renders it as a page; a

@@ -4,6 +4,7 @@ import { createBdd } from "playwright-yadda";
 import { test } from "./test.js";
 import { parseTable, requireBlock } from "./support/blocks.js";
 import { indexOfOrdinal } from "./support/ordinal.js";
+import { parseChecks } from "./support/checks.js";
 
 const { createStepLibrary } = createBdd(test);
 
@@ -86,8 +87,8 @@ scheduleSteps.then(
   /^the (\w+) "([^"]+)" schedule shows (.+)$/,
   async ({ page }, ordinal: string, payee: string, checks: string) => {
     const row = scheduleOf(page, payee, ordinal);
-    for (const [, column, expected] of checks.matchAll(/(\w+) "([^"]*)"/g)) {
-      await expect(row.getByTestId(column!)).toHaveText(expected!);
+    for (const { column, expected } of parseChecks(checks)) {
+      await expect(row.getByTestId(column)).toHaveText(expected);
     }
   },
 );

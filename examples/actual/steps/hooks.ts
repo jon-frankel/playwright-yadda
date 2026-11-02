@@ -5,8 +5,12 @@ export const hooks = createHooks();
 // A failed step leaves a screenshot in the report, whichever scenario it was.
 hooks.AfterStep(async ({ error, step, fixtures }) => {
   if (!error) return;
-  await fixtures.page.screenshot({ path: `test-results/failed-${Date.now()}.png` }).catch(() => {});
-  console.log(`failed: ${step}`);
+  try {
+    const body = await fixtures.page.screenshot();
+    await fixtures.testInfo.attach("failed step", { body, contentType: "image/png" });
+  } catch (screenshotError) {
+    console.warn(`no screenshot of "${step}": ${String(screenshotError)}`);
+  }
 });
 
 // Actual switches to its narrow layout by viewport width, and decides at load time. This runs after

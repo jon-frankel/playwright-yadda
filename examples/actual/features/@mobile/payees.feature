@@ -10,8 +10,10 @@ Feature: Payees on a phone
     Then "No payees found." is shown
 
   Scenario: Clearing the filter brings the other payees back
+    Given the payees list has loaded
     When the user searches for "Fast Internet"
-    Then "Starting Balance" is not shown
+    Then only some of the payees are listed
+    And "Starting Balance" is not shown
     When the user clears the search
     Then "Starting Balance" is shown
 

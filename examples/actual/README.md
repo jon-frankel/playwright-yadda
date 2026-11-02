@@ -36,22 +36,22 @@ The step libraries are the layer the features talk to. Selectors and Playwright 
 
 ## Package features exercised
 
-| Feature                                                                           | Where                                                                            |
-| --------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| library registry, default libraries                                               | every feature                                                                    |
-| path tags (library selection, `@smoke`)                                           | the `features/@…` directories                                                    |
-| scenario-level `@Libraries` (merge)                                               | `@schedules/schedules.feature`                                                   |
-| `libraryInheritance: "override"`                                                  | `overrides/inheritance.feature`, run by `e2e/override.spec.ts` as a second suite |
-| `bound`, `param` and `fixtures` step modes                                        | see the table above                                                              |
-| `createBdd` and a custom fixture                                                  | `steps/test.ts` (`budget`)                                                       |
-| `createContext`                                                                   | `createActualContext` in `steps/context.ts`                                      |
-| `define` with a macro context                                                     | `steps/schedules.ts`                                                             |
-| `Background:`, `Examples:` with `[name]`                                          | payees, accounts, transactions, budget, Markdown                                 |
-| `---` blocks (tables, CSV, QIF)                                                   | rules, transactions, accounts                                                    |
-| Markdown feature                                                                  | `features/@markdown/payees.md`                                                   |
-| `createHooks`: `AfterStep`, tag-filtered `BeforeScenario` with `name` and `order` | `steps/hooks.ts` (screenshot on failure; the `@mobile` viewport)                 |
-| `@slow`, `@timeout`, `@retries`, `@fail`                                          | accounts, rules, `@misc/expectations.feature`                                    |
-| reporter                                                                          | `playwright.config.ts`                                                           |
+| Feature                                                                           | Where                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| library registry, default libraries                                               | every feature                                                                                                                                                                                                                                                |
+| path tags (library selection, `@smoke`)                                           | the `features/@…` directories                                                                                                                                                                                                                                |
+| scenario-level `@Libraries` (merge)                                               | `@schedules/schedules.feature`                                                                                                                                                                                                                               |
+| `libraryInheritance: "override"`                                                  | `overrides/inheritance.feature` (run by `e2e/override.spec.ts` as a second suite): two libraries in `steps/inheritance.ts` define the same step text and report which one ran, so a scenario's `@Libraries` replacing its feature's is visible in the result |
+| `bound`, `param` and `fixtures` step modes                                        | see the table above                                                                                                                                                                                                                                          |
+| `createBdd` and a custom fixture                                                  | `steps/test.ts` (`budget`)                                                                                                                                                                                                                                   |
+| `createContext`                                                                   | `createActualContext` in `steps/context.ts`                                                                                                                                                                                                                  |
+| `define` with a macro context                                                     | `steps/schedules.ts`                                                                                                                                                                                                                                         |
+| `Background:`, `Examples:` with `[name]`                                          | payees, accounts, transactions, budget, Markdown                                                                                                                                                                                                             |
+| `---` blocks (tables, CSV, QIF)                                                   | rules, transactions, accounts                                                                                                                                                                                                                                |
+| Markdown feature                                                                  | `features/@markdown/payees.md`                                                                                                                                                                                                                               |
+| `createHooks`: `AfterStep`, tag-filtered `BeforeScenario` with `name` and `order` | `steps/hooks.ts` (failed-step screenshot attached with `testInfo.attach`; the `@mobile` viewport). The viewport hook passes `name` and `order`, but there is only one such hook, so `order` has no observable effect here                                    |
+| `@slow`, `@timeout`, `@retries`, `@fail`                                          | accounts, rules, `@misc/expectations.feature`                                                                                                                                                                                                                |
+| reporter                                                                          | `playwright.config.ts`                                                                                                                                                                                                                                       |
 
 Not exercised: `BeforeWorker` / `AfterWorker` (nothing here needs one), `@only`, `@skip`, `@pending`, `@fixme`, `@mode:serial` (every scenario gets its own demo budget, so none depend on another), `language`, and the reporter's `tags` and `fullStackTrace` options. `examples/basic` covers them.
 
@@ -59,27 +59,33 @@ Not exercised: `BeforeWorker` / `AfterWorker` (nothing here needs one), `@only`,
 
 The first ported areas. Accounts, transactions, budget, schedules and some of the mobile tests have been ported since; their counts are not in the table below.
 
-| Original                   | Here                           |
-| -------------------------- | ------------------------------ |
-| `rules.test.ts` (4 tests)  | `rules.feature` (3 scenarios)  |
-| `payees.test.ts` (5 tests) | `payees.feature` (4 scenarios) |
+| Original                   | Here                                                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rules.test.ts` (4 tests)  | `features/@rules/@transactions/rules.feature` (4 scenarios: 3 ported, plus a delete scenario the original does not have)                             |
+| `payees.test.ts` (5 tests) | `features/@smoke/payees.feature` (4 scenarios, one an outline over three payees), and its Markdown twin `features/@markdown/payees.md` (2 scenarios) |
 
-Not ported: the two "checks the page visuals" tests. They only compare screenshots, and in Actual's own suite the screenshot assertion is a no-op outside its visual-regression mode.
+The failed-step screenshot is attached to the report by the `AfterStep` hook with `testInfo.attach`.
+
+Not ported: the two "checks the page visuals" tests (rules, payees). They only compare screenshots, and in Actual's own suite the screenshot assertion is a no-op outside its visual-regression mode.
 
 Also different from the originals: "is shown" checks use the first match instead of requiring exactly one, and Actual's animation-disabling trick is applied by the `budget` fixture.
 
+### Differences from the originals
+
+Deliberately not ported, across all areas:
+
+- Every `toMatchThemeScreenshots()` / `toHaveScreenshot()` call, including those inside otherwise ported tests (for example the account-creation and filter tests), and the tests that consist of nothing else ("checks the page visuals", "creates a full list of schedules", the command bar and help menu visuals).
+- Transactions filtered "by date": the original picks day 20 of the current month and expects an empty table, which depends on the date the suite runs.
+- The remaining original areas not ported yet: bank sync, onboarding, tour, reports, command bar, help menu, budget automations, calculator, and most of the mobile budget and transaction tests, plus the two account import tests ("an unchecked match with the same amount", "import notes checkbox").
+
 ### Numbers so far
 
-Lines, pilot areas only. These are not a like-for-like comparison yet: the originals also lean on page objects (`navigation`, `account-page`, `configuration-page`) that are shared with the rest of the suite and not counted here, while these steps will be reused by every area still to come.
+Lines, pilot areas only (`rules.feature` and `payees.feature`; the Markdown twin is not counted). These are not a like-for-like comparison: the originals also lean on page objects that are shared with the rest of the suite, while the steps here are shared by every area.
 
-|                                      | Original | Here |
-| ------------------------------------ | -------- | ---- |
-| tests / scenarios                    | 7        | 7    |
-| spec and feature lines               | 218      | 70   |
-| page-object lines (3 files)          | 245      | n/a  |
-| step and support lines               | n/a      | 334  |
-| step definitions                     | n/a      | 17   |
-| distinct step texts used by 45 steps | n/a      | 29   |
+|                        | Original | Here |
+| ---------------------- | -------- | ---- |
+| tests / scenarios      | 9        | 8    |
+| spec and feature lines | 218      | 79   |
 
 ## Findings
 

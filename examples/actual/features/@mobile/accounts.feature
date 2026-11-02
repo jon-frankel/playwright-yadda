@@ -16,4 +16,4 @@ Feature: Accounts on a phone
     Then "No transactions" is shown
     When the user clears the search
     And the user searches for "Kroger"
-    Then the account lists transactions
+    Then the account lists transactions mentioning "Kroger"

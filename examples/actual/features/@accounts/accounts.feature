@@ -52,6 +52,8 @@ Feature: Accounts
     And the user selects the first transaction
     And the user chooses "Date" for the selection
     Then a date picker is centred in the dialog
+    And every month of the date picker keeps its grid inside the dialog for the next 12 months
+    And the date picker dialog is at most 700 pixels wide on a 2560 pixel wide screen
 
   @slow
   Scenario: Shift-click selection skips hidden reconciled transactions
@@ -153,6 +155,7 @@ Feature: Accounts
       LIncome:Income
       ^
       ---
-    And the user imports the transactions
+    Then the import preview lists the categories "Food" and "Income"
+    When the user imports the transactions
     Then the transaction "QIF Cafe" is listed with category "Food"
     And the transaction "QIF Salary" is listed with category "Income"

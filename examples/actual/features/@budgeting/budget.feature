@@ -37,5 +37,6 @@ Feature: Budget
     Given the budget has 20 extra categories
     When the user scrolls to the bottom of the budget
     And the user clicks the last spent amount in view
-    And the user goes back to the budget
+    Then the transactions of "All Accounts" are shown
+    When the user goes back to the budget
     Then the budget is scrolled to where it was

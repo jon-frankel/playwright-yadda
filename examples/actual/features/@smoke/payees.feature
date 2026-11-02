@@ -7,7 +7,7 @@ Feature: Payees
 
   Scenario: [payee] is listed
     When the user filters the list for "[payee]"
-    Then "[payee]" is shown
+    Then the payee list shows "[payee]"
 
     Examples:
       payee

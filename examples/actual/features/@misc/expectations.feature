@@ -10,7 +10,9 @@ Feature: Tags that change how a scenario runs
   @fail
   Scenario: A payee that does not exist is claimed to be listed
     When the user filters the list for "Unicorn Ltd"
-    Then "Unicorn Ltd" is shown
+    # The page loaded and the filter ran: only the claim below can be the failure.
+    Then "No payees" is shown
+    And "Unicorn Ltd" is shown
 
   # Half the default minute: this scenario takes about ten seconds, so a hang fails sooner.
   @timeout:30000

@@ -10,6 +10,7 @@ import {
   openEntryForm,
   type TransactionEntry,
 } from "./support/transaction-form.js";
+import { parseChecks } from "./support/checks.js";
 
 const { createStepLibrary } = createBdd(test);
 
@@ -48,8 +49,8 @@ transactionSteps.then(
       .getByTestId("transaction-table")
       .getByTestId("row")
       .nth(indexOfOrdinal(ordinal));
-    for (const [, column, expected] of checks.matchAll(/(\w+) "([^"]*)"/g)) {
-      await expect(row.getByTestId(column!)).toHaveText(expected!);
+    for (const { column, expected } of parseChecks(checks)) {
+      await expect(row.getByTestId(column)).toHaveText(expected);
     }
   },
 );
@@ -295,6 +296,9 @@ transactionSteps.then(
 
 // Notes tooltip
 
+// Actual's Tooltip opens after this hover delay (component-library Tooltip.tsx).
+const TOOLTIP_HOVER_DELAY_MS = 300;
+
 transactionSteps.when(
   /^the user hovers over the notes of the (\w+) transaction$/,
   async ({ page }, ordinal: string) => {
@@ -313,7 +317,34 @@ transactionSteps.then(
 );
 
 transactionSteps.then("no tooltip appears", async ({ page }) => {
-  await page.waitForTimeout(700); // past the tooltip's hover delay
+  // Absence cannot be polled for, so first confirm the pointer really rests on the notes (a
+  // positive signal), then watch the DOM for the tooltip over a window that outlasts Actual's
+  // 300 ms hover delay. The watch ends early with a failure the moment a tooltip is added.
+  await expect
+    .poll(() =>
+      page.getByTestId("notes").evaluateAll((els) => els.some((el) => el.matches(":hover"))),
+    )
+    .toBe(true);
+  const appeared = await page.evaluate(
+    (windowMs) =>
+      new Promise<boolean>((resolve) => {
+        const present = () => document.querySelector('[role="tooltip"]') !== null;
+        if (present()) return resolve(true);
+        const observer = new MutationObserver(() => {
+          if (present()) {
+            observer.disconnect();
+            resolve(true);
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        setTimeout(() => {
+          observer.disconnect();
+          resolve(false);
+        }, windowMs);
+      }),
+    TOOLTIP_HOVER_DELAY_MS * 2,
+  );
+  expect(appeared, "a tooltip appeared on a note that is not truncated").toBe(false);
   await expect(page.getByRole("tooltip")).not.toBeVisible();
 });
 

@@ -102,11 +102,39 @@ mobileSteps.then("the account lists transactions", async (ctx: ActualContext) =>
   await expect(ctx.page.getByLabel("Transaction list").getByRole("button").first()).toBeVisible();
 });
 
+mobileSteps.then(
+  /^the account lists transactions mentioning "([^"]+)"$/,
+  async (ctx: ActualContext, text: string) => {
+    const list = ctx.page.getByLabel("Transaction list");
+    await expect(list.getByRole("button").first()).toBeVisible();
+    await expect(list.getByRole("button").filter({ hasText: text }).first()).toBeVisible();
+  },
+);
+
+const payeeCells = (ctx: ActualContext) =>
+  ctx.page.getByRole("grid", { name: "Payees" }).getByRole("gridcell");
+
+// Remembers the unfiltered count, so a later "not shown" check has a rendered list to compare to.
+mobileSteps.given("the payees list has loaded", async (ctx: ActualContext) => {
+  await payeeCells(ctx).first().waitFor();
+  ctx.payeeCount = await payeeCells(ctx).count();
+});
+
+mobileSteps.then("only some of the payees are listed", async (ctx: ActualContext) => {
+  const total = ctx.payeeCount as number;
+  await expect(payeeCells(ctx).first()).toBeVisible();
+  await expect.poll(() => payeeCells(ctx).count()).toBeLessThan(total);
+});
+
 mobileSteps.then(/^"([^"]+)" is not shown$/, async (ctx: ActualContext, text: string) => {
   await expect(ctx.page.getByText(text)).toHaveCount(0);
 });
 
 mobileSteps.then("a zip named after today's date is downloaded", async (ctx: ActualContext) => {
   const download = ctx.download as import("@playwright/test").Download;
-  expect(download.suggestedFilename()).toMatch(/^\d{4}-\d{2}-\d{2}-.*\.zip$/);
+  // Actual names it `yyyy-MM-dd-<budget>.zip`, in local time.
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  expect(download.suggestedFilename()).toMatch(new RegExp(`^${today}-.*\\.zip$`));
 });

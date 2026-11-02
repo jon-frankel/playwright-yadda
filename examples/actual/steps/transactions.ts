@@ -192,6 +192,13 @@ async function openFilter(page: Page, field: string) {
   return page.getByTestId("filters-menu-tooltip");
 }
 
+/** Picks an item from an autocomplete list, and waits for the list to close so the value has registered. */
+async function pickItem(page: Page, testId: string) {
+  const item = page.getByTestId(testId);
+  await item.click();
+  await expect(item).toBeHidden();
+}
+
 /** Applies the filter and waits until the list shows it, so a check right after reads the filtered rows. */
 async function applyFilter(menu: Locator) {
   await menu.getByRole("button", { name: "Apply" }).click();
@@ -204,7 +211,7 @@ transactionSteps.when(
   async ({ page }, category: string) => {
     const menu = await openFilter(page, "Category");
     await page.keyboard.type(category.slice(0, 1));
-    await page.getByTestId(`${category}-category-item`).click();
+    await pickItem(page, `${category}-category-item`);
     await applyFilter(menu);
   },
 );
@@ -216,7 +223,7 @@ transactionSteps.when(
     await menu.getByRole("button", { name: "Category", exact: true }).click();
     await page.getByRole("button", { name: "Category group", exact: true }).click();
     await page.keyboard.type(group.slice(0, 1));
-    await page.getByTestId(`${group}-category-group-item`).click();
+    await pickItem(page, `${group}-category-group-item`);
     await applyFilter(menu);
   },
 );
@@ -227,7 +234,7 @@ transactionSteps.when(
     const menu = await openFilter(page, "Payee");
     // Auto-open is broken for anything but "is not", so open the list by clicking.
     await menu.getByLabel("Payee").click();
-    await page.getByTestId(`${payee}-payee-item`).click();
+    await pickItem(page, `${payee}-payee-item`);
     await applyFilter(menu);
   },
 );

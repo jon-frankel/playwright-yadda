@@ -84,9 +84,6 @@ Feature: Accounts
     And the user shift-selects the transaction with notes "range-one"
     Then the selection is "2 transactions"
 
-  # Under parallel load a row added a moment ago can swallow the selection click, as Actual's own test notes.
-  # Still needed: 12 runs on 4 workers, with the tag's retries, ended 5 flaky and 2 failed.
-  @retries:2
   Scenario: Two transactions are made into a transfer
     When the user opens the "On budget" account
     And the user filters the transactions to the note "Test Acc Transfer"
@@ -100,7 +97,8 @@ Feature: Accounts
       | account | notes             | category | credit |
       | HSBC    | Test Acc Transfer | Food     | 34.56  |
       ---
-    And the user selects the first transaction
+    Then the second transaction is listed
+    When the user selects the first transaction
     And the user selects the second transaction
     And the user chooses "Make transfer" for the selection
     Then the transaction list starts with:

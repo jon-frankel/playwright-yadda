@@ -83,6 +83,10 @@ accountSteps.then(
 
 // Selecting transactions
 
+accountSteps.then(/^the (\w+) transaction is listed$/, async ({ page }, ordinal: string) => {
+  await expect(rowsOf(page).nth(indexOfOrdinal(ordinal)).getByTestId("payee")).toBeVisible();
+});
+
 accountSteps.when(/^the user selects the (\w+) transaction$/, async ({ page }, ordinal: string) => {
   // A row added a moment ago may still be mounting, and a click on it would not select anything.
   const row = rowsOf(page).nth(indexOfOrdinal(ordinal));

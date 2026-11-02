@@ -11,12 +11,12 @@ heading is a keyword line and a list item is a step.
 ## Scenario: A payee is found by its name
 
 - When the user filters the list for "Fast Internet"
-- Then "Fast Internet" is shown
+- Then the payee list shows "Fast Internet"
 
 ## Scenario Outline: [payee] is listed
 
 - When the user filters the list for "[payee]"
-- Then "[payee]" is shown
+- Then the payee list shows "[payee]"
 
 ### Examples:
 

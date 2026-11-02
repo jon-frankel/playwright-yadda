@@ -106,8 +106,11 @@ mobileSteps.then(
   /^the account lists transactions mentioning "([^"]+)"$/,
   async (ctx: ActualContext, text: string) => {
     const list = ctx.page.getByLabel("Transaction list");
-    await expect(list.getByRole("button").first()).toBeVisible();
-    await expect(list.getByRole("button").filter({ hasText: text }).first()).toBeVisible();
+    const buttons = list.getByRole("button");
+    await expect(buttons.first()).toBeVisible();
+    // Every listed transaction mentions the text: an unfiltered list has others, so it fails.
+    await expect.poll(() => buttons.filter({ hasNotText: text }).count()).toBe(0);
+    await expect(buttons.first()).toContainText(text);
   },
 );
 

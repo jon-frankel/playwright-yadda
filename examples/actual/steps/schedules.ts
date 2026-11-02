@@ -106,10 +106,11 @@ scheduleSteps.then(
 /**
  * Edits the schedule's rule the way a user's rule editor would, through Actual's own API: the
  * editor has no screen for a split to another account's payee. The demo's "Phone bills" schedule
- * then pays `amount` to the account and leaves the rest for its own payee.
+ * then keeps `amount` of each payment on its own payee (split 1) and sends the remainder
+ * (split 2) to the account's transfer payee.
  */
 scheduleSteps.given(
-  /^the "([^"]+)" schedule sends (\d+(?:\.\d+)?) of each payment on to the "([^"]+)" account$/,
+  /^the "([^"]+)" schedule keeps (\d+(?:\.\d+)?) of each payment and sends the rest on to the "([^"]+)" account$/,
   async ({ page }, name: string, amount: string, account: string) => {
     await page.evaluate(
       async ([scheduleName, cents, accountName]) => {

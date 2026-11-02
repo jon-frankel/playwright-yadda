@@ -47,7 +47,7 @@ Feature: Schedules
     And the second transaction shows payee "Apple", category "Categorize", debit "5.00" and credit ""
 
   Scenario: A scheduled split transfer is shown in its destination account
-    Given the "Phone bills" schedule sends 70 of each payment on to the "Ally Savings" account
+    Given the "Phone bills" schedule keeps 70 of each payment and sends the rest on to the "Ally Savings" account
     When the user opens the "Ally Savings" account
     Then a scheduled transfer from "Bank of America" of 50.00 is listed as due
 

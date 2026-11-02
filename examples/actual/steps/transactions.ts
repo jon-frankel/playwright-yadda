@@ -288,8 +288,16 @@ transactionSteps.then(
 transactionSteps.then(
   /^none of the first (\d+) transactions show (\w+) matching "([^"]*)"$/,
   async ({ page }, count: string, column: string, pattern: string) => {
-    for (let i = 0; i < Number(count); i++) {
-      await expect(rowsOf(page).nth(i).getByTestId(column)).not.toHaveText(new RegExp(pattern));
+    // Read the cells once they are rendered: an absent or still-empty row would pass a negated
+    // check vacuously.
+    const pick = () => rowsOf(page).getByTestId(column).allTextContents();
+    await expect(async () => {
+      const texts = (await pick()).slice(0, Number(count));
+      expect(texts).toHaveLength(Number(count));
+      expect(texts.every((text) => text !== "")).toBe(true);
+    }).toPass();
+    for (const text of (await pick()).slice(0, Number(count))) {
+      expect(text).not.toMatch(new RegExp(pattern));
     }
   },
 );

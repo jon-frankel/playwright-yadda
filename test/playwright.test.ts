@@ -337,3 +337,26 @@ describe("warnings about how scenarios are declared, with the real Playwright", 
     ]);
   }, 60_000);
 });
+
+describe("--list with the yadda reporter, with the real Playwright", () => {
+  // The reporter knows it is only listing from an option Playwright passes to every reporter
+  // (`_mode: "list"`), which is not documented. Run against each new Playwright by the "Latest
+  // Playwright" workflow, so that a release that renames it is noticed.
+  const run = runPlaywright("warnings.spec.ts", [
+    "--list",
+    `--reporter=${path.join(root, "src", "reporter.ts")}`,
+  ]);
+  // eslint-disable-next-line no-control-regex
+  const output = run.stdout.replace(/\x1b\[[0-9;]*m/g, "");
+
+  it("lists the scenarios by feature file, with a total", () => {
+    expect(run.status).toBe(0);
+    expect(output).toMatch(/^Feature: Warnings @mode:parallel$/m);
+    expect(output).toMatch(/^ {2}Scenario: Clean one$/m);
+    expect(output).toMatch(/^Total: 6 scenarios in 1 feature$/m);
+  });
+
+  it("does not print a run that did not happen", () => {
+    expect(output).not.toMatch(/Running \d+ scenario|\d+ passed/);
+  });
+});

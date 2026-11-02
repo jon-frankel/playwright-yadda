@@ -1,0 +1,33 @@
+name: Latest Playwright
+
+# Reusable. The tests that run the real Playwright CLI (test/playwright.test.ts), against the newest
+# @playwright/test rather than the one the lockfile pins.
+#
+# playwright-yadda relies on a few things Playwright does not document, such as the `_mode: "list"`
+# option it passes to reporters, which the yadda reporter reads to tell `--list` from a run. When a
+# release changes one, nothing else fails until someone upgrades; this fails on the next merge to
+# main instead. Only validate-main.yml calls it, not pull requests, which run against the lockfile.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  vitest:
+    name: real Playwright (latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup
+
+      # Only in this runner's checkout: nothing is committed
+      - name: Install the latest Playwright
+        run: pnpm add --save-dev @playwright/test@latest
+
+      - name: Show the Playwright version
+        run: pnpm exec playwright --version
+
+      - name: Test against the real Playwright
+        run: pnpm run test test/playwright.test.ts

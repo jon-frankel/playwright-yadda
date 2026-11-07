@@ -130,7 +130,7 @@ jobs:
             }
 
             const finalVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
-            if (fs.existsSync("CHANGELOG.md") && finalVersion !== currentVersion) {
+            if (fs.existsSync("CHANGELOG.md") && changesetBump !== "none" && finalVersion !== currentVersion) {
               console.log(`Syncing CHANGELOG.md top heading to ${finalVersion}`);
               const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
               const updated = changelog.replace(/^##\s+\d+\.\d+\.\d+/m, `## ${finalVersion}`);

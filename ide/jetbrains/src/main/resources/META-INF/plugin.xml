@@ -44,6 +44,8 @@
         in <code>.feature</code> and Markdown files, keeping the groups of the pattern and what they matched.</li>
       <li><b>Run from the gutter:</b> the run icon next to <code>Feature:</code> and
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
+      <li><b>Jump to scenario from test runner:</b> double-clicking a scenario in WebStorm's test runner
+        window jumps directly to its scenario definition in the feature file.</li>
     </ul>
   ]]></description>
 
@@ -51,6 +53,12 @@
   <depends>JavaScript</depends>
   <depends>gherkin</depends>
   <depends>cucumber-javascript</depends>
+
+  <projectListeners>
+    <listener
+        class="io.github.jonfrankel.playwrightyadda.run.YaddaTestStatusListener"
+        topic="com.intellij.execution.testframework.sm.runner.SMTRunnerEventsListener"/>
+  </projectListeners>
 
   <extensions defaultExtensionNs="com.intellij">
     <!-- *.yadda.feature: Gherkin as Yadda writes it, with dashed fences around multi-line steps. -->

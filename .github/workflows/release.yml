@@ -159,11 +159,22 @@ jobs:
 
       - name: Start Verdaccio Registry Container
         run: |
+          mkdir -p .verdaccio/storage .verdaccio/plugins
+          chmod -R 777 .verdaccio
           pnpm run verdaccio:start
-          until curl -s http://localhost:4873/ > /dev/null; do
+          for i in {1..30}; do
+            if curl -s -f http://127.0.0.1:4873/ > /dev/null 2>&1; then
+              echo "Verdaccio is healthy and reachable at http://127.0.0.1:4873."
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::Verdaccio failed to respond on 127.0.0.1:4873 within 30 seconds."
+              docker compose logs
+              exit 1
+            fi
             sleep 1
           done
-          TOKEN=$(node scripts/npm-authn/index.mjs create-token playwright-yadda password http://localhost:4873)
+          TOKEN=$(node scripts/npm-authn/index.mjs create-token playwright-yadda password http://127.0.0.1:4873)
           echo "NPM_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Publish Candidate to Verdaccio & Update Example Workspaces
@@ -203,10 +214,15 @@ jobs:
           VERSION="${{ steps.bump_step.outputs.version }}"
           mkdir -p dist-pack
           # Download the exact verified tarball from Verdaccio to preserve byte-for-byte lockfile integrity
-          npm pack "playwright-yadda@$VERSION" --registry http://localhost:4873 --pack-destination dist-pack
+          npm pack "playwright-yadda@$VERSION" --registry http://127.0.0.1:4873 --pack-destination dist-pack
           # Generate SBOMs via native pnpm sbom
           pnpm sbom --sbom-format cyclonedx --prod > dist-pack/sbom.cyclonedx.json
           pnpm sbom --sbom-format spdx --prod > dist-pack/sbom.spdx.json
+
+      - name: Dump Verdaccio Logs on Failure
+        if: failure()
+        run: |
+          docker compose logs || true
 
       - name: Stop Verdaccio Container
         if: always()

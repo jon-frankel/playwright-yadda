@@ -12,8 +12,8 @@ importers:
         specifier: ^1.50.0
         version: 1.64.1
       playwright-yadda:
-        specifier: 0.0.14
-        version: 0.0.14(@playwright/test@1.64.1)(yadda@3.2.0)
+        specifier: 0.0.16
+        version: 0.0.16(@playwright/test@1.64.1)(yadda@3.2.0)
       yadda:
         specifier: ^3.2.0
         version: 3.2.0
@@ -849,8 +849,8 @@ packages:
     engines: {node: '>=20'}
     hasBin: true
 
-  playwright-yadda@0.0.14:
-    resolution: {integrity: sha512-KP9eKY9thNiggCGz+hDW6RbiV9o4WAJdSav8ELHv3fPNtTq3PyIs00fdPccxylKmlIZliAAiOp/IQZ22wnURBw==}
+  playwright-yadda@0.0.16:
+    resolution: {integrity: sha512-VfB/U7ddf5SO5iSIJCU60XnAfLr70qItzkwoMl9K2jiUSv5u5w3tThWYPunsIRZMdxrL+hEWsjn4lWaz7uzDFQ==}
     engines: {node: '>=22.0.0', pnpm: '>=10.0.0'}
     peerDependencies:
       '@playwright/test': '>=1.30.0'
@@ -1981,7 +1981,7 @@ snapshots:
 
   playwright-core@1.64.1: {}
 
-  playwright-yadda@0.0.14(@playwright/test@1.64.1)(yadda@3.2.0):
+  playwright-yadda@0.0.16(@playwright/test@1.64.1)(yadda@3.2.0):
     dependencies:
       '@playwright/test': 1.64.1
       yadda: 3.2.0

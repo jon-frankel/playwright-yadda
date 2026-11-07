@@ -1,0 +1,29 @@
+changelog:
+  categories:
+    - title: "🚀 Features & Improvements"
+      labels:
+        - "feature"
+        - "enhancement"
+        - "minor"
+    - title: "🐛 Bug Fixes"
+      labels:
+        - "bug"
+        - "fix"
+        - "patch"
+    - title: "🧪 Examples & Testing"
+      labels:
+        - "examples"
+        - "tests"
+        - "ci"
+    - title: "📚 Documentation"
+      labels:
+        - "documentation"
+        - "docs"
+    - title: "🧹 Maintenance & Other Changes"
+      labels:
+        - "*"
+  exclude:
+    labels:
+      - "skip-changelog"
+    authors:
+      - "dependabot[bot]"

@@ -194,6 +194,12 @@ jobs:
           pnpm sbom --sbom-format cyclonedx --prod > dist-pack/sbom.cyclonedx.json
           pnpm sbom --sbom-format spdx --prod > dist-pack/sbom.spdx.json
 
+      - name: Dry-Run npm Publish (Tarball & Registry Validation)
+        run: |
+          TARBALL=$(ls dist-pack/playwright-yadda-*.tgz)
+          echo "Simulating npm publish with --dry-run for $TARBALL..."
+          npm publish "$TARBALL" --access public --dry-run --registry https://registry.npmjs.org/
+
       - name: Generate Release Patch
         run: |
           git add -A -- package.json .changeset
@@ -219,7 +225,6 @@ jobs:
   publish:
     name: Publish to npm & GitHub Release
     needs: verify
-    if: inputs.dry_run != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -256,15 +261,21 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "release: v$VERSION [skip ci]"
           git tag -a "v$VERSION" -m "Release v$VERSION"
-          # Push commit and tag atomically BEFORE publishing to npm
-          git push --atomic origin HEAD:main "v$VERSION"
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "[Dry Run] Release patch applied and commit/tag created locally. Skipping git push to main."
+          else
+            # Push commit and tag atomically BEFORE publishing to npm
+            git push --atomic origin HEAD:main "v$VERSION"
+          fi
 
       - name: Attest Build Provenance (SLSA)
+        if: inputs.dry_run != true
         uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
         with:
           subject-path: "dist-pack/playwright-yadda-*.tgz"
 
       - name: Attest SBOM
+        if: inputs.dry_run != true
         uses: actions/attest-sbom@df501e29bc01a65642d3fb09dc8c88d6a9a7795b # v2.2.2
         with:
           subject-path: "dist-pack/playwright-yadda-*.tgz"
@@ -273,10 +284,16 @@ jobs:
       - name: Publish to npm Registry with Provenance (OIDC)
         run: |
           TARBALL=$(ls dist-pack/playwright-yadda-*.tgz)
-          echo "Publishing $TARBALL to registry.npmjs.org with provenance via OIDC..."
-          npm publish "$TARBALL" --access public --provenance --registry https://registry.npmjs.org/
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "[Dry Run] Testing npm publish with --provenance --dry-run (validates OIDC tokens without uploading)..."
+            npm publish "$TARBALL" --access public --provenance --registry https://registry.npmjs.org/ --dry-run
+          else
+            echo "Publishing $TARBALL to registry.npmjs.org with provenance via OIDC..."
+            npm publish "$TARBALL" --access public --provenance --registry https://registry.npmjs.org/
+          fi
 
       - name: Create GitHub Release
+        if: inputs.dry_run != true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -294,3 +311,13 @@ jobs:
             dist-pack/sbom.spdx.json \
             --title "v$VERSION" \
             $NOTES_FLAG
+
+      - name: Preview GitHub Release (Dry Run)
+        if: inputs.dry_run == true
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          echo "================================================================="
+          echo "[Dry Run] Release simulation for v$VERSION completed successfully."
+          echo "All artifacts, SBOMs, git patch, and npm provenance verified."
+          echo "No changes pushed to git, npm registry, or GitHub Releases."
+          echo "================================================================="

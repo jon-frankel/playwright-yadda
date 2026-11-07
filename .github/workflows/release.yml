@@ -12,10 +12,12 @@ name: Release Package
 #    - Runs security audit on production dependencies.
 #    - Downloads the exact verified tarball from Verdaccio for tarball parity.
 #    - Generates CycloneDX and SPDX SBOMs via native pnpm sbom.
+#    - Generates a git release patch capturing package.json, CHANGELOG.md, examples, and changeset deletions.
 #    - Uploads artifacts.
 # 2. publish job (contents: write, id-token: write, attestations: write):
+#    - Applies the release patch and commits to main.
+#    - Pushes commit and tag atomically BEFORE publishing.
 #    - Attests SLSA build provenance and SBOM.
-#    - Commits version bumps to main, tags vX.Y.Z, and pushes atomically BEFORE publishing.
 #    - Publishes the exact verified tarball to https://registry.npmjs.org/ with --provenance using OIDC.
 #    - Creates GitHub Release with commit notes and attached SBOMs & tarball.
 on:
@@ -98,12 +100,9 @@ jobs:
             const pkgBefore = JSON.parse(fs.readFileSync("package.json", "utf8"));
             const oldVersion = pkgBefore.version;
 
-            // Always run changeset version to consume pending changesets and update CHANGELOG.md
-            try {
-              execSync("pnpm exec changeset version", { stdio: "inherit" });
-            } catch (err) {
-              console.warn("changeset version error:", err.message);
-            }
+            // Run changeset version to consume pending changesets and update CHANGELOG.md
+            // Do not swallow errors: fail immediately if changeset version fails
+            execSync("pnpm exec changeset version", { stdio: "inherit" });
 
             const pkgAfter = JSON.parse(fs.readFileSync("package.json", "utf8"));
             let currentVersion = pkgAfter.version;
@@ -130,11 +129,12 @@ jobs:
               execSync(`npm version ${requested} --no-git-tag-version`, { stdio: "inherit" });
             }
 
-            // Ensure generated CHANGELOG.md adheres to project format rules
-            if (fs.existsSync("CHANGELOG.md")) {
-              try {
-                execSync("pnpm run format:fix", { stdio: "inherit" });
-              } catch (_) {}
+            const finalVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+            if (fs.existsSync("CHANGELOG.md") && finalVersion !== currentVersion) {
+              console.log(`Syncing CHANGELOG.md top heading to ${finalVersion}`);
+              const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
+              const updated = changelog.replace(/^##\s+\d+\.\d+\.\d+/m, `## ${finalVersion}`);
+              fs.writeFileSync("CHANGELOG.md", updated, "utf8");
             }
           '
 
@@ -193,26 +193,23 @@ jobs:
         run: |
           pnpm run verdaccio:stop || true
 
+      - name: Generate Release Patch
+        run: |
+          git add -A -- package.json examples .changeset
+          if [ -f CHANGELOG.md ]; then
+            git add CHANGELOG.md
+          fi
+          git diff --cached --binary > dist-pack/release.patch
+          if [ ! -s dist-pack/release.patch ]; then
+            echo "Error: release.patch is empty - no changes staged."
+            exit 1
+          fi
+
       - name: Upload Verified Release Artifacts
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-artifacts
           path: dist-pack/
-          retention-days: 1
-
-      - name: Prepare Git Release Workspace
-        run: |
-          mkdir -p git-diff
-          cp package.json git-diff/
-          if [ -f CHANGELOG.md ]; then cp CHANGELOG.md git-diff/; fi
-          cp -R examples git-diff/
-          cp -R .changeset git-diff/
-
-      - name: Upload Git Workspace Changes
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: git-release-workspace
-          path: git-diff/
           retention-days: 1
 
   # -------------------------------------------------------------------------
@@ -244,34 +241,20 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Download Verified Release Artifacts
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-artifacts
           path: dist-pack/
 
-      - name: Download Git Release Workspace
-        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
-        with:
-          name: git-release-workspace
-          path: git-diff/
-
-      - name: Apply Git Workspace Changes
-        run: |
-          cp -R git-diff/* .
-          rm -rf git-diff
-
-      - name: Commit Release Updates and Push Tag Atomically
+      - name: Apply Release Patch, Commit & Push Atomically
         run: |
           VERSION="${{ needs.verify.outputs.version }}"
+          git apply --index dist-pack/release.patch
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A -- package.json examples .changeset
-          if [ -f CHANGELOG.md ]; then
-            git add CHANGELOG.md
-          fi
           git commit -m "release: v$VERSION [skip ci]"
           git tag -a "v$VERSION" -m "Release v$VERSION"
-          # Push both commit and tag atomically BEFORE publishing to npm
+          # Push commit and tag atomically BEFORE publishing to npm
           git push --atomic origin HEAD:main "v$VERSION"
 
       - name: Attest Build Provenance (SLSA)

@@ -145,10 +145,14 @@ The tests drive the same platform code paths the editor uses, including the exac
 
 ### Releasing
 
-Releases are published to the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/io.github.jonfrankel.playwright-yadda) and [GitHub Releases](https://github.com/jon-frankel/playwright-yadda/releases) by the [**Release JetBrains Plugin**](../../.github/workflows/release-jetbrains.yml) GitHub Actions workflow (`workflow_dispatch` on `main`):
+Releases are published to the JetBrains Marketplace (search for **Playwright Yadda**) and [GitHub Releases](https://github.com/jon-frankel/playwright-yadda/releases) by the [**Release JetBrains Plugin**](../../.github/workflows/release-jetbrains.yml) GitHub Actions workflow (`workflow_dispatch` on `main`):
 
-1. **Verify job**: Resolves `pluginVersion` in `gradle.properties` (using it as-is if `jetbrains-v<version>` is not yet tagged, or applying the requested semver bump), checks that the version is not already published, generates release notes from commits touching `ide/jetbrains/`, and runs `./gradlew test verifyPlugin buildPlugin`.
-2. **Publish job** (`jetbrains-release` environment): Pushes the `jetbrains-v<version>` tag (and version-bump commit, if any), signs the verified `.zip` (`./gradlew signPlugin`), attests SLSA build provenance, publishes to JetBrains Marketplace (`./gradlew publishPlugin`), and creates the GitHub Release.
+1. **Verify job**: Resolves `pluginVersion` in `gradle.properties` (using it as-is if `jetbrains-v<version>` is not yet tagged, or applying the requested semver bump via `scripts/release-jetbrains.py`), checks that the version is not already published, generates release notes from commits touching `ide/jetbrains/`, and runs `./gradlew test verifyPlugin buildPlugin`.
+2. **Publish job** (`jetbrains-release` environment):
+   - Signs the verified `.zip` (`./gradlew signPlugin`).
+   - Publishes to JetBrains Marketplace (`./gradlew publishPlugin`).
+   - Pushes the `jetbrains-v<version>` tag and any version-bump commit (without `[skip ci]` so `Validate Main` validates the commit for subsequent npm releases).
+   - Attests SLSA build provenance and creates the GitHub Release with the signed `.zip`.
 
 The `jetbrains-release` GitHub Environment requires four secrets:
 
@@ -157,7 +161,23 @@ The `jetbrains-release` GitHub Environment requires four secrets:
 - `JETBRAINS_PRIVATE_KEY`: PEM-encoded encrypted RSA private key (`private.pem`).
 - `JETBRAINS_PRIVATE_KEY_PASSWORD`: Passphrase for `private.pem`.
 
-Note: JetBrains Marketplace requires the very first version of a new plugin ID to be uploaded once through the web UI (`https://plugins.jetbrains.com/plugin/add`); run the workflow with `dry_run: true` (or `./gradlew signPlugin` locally) to produce the initial `.zip` for that upload.
+#### Initial Marketplace Upload
+
+JetBrains Marketplace requires the very first version of a new plugin ID to be uploaded once through the web UI at [https://plugins.jetbrains.com/plugin/add](https://plugins.jetbrains.com/plugin/add). To obtain the initial `.zip`:
+
+- Trigger the workflow with `dry_run: true` and download the `.zip` from the `jetbrains-release-artifacts` artifact on the workflow run (retained for 1 day).
+- Alternatively, run `./gradlew buildPlugin` (or `./gradlew signPlugin` with a local keypair) to produce the `.zip` locally.
+
+#### Troubleshooting a Failed Release
+
+Because signing and Marketplace publishing occur before the git tag and commit are pushed, an invalid secret or signing failure leaves the git history clean without half-done tags. If a release ever needs to be cleaned up after a tag has been pushed:
+
+```bash
+git tag -d jetbrains-v<version>
+git push origin :refs/tags/jetbrains-v<version>
+# Revert the bump commit if one was pushed:
+git revert HEAD && git push origin main
+```
 
 ## How it works
 

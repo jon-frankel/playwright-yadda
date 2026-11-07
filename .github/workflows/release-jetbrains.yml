@@ -13,10 +13,10 @@ name: Release JetBrains Plugin
 #      and builds the plugin distribution (./gradlew buildPlugin).
 #    - Generates a git patch if gradle.properties was bumped and uploads verified artifacts.
 # 2. publish job (environment: jetbrains-release, contents: write, id-token: write, attestations: write):
-#    - Applies release.patch (if version was bumped), creates annotated tag jetbrains-v<version>,
-#      and pushes atomically to origin BEFORE publishing.
-#    - Cryptographically signs the plugin (./gradlew signPlugin) and publishes to JetBrains Marketplace
-#      (./gradlew publishPlugin).
+#    - Cryptographically signs the verified plugin archive (./gradlew signPlugin).
+#    - Publishes to JetBrains Marketplace (./gradlew publishPlugin).
+#    - Applies release.patch (if version was bumped), commits to main without [skip ci] so Validate Main runs,
+#      creates annotated tag jetbrains-v<version>, and pushes to origin.
 #    - Attests SLSA build provenance for the signed distribution archive.
 #    - Creates a GitHub Release for jetbrains-v<version> with the signed plugin .zip attached.
 on:
@@ -84,133 +84,9 @@ jobs:
       - name: Determine Candidate Version & Generate Change Notes
         id: bump_step
         run: |
-          mkdir -p dist-jetbrains
-
           PREV_TAG=$(git tag --list 'jetbrains-v*' --sort=-v:refname | head -n 1 || true)
           echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
-
-          python3 - <<'PY'
-          import json
-          import os
-          import re
-          import subprocess
-          import sys
-          import urllib.error
-          import urllib.request
-          import html
-
-          requested = "${{ inputs.bump }}"
-          prev_tag = "${{ steps.bump_step.outputs.previous_tag }}" if False else os.popen("git tag --list 'jetbrains-v*' --sort=-v:refname | head -n 1").read().strip()
-          props_path = "ide/jetbrains/gradle.properties"
-
-          with open(props_path, "r", encoding="utf-8") as f:
-              props = f.read()
-
-          m = re.search(r"^pluginVersion=(\d+)\.(\d+)\.(\d+)\s*$", props, re.MULTILINE)
-          if not m:
-              print("::error::Could not parse pluginVersion=X.Y.Z in ide/jetbrains/gradle.properties", file=sys.stderr)
-              sys.exit(1)
-
-          maj, min_v, patch = map(int, m.groups())
-          current_version = f"{maj}.{min_v}.{patch}"
-
-          def tag_exists(ver: str) -> bool:
-              res = subprocess.run(
-                  ["git", "rev-parse", "-q", "--verify", f"refs/tags/jetbrains-v{ver}"],
-                  stdout=subprocess.DEVNULL,
-                  stderr=subprocess.DEVNULL,
-              )
-              return res.returncode == 0
-
-          bump_kind = requested
-          if requested == "auto":
-              if tag_exists(current_version):
-                  print(f"Tag jetbrains-v{current_version} already exists; bumping patch version.")
-                  bump_kind = "patch"
-              else:
-                  bump_kind = "none"
-
-          if bump_kind == "major":
-              maj, min_v, patch = maj + 1, 0, 0
-          elif bump_kind == "minor":
-              min_v, patch = min_v + 1, 0
-          elif bump_kind == "patch":
-              patch += 1
-
-          new_version = f"{maj}.{min_v}.{patch}"
-          bumped = new_version != current_version
-
-          if bumped:
-              updated_props = re.sub(
-                  r"^pluginVersion=\d+\.\d+\.\d+\s*$",
-                  f"pluginVersion={new_version}",
-                  props,
-                  count=1,
-                  flags=re.MULTILINE,
-              )
-              with open(props_path, "w", encoding="utf-8") as f:
-                  f.write(updated_props)
-
-          if tag_exists(new_version):
-              print(f"::error::Git tag jetbrains-v{new_version} already exists.", file=sys.stderr)
-              sys.exit(1)
-
-          # Check JetBrains Marketplace API to ensure version is not already published
-          plugin_xml_id = "io.github.jonfrankel.playwright-yadda"
-          url = f"https://plugins.jetbrains.com/api/plugins/{plugin_xml_id}/updates?size=50"
-          try:
-              req = urllib.request.Request(url, headers={"Accept": "application/json"})
-              with urllib.request.urlopen(req, timeout=15) as resp:
-                  updates = json.loads(resp.read().decode("utf-8"))
-                  if isinstance(updates, list):
-                      for u in updates:
-                          if u.get("version") == new_version:
-                              print(f"::error::Version {new_version} of {plugin_xml_id} is already published on JetBrains Marketplace.", file=sys.stderr)
-                              sys.exit(1)
-          except urllib.error.HTTPError as e:
-              if e.code == 404:
-                  print(f"Plugin {plugin_xml_id} not yet listed on Marketplace (HTTP 404); skipping remote duplicate check.")
-              else:
-                  print(f"::warning::Marketplace version check returned HTTP {e.code}; continuing.")
-          except Exception as e:
-              print(f"::warning::Could not reach JetBrains Marketplace API ({e}); continuing.")
-
-          # Collect commit messages touching ide/jetbrains since previous jetbrains-v* tag
-          log_range = f"{prev_tag}..HEAD" if prev_tag else "-n 30"
-          log_cmd = ["git", "log", "--no-merges", "--pretty=format:%s (%h)"]
-          if prev_tag:
-              log_cmd.append(log_range)
-          else:
-              log_cmd.extend(["-n", "30"])
-          log_cmd.extend(["--", "ide/jetbrains"])
-
-          raw_lines = subprocess.check_output(log_cmd, text=True).strip().splitlines()
-          items = [line.strip() for line in raw_lines if line.strip() and not line.startswith("release(ide):")]
-          if not items:
-              items = [f"Release Playwright Yadda JetBrains plugin v{new_version}."]
-
-          html_items = "\n".join(f"  <li>{html.escape(item)}</li>" for item in items)
-          change_notes_html = f"<ul>\n{html_items}\n</ul>\n"
-          with open("dist-jetbrains/change-notes.html", "w", encoding="utf-8") as f:
-              f.write(change_notes_html)
-
-          md_items = "\n".join(f"- {item}" for item in items)
-          release_notes_md = (
-              f"## Playwright Yadda for JetBrains IDEs v{new_version}\n\n"
-              f"### Changes\n\n{md_items}\n\n"
-              f"### Installation\n\n"
-              f"- **JetBrains Marketplace**: In WebStorm or another JetBrains IDE (2026.2+), open **Settings → Plugins → Marketplace** and search for **Playwright Yadda**.\n"
-              f"- **From Disk**: Download `playwright-yadda-jetbrains-{new_version}-signed.zip` below and choose **Settings → Plugins → ⚙ → Install Plugin from Disk…**.\n"
-          )
-          with open("dist-jetbrains/release-notes.md", "w", encoding="utf-8") as f:
-              f.write(release_notes_md)
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
-              out.write(f"version={new_version}\n")
-              out.write(f"bumped={'true' if bumped else 'false'}\n")
-
-          print(f"Candidate JetBrains plugin version: {new_version} (bumped={bumped})")
-          PY
+          python3 scripts/release-jetbrains.py --bump "${{ inputs.bump }}" --previous-tag "$PREV_TAG"
 
       - name: Run Tests, Plugin Verifier & Build Distribution
         working-directory: ide/jetbrains
@@ -261,7 +137,7 @@ jobs:
     timeout-minutes: 20
     environment:
       name: jetbrains-release
-      url: https://plugins.jetbrains.com/plugin/io.github.jonfrankel.playwright-yadda
+      url: https://plugins.jetbrains.com/
     permissions:
       contents: write
       id-token: write
@@ -288,7 +164,46 @@ jobs:
           name: jetbrains-release-artifacts
           path: dist-jetbrains/
 
-      - name: Apply Release Patch (if bumped), Tag & Push Atomically
+      # Step 1: Sign plugin before touching git to avoid half-done state on signing failure
+      - name: Sign Plugin Distribution Archive
+        working-directory: ide/jetbrains
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -z "$CERTIFICATE_CHAIN" ] || [ -z "$PRIVATE_KEY" ] || [ -z "$PRIVATE_KEY_PASSWORD" ]; then
+            echo "::error::Missing signing secrets (JETBRAINS_CERTIFICATE_CHAIN, JETBRAINS_PRIVATE_KEY, JETBRAINS_PRIVATE_KEY_PASSWORD) in jetbrains-release environment."
+            exit 1
+          fi
+
+          VERSION="${{ needs.verify.outputs.version }}"
+          mkdir -p build/distributions
+          cp "../dist-jetbrains/playwright-yadda-jetbrains-${VERSION}.zip" build/distributions/
+          ./gradlew signPlugin \
+            -PprebuiltPluginArchive="build/distributions/playwright-yadda-jetbrains-${VERSION}.zip" \
+            --console=plain
+
+      # Step 2: Publish plugin to JetBrains Marketplace
+      - name: Publish Plugin to JetBrains Marketplace
+        working-directory: ide/jetbrains
+        env:
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "$PUBLISH_TOKEN" ]; then
+            echo "::error::Missing JETBRAINS_PUBLISH_TOKEN secret in jetbrains-release environment."
+            exit 1
+          fi
+
+          VERSION="${{ needs.verify.outputs.version }}"
+          export PLUGIN_CHANGE_NOTES="$(cat ../dist-jetbrains/change-notes.html)"
+          ./gradlew publishPlugin \
+            -PprebuiltPluginArchive="build/distributions/playwright-yadda-jetbrains-${VERSION}.zip" \
+            -PpluginChannel="${{ inputs.channel }}" \
+            --console=plain
+
+      # Step 3: Once published, commit version bump without [skip ci] and push tag
+      - name: Apply Release Patch (if bumped), Tag & Push
         run: |
           VERSION="${{ needs.verify.outputs.version }}"
           TAG="jetbrains-v$VERSION"
@@ -298,7 +213,8 @@ jobs:
 
           if [ -f dist-jetbrains/release.patch ] && [ -s dist-jetbrains/release.patch ]; then
             git apply --index dist-jetbrains/release.patch
-            git commit -m "release(ide): jetbrains plugin v$VERSION [skip ci]"
+            # Commit without [skip ci] so Validate Main workflow validates the bump commit for subsequent npm releases
+            git commit -m "release(ide): jetbrains plugin v$VERSION"
             git tag -a "$TAG" -m "JetBrains Plugin v$VERSION"
             git push --atomic origin HEAD:main "$TAG"
           else
@@ -306,31 +222,7 @@ jobs:
             git push origin "$TAG"
           fi
 
-      - name: Sign & Publish Plugin to JetBrains Marketplace
-        working-directory: ide/jetbrains
-        env:
-          CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
-          PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
-          PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
-          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
-        run: |
-          if [ -z "$CERTIFICATE_CHAIN" ] || [ -z "$PRIVATE_KEY" ] || [ -z "$PRIVATE_KEY_PASSWORD" ]; then
-            echo "::error::Missing signing secrets (JETBRAINS_CERTIFICATE_CHAIN, JETBRAINS_PRIVATE_KEY, JETBRAINS_PRIVATE_KEY_PASSWORD) in jetbrains-release environment."
-            exit 1
-          fi
-          if [ -z "$PUBLISH_TOKEN" ]; then
-            echo "::error::Missing JETBRAINS_PUBLISH_TOKEN secret in jetbrains-release environment."
-            exit 1
-          fi
-
-          export PLUGIN_CHANGE_NOTES="$(cat ../dist-jetbrains/change-notes.html)"
-          mkdir -p build/distributions
-          cp "../dist-jetbrains/playwright-yadda-jetbrains-${{ needs.verify.outputs.version }}.zip" build/distributions/
-          ./gradlew signPlugin publishPlugin \
-            -PprebuiltPluginArchive="build/distributions/playwright-yadda-jetbrains-${{ needs.verify.outputs.version }}.zip" \
-            -PpluginChannel="${{ inputs.channel }}" \
-            --console=plain
-
+      # Step 4: Attest provenance and create GitHub Release
       - name: Attest Build Provenance (SLSA)
         uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
         with:
@@ -345,6 +237,5 @@ jobs:
 
           gh release create "$TAG" \
             "ide/jetbrains/build/distributions/playwright-yadda-jetbrains-${VERSION}-signed.zip" \
-            "dist-jetbrains/playwright-yadda-jetbrains-${VERSION}.zip" \
             --title "JetBrains Plugin v$VERSION" \
             --notes-file dist-jetbrains/release-notes.md

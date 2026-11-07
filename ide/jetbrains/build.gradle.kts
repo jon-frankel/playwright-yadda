@@ -76,6 +76,9 @@ intellijPlatform {
       if (localIde.isPresent) {
         local(file(localIde.get()))
       } else {
+        // Target the baseline WebStorm release in CI to avoid downloading multi-gigabyte
+        // IDE distributions on every run. JetBrains Marketplace runs its own verifier against
+        // newer builds automatically upon upload.
         create(IntelliJPlatformType.WebStorm, providers.gradleProperty("platformVersion").get())
       }
     }

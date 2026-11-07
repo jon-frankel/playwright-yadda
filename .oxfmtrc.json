@@ -4,6 +4,7 @@
     ".changeset",
     ".verdaccio",
     ".git",
+    "CHANGELOG.md",
     "dist",
     "node_modules",
     "ide/jetbrains/build",

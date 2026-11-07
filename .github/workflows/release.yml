@@ -3,13 +3,21 @@ name: Release Package
 # Manually triggered workflow to publish playwright-yadda to the public npm registry.
 #
 # Release Process:
-# 1. Determines candidate version (consumes changesets or applies semver bump).
-# 2. Boots Verdaccio in CI and publishes candidate package locally.
-# 3. Upgrades all example projects to candidate version from Verdaccio.
-# 4. Executes full validation suite (unit tests, static analysis, all example tests, IDE plugin).
-# 5. Generates CycloneDX and SPDX SBOMs and GitHub SLSA build provenance attestations.
-# 6. Publishes to https://registry.npmjs.org/ with --provenance using OIDC Trusted Publishing.
-# 7. Commits version bumps to main, tags vX.Y.Z, and creates GitHub Release with commit notes.
+# 1. verify job (contents: read, no OIDC write access):
+#    - Verifies trigger is on main.
+#    - Determines candidate version (consumes changesets or applies semver bump).
+#    - Boots Verdaccio in CI and publishes candidate package locally.
+#    - Upgrades all example projects to candidate version from Verdaccio.
+#    - Executes full validation suite (unit tests, static analysis, all example tests, IDE plugin).
+#    - Runs security audit on production dependencies.
+#    - Downloads the exact verified tarball from Verdaccio for tarball parity.
+#    - Generates CycloneDX and SPDX SBOMs via native pnpm sbom.
+#    - Uploads artifacts.
+# 2. publish job (contents: write, id-token: write, attestations: write):
+#    - Attests SLSA build provenance and SBOM.
+#    - Commits version bumps to main, tags vX.Y.Z, and pushes atomically BEFORE publishing.
+#    - Publishes the exact verified tarball to https://registry.npmjs.org/ with --provenance using OIDC.
+#    - Creates GitHub Release with commit notes and attached SBOMs & tarball.
 on:
   workflow_dispatch:
     inputs:
@@ -24,29 +32,29 @@ on:
           - minor
           - major
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-
 concurrency:
   group: release-pipeline
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build, Verify & Publish
+  # -------------------------------------------------------------------------
+  # Job 1: Verification & Pre-Flight Testing (Read-only permissions)
+  # -------------------------------------------------------------------------
+  verify:
+    name: Verify & Build Candidate
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    environment:
-      name: npm-release
-      url: https://www.npmjs.com/package/playwright-yadda
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.bump_step.outputs.version }}
+      previous_tag: ${{ steps.bump_step.outputs.previous_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node and pnpm
         id: setup
@@ -76,28 +84,61 @@ jobs:
       - name: Install Playwright Browsers
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Determine New Version & Update package.json
+      - name: Determine Candidate Version & Update package.json
         id: bump_step
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
 
-          OLD_VERSION=$(node -p "require('./package.json').version")
+          node -e '
+            const fs = require("node:fs");
+            const { execSync } = require("node:child_process");
 
-          if [ "${{ inputs.bump }}" = "auto" ]; then
-            pnpm exec changeset version
-            NEW_VERSION=$(node -p "require('./package.json').version")
-            if [ "$NEW_VERSION" = "$OLD_VERSION" ]; then
-              echo "No pending changesets found; defaulting to patch bump."
-              npm version patch --no-git-tag-version
-              NEW_VERSION=$(node -p "require('./package.json').version")
-            fi
-          else
-            pnpm exec changeset version --empty 2>/dev/null || true
-            npm version ${{ inputs.bump }} --no-git-tag-version
-            NEW_VERSION=$(node -p "require('./package.json').version")
-          fi
+            const requested = "${{ inputs.bump }}";
+            const pkgBefore = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            const oldVersion = pkgBefore.version;
 
+            // Always run changeset version to consume pending changesets and update CHANGELOG.md
+            try {
+              execSync("pnpm exec changeset version", { stdio: "inherit" });
+            } catch (err) {
+              console.warn("changeset version error:", err.message);
+            }
+
+            const pkgAfter = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            let currentVersion = pkgAfter.version;
+
+            const [oldMaj, oldMin, oldPatch] = oldVersion.split(".").map(Number);
+            const [newMaj, newMin, newPatch] = currentVersion.split(".").map(Number);
+
+            let changesetBump = "none";
+            if (newMaj > oldMaj) changesetBump = "major";
+            else if (newMin > oldMin) changesetBump = "minor";
+            else if (newPatch > oldPatch) changesetBump = "patch";
+
+            const semverOrder = { patch: 1, minor: 2, major: 3 };
+
+            if (requested === "auto") {
+              if (changesetBump === "none") {
+                console.log("No changesets consumed; bumping patch version.");
+                execSync("npm version patch --no-git-tag-version", { stdio: "inherit" });
+              }
+            } else if ((semverOrder[requested] || 0) > (semverOrder[changesetBump] || 0)) {
+              console.log(`Requested bump "${requested}" requires upgrading beyond changeset bump "${changesetBump}".`);
+              // Reset version to oldVersion so npm version increments from baseline
+              fs.writeFileSync("package.json", JSON.stringify({ ...pkgAfter, version: oldVersion }, null, 2) + "\n");
+              execSync(`npm version ${requested} --no-git-tag-version`, { stdio: "inherit" });
+            }
+
+            // Ensure generated CHANGELOG.md adheres to project format rules
+            if (fs.existsSync("CHANGELOG.md")) {
+              try {
+                execSync("pnpm run format:fix", { stdio: "inherit" });
+              } catch (_) {}
+            }
+          '
+
+          NEW_VERSION=$(node -p "require('./package.json').version")
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Candidate version to release: $NEW_VERSION"
 
@@ -137,17 +178,101 @@ jobs:
         run: |
           pnpm audit --prod --audit-level=high
 
+      - name: Download Verified Tarball from Verdaccio & Generate SBOMs
+        run: |
+          VERSION="${{ steps.bump_step.outputs.version }}"
+          mkdir -p dist-pack
+          # Download the exact verified tarball from Verdaccio to preserve byte-for-byte lockfile integrity
+          npm pack "playwright-yadda@$VERSION" --registry http://localhost:4873 --pack-destination dist-pack
+          # Generate SBOMs via native pnpm sbom
+          pnpm sbom --sbom-format cyclonedx --prod > dist-pack/sbom.cyclonedx.json
+          pnpm sbom --sbom-format spdx --prod > dist-pack/sbom.spdx.json
+
       - name: Stop Verdaccio Container
         if: always()
         run: |
           pnpm run verdaccio:stop || true
 
-      - name: Pack Production Tarball & Generate SBOMs
+      - name: Upload Verified Release Artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-artifacts
+          path: dist-pack/
+          retention-days: 1
+
+      - name: Prepare Git Release Workspace
         run: |
-          mkdir -p dist-pack
-          pnpm pack --pack-destination dist-pack
-          npm sbom --sbom-format=cyclonedx --omit=dev > dist-pack/sbom.cyclonedx.json
-          npm sbom --sbom-format=spdx --omit=dev > dist-pack/sbom.spdx.json
+          mkdir -p git-diff
+          cp package.json git-diff/
+          if [ -f CHANGELOG.md ]; then cp CHANGELOG.md git-diff/; fi
+          cp -R examples git-diff/
+          cp -R .changeset git-diff/
+
+      - name: Upload Git Workspace Changes
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: git-release-workspace
+          path: git-diff/
+          retention-days: 1
+
+  # -------------------------------------------------------------------------
+  # Job 2: Secure Publish & Release (Restricted environment, OIDC tokens)
+  # -------------------------------------------------------------------------
+  publish:
+    name: Publish to npm & GitHub Release
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: npm-release
+      url: https://www.npmjs.com/package/playwright-yadda
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download Verified Release Artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: release-artifacts
+          path: dist-pack/
+
+      - name: Download Git Release Workspace
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
+        with:
+          name: git-release-workspace
+          path: git-diff/
+
+      - name: Apply Git Workspace Changes
+        run: |
+          cp -R git-diff/* .
+          rm -rf git-diff
+
+      - name: Commit Release Updates and Push Tag Atomically
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A -- package.json examples .changeset
+          if [ -f CHANGELOG.md ]; then
+            git add CHANGELOG.md
+          fi
+          git commit -m "release: v$VERSION [skip ci]"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          # Push both commit and tag atomically BEFORE publishing to npm
+          git push --atomic origin HEAD:main "v$VERSION"
 
       - name: Attest Build Provenance (SLSA)
         uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
@@ -166,27 +291,12 @@ jobs:
           echo "Publishing $TARBALL to registry.npmjs.org with provenance via OIDC..."
           npm publish "$TARBALL" --access public --provenance --registry https://registry.npmjs.org/
 
-      - name: Commit Release Updates to Main
-        run: |
-          VERSION="${{ steps.bump_step.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json CHANGELOG.md examples/ .changeset/ || true
-          git commit -m "release: v$VERSION [skip ci]" || echo "Nothing to commit"
-          git push origin HEAD:main
-
-      - name: Create Git Tag & Push
-        run: |
-          VERSION="${{ steps.bump_step.outputs.version }}"
-          git tag -a "v$VERSION" -m "Release v$VERSION"
-          git push origin "v$VERSION"
-
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="${{ steps.bump_step.outputs.version }}"
-          PREV_TAG="${{ steps.bump_step.outputs.previous_tag }}"
+          VERSION="${{ needs.verify.outputs.version }}"
+          PREV_TAG="${{ needs.verify.outputs.previous_tag }}"
 
           NOTES_FLAG="--generate-notes"
           if [ -n "$PREV_TAG" ]; then

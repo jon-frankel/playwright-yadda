@@ -187,7 +187,15 @@ async function main() {
 
   // Every run publishes a new version, past anything already in the registry, unless --no-bump
   // asks to publish the version in package.json and that version is still free.
-  const needsBump = !noBump || isAlreadyPublished;
+  if (noBump && isAlreadyPublished) {
+    console.error(
+      `\n❌ Version ${packageVersion} is already published to registry ${registryUrl}.`,
+    );
+    console.error(`   Exiting because --no-bump was requested.\n`);
+    process.exit(1);
+  }
+
+  const needsBump = !noBump;
   if (needsBump) {
     let nextVersion = incrementPatchVersion(packageVersion);
     while (publishedVersions.includes(nextVersion)) {

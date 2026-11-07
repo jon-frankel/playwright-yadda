@@ -270,13 +270,13 @@ jobs:
 
       - name: Attest Build Provenance (SLSA)
         if: inputs.dry_run != true
-        uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
+        uses: actions/attest-build-provenance@c074443f1aee8d4aeeae555aebba3282517141b2 # v2.2.3
         with:
           subject-path: "dist-pack/playwright-yadda-*.tgz"
 
       - name: Attest SBOM
         if: inputs.dry_run != true
-        uses: actions/attest-sbom@df501e29bc01a65642d3fb09dc8c88d6a9a7795b # v2.2.2
+        uses: actions/attest-sbom@115c3be05ff3974bcbd596578934b3f9ce39bf68 # v2.2.0
         with:
           subject-path: "dist-pack/playwright-yadda-*.tgz"
           sbom-path: "dist-pack/sbom.cyclonedx.json"

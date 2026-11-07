@@ -196,7 +196,7 @@ jobs:
 
       - name: Dry-Run npm Publish (Tarball & Registry Validation)
         run: |
-          TARBALL=$(ls dist-pack/playwright-yadda-*.tgz)
+          TARBALL=$(ls "$PWD"/dist-pack/playwright-yadda-*.tgz)
           echo "Simulating npm publish with --dry-run for $TARBALL..."
           npm publish "$TARBALL" --access public --dry-run --registry https://registry.npmjs.org/
 
@@ -283,7 +283,7 @@ jobs:
 
       - name: Publish to npm Registry with Provenance (OIDC)
         run: |
-          TARBALL=$(ls dist-pack/playwright-yadda-*.tgz)
+          TARBALL=$(ls "$PWD"/dist-pack/playwright-yadda-*.tgz)
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             echo "[Dry Run] Testing npm publish with --provenance --dry-run (validates OIDC tokens without uploading)..."
             npm publish "$TARBALL" --access public --provenance --registry https://registry.npmjs.org/ --dry-run

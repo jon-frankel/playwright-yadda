@@ -11,6 +11,8 @@ function parseCommandLineArgs() {
   const args = process.argv.slice(2);
   const isDryRun = args.includes("--dry-run") || args.includes("-n");
   // Bumping is the default now. --all, -a, --force-bump and -b are accepted and mean nothing.
+  // With --no-bump, the version in package.json is published if not already present in the registry.
+  // If that version is already published, the script exits with an error instead of bumping.
   const noBump = args.includes("--no-bump");
   const skipBuild = args.includes("--skip-build");
   const skipExamples = args.includes("--skip-examples");
@@ -185,8 +187,8 @@ async function main() {
   const publishedVersions = Object.keys(registryData?.versions || {});
   const isAlreadyPublished = publishedVersions.includes(packageVersion);
 
-  // Every run publishes a new version, past anything already in the registry, unless --no-bump
-  // asks to publish the version in package.json and that version is still free.
+  // By default, every run bumps the patch version past anything already in the registry.
+  // With --no-bump, publish the current package.json version if free; fail if already published.
   if (noBump && isAlreadyPublished) {
     console.error(
       `\n❌ Version ${packageVersion} is already published to registry ${registryUrl}.`,

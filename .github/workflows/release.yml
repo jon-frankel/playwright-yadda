@@ -147,6 +147,16 @@ jobs:
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"
           echo "Candidate version to release: $NEW_VERSION"
 
+          # Verify candidate version is not already published on registry.npmjs.org
+          if npm view "playwright-yadda@$NEW_VERSION" version --registry https://registry.npmjs.org/ --silent >/dev/null 2>&1; then
+            echo "::error::playwright-yadda@$NEW_VERSION is already published to registry.npmjs.org. Cannot republish an existing version."
+            exit 1
+          fi
+
+      - name: Run Root Checks, Unit Tests & Build
+        run: |
+          pnpm run check
+
       - name: Start Verdaccio Registry Container
         run: |
           pnpm run verdaccio:start
@@ -158,11 +168,7 @@ jobs:
 
       - name: Publish Candidate to Verdaccio & Update Example Workspaces
         run: |
-          node scripts/verdaccio-sync.mjs --no-bump
-
-      - name: Run Root Checks & Unit Tests
-        run: |
-          pnpm run check
+          node scripts/verdaccio-sync.mjs --no-bump --skip-build
 
       - name: Run Example Tests (against Verdaccio package)
         run: |
@@ -174,6 +180,15 @@ jobs:
 
           echo "Running examples/actual tests..."
           pnpm --dir examples/actual test --trace=retain-on-failure
+
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-example-test-results
+          path: examples/*/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run JetBrains Plugin Tests
         run: |

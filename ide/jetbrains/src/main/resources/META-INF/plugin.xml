@@ -46,6 +46,8 @@
         <code>Scenario:</code> runs the tests through Playwright, narrowed to that feature or scenario.</li>
       <li><b>Jump to scenario from test runner:</b> double-clicking a scenario in WebStorm's test runner
         window jumps directly to its scenario definition in the feature file.</li>
+      <li><b>Run test files and directories:</b> right-click any feature file, spec file, or test directory
+        in the project explorer or editor to run all tests in that file or directory.</li>
     </ul>
   ]]></description>
 

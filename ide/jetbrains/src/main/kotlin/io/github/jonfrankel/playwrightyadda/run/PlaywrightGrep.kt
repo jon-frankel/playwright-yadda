@@ -15,6 +15,16 @@ object PlaywrightGrep {
   /** Every scenario of the feature. The trailing `Scenario:` stops "Cart" from also matching "Cart Admin". */
   fun forFeature(featureTitle: String): String = "Feature: ${escape(featureTitle.trim())} Scenario: "
 
+  /** Matches any scenario belonging to any of the given features. */
+  fun forFeatures(featureTitles: Collection<String>): String {
+    val clean = featureTitles.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+    return when (clean.size) {
+      0 -> ""
+      1 -> forFeature(clean.first())
+      else -> "(?:" + clean.joinToString("|") { forFeature(it) } + ")"
+    }
+  }
+
   /**
    * One scenario. Anchored at the end so "Clears cart" doesn't also run "Clears cart twice", but
    * Playwright (1.42 and later) appends a test's tags (`@smoke @timeout:5000`) to the title it

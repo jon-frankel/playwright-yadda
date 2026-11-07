@@ -49,7 +49,8 @@ class YaddaCucumberExtension : AbstractCucumberExtension(), OptionalStepDefiniti
     override fun getDefaultStepFileName(step: GherkinStep): String = ""
   }
 
-  override fun loadStepsFor(module: Module): List<AbstractStepDefinition> = emptyList()
+  override fun loadStepsFor(module: Module): List<AbstractStepDefinition> =
+    io.github.jonfrankel.playwrightyadda.steps.YaddaStepLoader.loadDynamicSteps(module)
 
   override fun getStepDefinitionContainers(file: GherkinFile): Collection<PsiFile> = emptyList()
 

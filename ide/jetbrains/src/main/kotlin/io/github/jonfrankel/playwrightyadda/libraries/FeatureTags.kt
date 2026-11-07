@@ -46,7 +46,7 @@ class FeatureTags private constructor(
     /** One line that starts a construct or is an annotation, 0-based. */
     private class Item(val line: Int, val kind: YaddaGrammar.MarkerKind, val key: String = "", val value: String? = null)
 
-    fun parse(text: CharSequence, vocabulary: Vocabulary = Vocabulary.ENGLISH): FeatureTags {
+    fun parse(text: CharSequence, vocabulary: Vocabulary = Vocabulary.ENGLISH, pathTags: List<String> = emptyList()): FeatureTags {
       val lines = text.split('\n')
       val items = mutableListOf<Item>()
       lines.forEachIndexed { index, line ->
@@ -63,14 +63,14 @@ class FeatureTags private constructor(
         }
         items += Item(index, kind, annotation?.first.orEmpty(), annotation?.second)
       }
-      return assemble(lines, items)
+      return assemble(lines, items, pathTags)
     }
 
     /**
      * The same for a Markdown feature, where a keyword is a heading and a fence, a comment or a table hides
      * what looks like one, so what is a heading is Yadda's own reading of it.
      */
-    fun parseMarkdown(text: CharSequence, vocabulary: Vocabulary = Vocabulary.ENGLISH): FeatureTags {
+    fun parseMarkdown(text: CharSequence, vocabulary: Vocabulary = Vocabulary.ENGLISH, pathTags: List<String> = emptyList()): FeatureTags {
       val items = YaddaGrammar.analyzeMarkdown(text.toString(), vocabulary).markers.mapNotNull { marker ->
         if (marker.kind == YaddaGrammar.MarkerKind.ANNOTATION) {
           // As in parseAnnotation: a key with a space in it is not an annotation Yadda would accept.
@@ -80,10 +80,10 @@ class FeatureTags private constructor(
           Item(marker.line - 1, marker.kind)
         }
       }
-      return assemble(text.split('\n'), items)
+      return assemble(text.split('\n'), items, pathTags)
     }
 
-    private fun assemble(lines: List<String>, items: List<Item>): FeatureTags {
+    private fun assemble(lines: List<String>, items: List<Item>, pathTags: List<String> = emptyList()): FeatureTags {
       val lineStarts = IntArray(lines.size)
       var start = 0
       lines.forEachIndexed { index, line ->
@@ -104,7 +104,14 @@ class FeatureTags private constructor(
             continue
           }
           YaddaGrammar.MarkerKind.FEATURE -> {
-            featureTags = pending
+            val combined = LinkedHashMap<String, String?>()
+            combined.putAll(pending)
+            if (pathTags.isNotEmpty()) {
+              val existing = combined[DEFAULT_ANNOTATION_KEY]
+              val pathLibs = pathTags.joinToString(", ")
+              combined[DEFAULT_ANNOTATION_KEY] = if (existing != null) "$existing, $pathLibs" else pathLibs
+            }
+            featureTags = combined
             headers += Header(item.line, null)
           }
           // Everything under a Rule is skipped by playwright-yadda, so it never has a known scenario.

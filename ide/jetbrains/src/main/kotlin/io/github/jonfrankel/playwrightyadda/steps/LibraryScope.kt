@@ -30,7 +30,7 @@ object LibraryScope {
    * False only if [definition] is certainly in a library that the scenario of [step] does not enable.
    * [offset] is where the step is in its file; for an element that is the whole file, it says which step.
    */
-  fun isEnabledFor(definition: JSLiteralExpression, step: PsiElement, offset: Int = step.textRange.startOffset): Boolean {
+  fun isEnabledFor(definition: PsiElement, step: PsiElement, offset: Int = step.textRange.startOffset): Boolean {
     if (DumbService.isDumb(definition.project)) return true
 
     val library = libraryOf(definition) ?: return true
@@ -99,22 +99,44 @@ object LibraryScope {
   private fun narrowed(step: PsiElement, definitions: List<PsiElement>): List<PsiElement>? {
     if (definitions.isEmpty()) return null
     val valid = YaddaStepFilter.filterCandidates(definitions, step)
-    val enabled = valid.filter { it !is JSLiteralExpression || isEnabledFor(it, step) }
+    val enabled = valid.filter { isEnabledFor(it, step) }
     val candidates = if (enabled.isNotEmpty()) enabled else valid
     return candidates.takeIf { it.size < definitions.size }
   }
 
   /** The `createStepLibrary()` variable a definition is called on: `storefrontSteps` in `storefrontSteps.given(…)`. */
-  private fun libraryOf(definition: JSLiteralExpression): PsiElement? {
-    val call = (definition.parent as? JSArgumentList)?.parent as? JSCallExpression ?: return null
+  private fun libraryOf(definition: PsiElement): PsiElement? {
+    val call = (definition.parent as? JSArgumentList)?.parent as? JSCallExpression
+      ?: definition as? JSCallExpression
+      ?: return null
     val receiver = (call.methodExpression as? JSReferenceExpression)?.qualifier as? JSReferenceExpression
     return receiver?.resolve()
+  }
+
+  fun pathTagsOf(file: PsiFile): List<String> {
+    val vFile = file.virtualFile ?: file.viewProvider.virtualFile ?: return emptyList()
+    val segments = vFile.path.replace('\\', '/').split('/')
+    val dirSegments = segments.dropLast(1)
+    val tags = mutableListOf<String>()
+    for (segment in dirSegments) {
+      if (segment.startsWith("@")) {
+        val raw = segment.drop(1).trim()
+        val split = raw.indexOfFirst { it == ':' || it == '=' }
+        val tag = if (split < 0) raw.lowercase() else raw.substring(0, split).lowercase() + raw.substring(split)
+        if (tag.isNotEmpty() && !tag.any(Char::isWhitespace) && tag !in tags) {
+          tags.add(tag)
+        }
+      }
+    }
+    return tags
   }
 
   private fun featureTags(file: PsiFile): FeatureTags =
     CachedValuesManager.getCachedValue(file) {
       val settings = YaddaSettings.of(file.project)
-      val tags = if (YaddaMarkdown.isFeature(file)) FeatureTags.parseMarkdown(file.text, settings.vocabulary) else FeatureTags.parse(file.text, settings.vocabulary)
+      val pathTags = pathTagsOf(file)
+      val tags = if (YaddaMarkdown.isFeature(file)) FeatureTags.parseMarkdown(file.text, settings.vocabulary, pathTags)
+                 else FeatureTags.parse(file.text, settings.vocabulary, pathTags)
       CachedValueProvider.Result.create(tags, file, settings.tracker)
     }
 }

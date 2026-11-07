@@ -546,6 +546,94 @@ class LibraryScopeTest : BasePlatformTestCase() {
     assertTrue(target.containingFile.virtualFile.path.contains("packages/pkg-a"))
   }
 
+  fun `test step definition defined with new RegExp and template literal matches step`() {
+    add(
+      "support/ref.ts",
+      """
+      export const TRANSACTION = String.raw`(the \w+ transaction|the transaction with notes "[^"]+")`;
+      """,
+    )
+    add(
+      "accounts.ts",
+      """
+      import { TRANSACTION } from "./support/ref.js";
+      export const accountSteps = createStepLibrary();
+      accountSteps.then(
+        new RegExp(`^${'$'}{TRANSACTION}'s (credit|debit) is shown in full${'$'}`),
+        function () {},
+      );
+      """,
+    )
+    add(
+      "registry.ts",
+      """
+      import { createLibraryRegistry } from "playwright-yadda";
+      import { accountSteps } from "./accounts.js";
+      export const registry = createLibraryRegistry({ accounts: accountSteps });
+      """,
+    )
+    val feature =
+      add(
+        "features/@accounts/accounts.feature",
+        """
+        Feature: Accounts
+          Scenario: A large balance is shown in full in the register
+            Then the first transaction's credit is shown in full
+        """.trimIndent(),
+      )
+
+    assertEquals(emptyList<String>(), stepWarnings(feature))
+    openAt(feature, "the first transaction", shift = 2)
+    assertEquals(listOf("accounts.ts"), goesTo())
+  }
+
+  fun `test path tag adds library to feature and preserves step mapping`() {
+    add(
+      "support/ref.ts",
+      """
+      export const TRANSACTION = String.raw`(the \w+ transaction|the transaction with notes "[^"]+")`;
+      """,
+    )
+    add(
+      "accounts.ts",
+      """
+      import { TRANSACTION } from "./support/ref.js";
+      export const accountSteps = createStepLibrary();
+      accountSteps.then(
+        new RegExp(`^${'$'}{TRANSACTION}'s (credit|debit) is shown in full${'$'}`),
+        function () {},
+      );
+      """,
+    )
+    add("transactions.ts", "export const transactionSteps = createStepLibrary();")
+    add(
+      "registry.ts",
+      """
+      import { createLibraryRegistry } from "playwright-yadda";
+      import { accountSteps } from "./accounts.js";
+      import { transactionSteps } from "./transactions.js";
+      export const registry = createLibraryRegistry({
+        accounts: accountSteps,
+        transactions: transactionSteps,
+      });
+      """,
+    )
+    val feature =
+      add(
+        "features/@accounts/accounts.feature",
+        """
+        @Libraries=transactions
+        Feature: Accounts
+          Scenario: A large balance is shown in full in the register
+            Then the first transaction's credit is shown in full
+        """.trimIndent(),
+      )
+
+    assertEquals(emptyList<String>(), stepWarnings(feature))
+    openAt(feature, "the first transaction", shift = 2)
+    assertEquals(listOf("accounts.ts"), goesTo())
+  }
+
   companion object {
     private val KEYS = listOf("common", "storefront", "admin")
   }

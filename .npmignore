@@ -1,0 +1,3 @@
+# Exclude test files and fixtures while preserving source code
+src/**/*.test.ts
+src/grep.cases.json

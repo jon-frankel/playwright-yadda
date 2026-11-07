@@ -2,10 +2,20 @@
   "name": "playwright-yadda",
   "version": "0.0.16",
   "description": "Dynamic step library loading for Playwright and Yadda BDD",
+  "homepage": "https://github.com/jon-frankel/playwright-yadda#readme",
+  "bugs": {
+    "url": "https://github.com/jon-frankel/playwright-yadda/issues"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jon-frankel/playwright-yadda.git"
+  },
   "files": [
     "dist",
-    "src"
+    "src",
+    "!src/**/*.test.ts",
+    "!src/grep.cases.json"
   ],
   "type": "module",
   "main": "./dist/index.cjs",

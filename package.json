@@ -84,6 +84,8 @@
     "check": "pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
     "ide:jetbrains:test": "scripts/ide-jetbrains-test.sh",
     "ide:jetbrains:build": "cd ide/jetbrains && ./gradlew buildPlugin",
+    "ide:jetbrains:verify": "cd ide/jetbrains && ./gradlew verifyPlugin",
+    "ide:jetbrains:publish": "cd ide/jetbrains && ./gradlew publishPlugin",
     "verdaccio:start": "docker compose up -d --wait",
     "verdaccio:stop": "docker compose down",
     "verdaccio:create-token": "echo NPM_TOKEN=$(node scripts/npm-authn/index.mjs create-token playwright-yadda password http://localhost:4873) >> .env",

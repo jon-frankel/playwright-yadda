@@ -55,6 +55,7 @@
   <depends>JavaScript</depends>
   <depends>gherkin</depends>
   <depends>cucumber-javascript</depends>
+  <depends>intellij.testRunner.plugin</depends>
 
   <projectListeners>
     <listener

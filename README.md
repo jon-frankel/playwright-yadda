@@ -411,7 +411,11 @@ With `playwright test --list`, the reporter lists scenarios grouped by their fea
 
 ## IDE Support
 
-A companion plugin for WebStorm and other JetBrains IDEs is available in [`ide/jetbrains`](ide/jetbrains). More details will be added here once it is published to the JetBrains Marketplace.
+### WebStorm and other JetBrains IDEs
+
+WebStorm's built-in Cucumber.js support already jumps from a step in a `.feature` file to its `.given()` / `.when()` / `.then()` definition. The companion plugin in [`ide/jetbrains`](ide/jetbrains) adds the way back: **Cmd+B or Find Usages on a step definition lists the feature steps that run it.** It also understands `@Libraries`, so when two libraries define the same step text, navigation in both directions follows the libraries a scenario enables. Install **Playwright Yadda** from **Settings → Plugins → Marketplace** in WebStorm 2026.2+, or see its [README](ide/jetbrains/README.md) to install from GitHub Releases or build from source.
+
+It also reads Yadda's own dialect, which WebStorm's Gherkin support does not: `---` fenced blocks (tables, JSON, CSV, text) under a step, `[name]` placeholders, `Where:` and `Examples:` rows without pipes, steps without a keyword, Yadda's own parse errors, and Markdown features. A `.feature` file is read as Yadda in any project that depends on `playwright-yadda`. For features in another language, set the same language in Settings | Tools | Playwright Yadda as in `defineFeatureSuite({ language })`.
 
 ---
 

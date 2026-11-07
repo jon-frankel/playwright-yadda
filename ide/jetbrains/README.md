@@ -61,6 +61,17 @@ Step navigation works for string steps and regex steps, in `.ts` and `.js` files
 
 ## Install
 
+### From the JetBrains Marketplace
+
+In WebStorm (or another JetBrains IDE with JavaScript support, 2026.2+):
+
+1. Open **Settings → Plugins → Marketplace**.
+2. Search for **Playwright Yadda** (`io.github.jonfrankel.playwright-yadda`) and click **Install**.
+
+### From GitHub Releases or Disk
+
+Download `playwright-yadda-jetbrains-<version>-signed.zip` from [GitHub Releases](https://github.com/jon-frankel/playwright-yadda/releases), or build it from source:
+
 ```bash
 pnpm ide:jetbrains:build
 ```
@@ -131,6 +142,22 @@ cd ide/jetbrains
 The first run downloads WebStorm (about 1 GB). To use an installed IDE instead, add `-PlocalIdePath=/path/to/WebStorm.app` to any of the commands above. `platformVersion` and `sinceBuild` live in `gradle.properties`.
 
 The tests drive the same platform code paths the editor uses, including the exact decision Cmd+B makes (`GotoDeclarationOrUsageHandler2`), against a real WebStorm 2026.2 test sandbox. They also run against the real `examples/basic` and `examples/wordpress` files. They are not a substitute for clicking through it once in the real IDE.
+
+### Releasing
+
+Releases are published to the [JetBrains Marketplace](https://plugins.jetbrains.com/plugin/io.github.jonfrankel.playwright-yadda) and [GitHub Releases](https://github.com/jon-frankel/playwright-yadda/releases) by the [**Release JetBrains Plugin**](../../.github/workflows/release-jetbrains.yml) GitHub Actions workflow (`workflow_dispatch` on `main`):
+
+1. **Verify job**: Resolves `pluginVersion` in `gradle.properties` (using it as-is if `jetbrains-v<version>` is not yet tagged, or applying the requested semver bump), checks that the version is not already published, generates release notes from commits touching `ide/jetbrains/`, and runs `./gradlew test verifyPlugin buildPlugin`.
+2. **Publish job** (`jetbrains-release` environment): Pushes the `jetbrains-v<version>` tag (and version-bump commit, if any), signs the verified `.zip` (`./gradlew signPlugin`), attests SLSA build provenance, publishes to JetBrains Marketplace (`./gradlew publishPlugin`), and creates the GitHub Release.
+
+The `jetbrains-release` GitHub Environment requires four secrets:
+
+- `JETBRAINS_PUBLISH_TOKEN`: Permanent token from [JetBrains Marketplace](https://plugins.jetbrains.com/author/me/tokens).
+- `JETBRAINS_CERTIFICATE_CHAIN`: PEM-encoded X.509 certificate chain (`chain.crt`).
+- `JETBRAINS_PRIVATE_KEY`: PEM-encoded encrypted RSA private key (`private.pem`).
+- `JETBRAINS_PRIVATE_KEY_PASSWORD`: Passphrase for `private.pem`.
+
+Note: JetBrains Marketplace requires the very first version of a new plugin ID to be uploaded once through the web UI (`https://plugins.jetbrains.com/plugin/add`); run the workflow with `dry_run: true` (or `./gradlew signPlugin` locally) to produce the initial `.zip` for that upload.
 
 ## How it works
 

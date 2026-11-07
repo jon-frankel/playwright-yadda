@@ -33,6 +33,11 @@ on:
           - patch
           - minor
           - major
+      dry_run:
+        description: "Dry run (runs verification without pushing to main or publishing to npm)"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: release-pipeline
@@ -218,6 +223,7 @@ jobs:
   publish:
     name: Publish to npm & GitHub Release
     needs: verify
+    if: inputs.dry_run != true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

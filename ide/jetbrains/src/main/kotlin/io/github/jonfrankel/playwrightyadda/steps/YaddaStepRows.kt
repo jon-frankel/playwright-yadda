@@ -37,7 +37,9 @@ object YaddaStepRows {
   fun loadDefinitions(context: PsiElement): List<AbstractStepDefinition> {
     if (DumbService.isDumb(context.project)) return emptyList()
     val module = ModuleUtilCore.findModuleForPsiElement(context) ?: return emptyList()
-    return load(module)
+    return load(module).filter { def ->
+      def.element?.let { YaddaStepFilter.isValidStepDefinition(it) } ?: true
+    }
   }
 
   private fun load(module: Module): List<AbstractStepDefinition> = CucumberStepHelper.loadStepsFor(module)

@@ -64,7 +64,11 @@ object LibraryScope {
   /** The same for [definitions] already found for the step at [step], whatever the file it is in. */
   fun candidates(definitions: List<PsiElement>, step: PsiElement): Candidates {
     val narrowed = narrowed(step, definitions)
-    return Candidates(narrowed ?: definitions, narrowed != null)
+    if (narrowed != null) {
+      return Candidates(narrowed, true)
+    }
+    val valid = YaddaStepFilter.filterCandidates(definitions, step)
+    return Candidates(valid, valid.size < definitions.size)
   }
 
   class Candidates(val definitions: List<PsiElement>, val narrowed: Boolean)
@@ -93,9 +97,11 @@ object LibraryScope {
   }
 
   private fun narrowed(step: PsiElement, definitions: List<PsiElement>): List<PsiElement>? {
-    if (definitions.size < 2) return null
-    val enabled = definitions.filter { it !is JSLiteralExpression || isEnabledFor(it, step) }
-    return enabled.takeIf { it.isNotEmpty() && it.size < definitions.size }
+    if (definitions.isEmpty()) return null
+    val valid = YaddaStepFilter.filterCandidates(definitions, step)
+    val enabled = valid.filter { it !is JSLiteralExpression || isEnabledFor(it, step) }
+    val candidates = if (enabled.isNotEmpty()) enabled else valid
+    return candidates.takeIf { it.size < definitions.size }
   }
 
   /** The `createStepLibrary()` variable a definition is called on: `storefrontSteps` in `storefrontSteps.given(…)`. */

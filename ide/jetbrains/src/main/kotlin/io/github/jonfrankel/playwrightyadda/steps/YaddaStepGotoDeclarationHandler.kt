@@ -28,6 +28,8 @@ class YaddaStepGotoDeclarationHandler : GotoDeclarationHandler {
 
     val (definitions, narrowed) = LibraryScope.candidateDefinitions(step).let { it.definitions to it.narrowed }
     return when {
+      // All candidates were excluded as invalid (e.g. only in node_modules or test files):
+      narrowed && definitions.isEmpty() -> PsiElement.EMPTY_ARRAY
       // One left after narrowing: go straight there.
       narrowed && definitions.size == 1 -> arrayOf(definitions.single())
       // Still several: let the popup say which file each is in.

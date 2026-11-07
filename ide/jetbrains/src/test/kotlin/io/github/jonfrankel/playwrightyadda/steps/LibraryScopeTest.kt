@@ -419,6 +419,133 @@ class LibraryScopeTest : BasePlatformTestCase() {
     }
   }
 
+  fun `test candidate in node_modules is excluded and does not make step ambiguous`() {
+    add(
+      "common.ts",
+      """
+      export const commonSteps = createStepLibrary();
+      commonSteps.given("they perform an action", function () {});
+      """,
+    )
+    add(
+      "node_modules/playwright-yadda/src/fixtures.test.ts",
+      """
+      export const otherSteps = createStepLibrary();
+      otherSteps.given("they perform an action", function () {});
+      """,
+    )
+    val feature =
+      feature(
+        "action",
+        """
+        Feature: Action
+          Scenario: A
+            Given they perform an action
+        """,
+      )
+
+    assertEquals(emptyList<String>(), stepWarnings(feature))
+    openAt(feature, "they perform", shift = 2)
+    assertEquals(listOf("common.ts"), goesTo())
+  }
+
+  fun `test candidate in test file is excluded and does not make step ambiguous`() {
+    add(
+      "steps/login.ts",
+      """
+      export const steps = createStepLibrary();
+      steps.given("user logs in", function () {});
+      """,
+    )
+    add(
+      "src/login.test.ts",
+      """
+      test("login test", () => {
+        builder.given("user logs in", function () {});
+      });
+      """,
+    )
+    val feature =
+      feature(
+        "login",
+        """
+        Feature: Login
+          Scenario: L
+            Given user logs in
+        """,
+      )
+
+    assertEquals(emptyList<String>(), stepWarnings(feature))
+    openAt(feature, "user logs in", shift = 2)
+    assertEquals(listOf("login.ts"), goesTo())
+  }
+
+  fun `test candidate inside test runner call is excluded even in plain ts file`() {
+    add(
+      "steps/action.ts",
+      """
+      export const steps = createStepLibrary();
+      steps.given("something occurs", function () {});
+      """,
+    )
+    add(
+      "utils/helper.ts",
+      """
+      it("an integration test", () => {
+        steps.given("something occurs", function () {});
+      });
+      """,
+    )
+    val feature =
+      feature(
+        "something",
+        """
+        Feature: Something
+          Scenario: S
+            Given something occurs
+        """,
+      )
+
+    assertEquals(emptyList<String>(), stepWarnings(feature))
+    openAt(feature, "something occurs", shift = 2)
+    assertEquals(listOf("action.ts"), goesTo())
+  }
+
+  fun `test monorepo narrows candidates to the same package as the feature file`() {
+    add("packages/pkg-a/package.json", """{ "name": "pkg-a" }""")
+    add(
+      "packages/pkg-a/steps/action.ts",
+      """
+      export const stepsA = createStepLibrary();
+      stepsA.given("shared phrase across monorepo", function () {});
+      """,
+    )
+    add("packages/pkg-b/package.json", """{ "name": "pkg-b" }""")
+    add(
+      "packages/pkg-b/steps/action.ts",
+      """
+      export const stepsB = createStepLibrary();
+      stepsB.given("shared phrase across monorepo", function () {});
+      """,
+    )
+
+    val featureA =
+      add(
+        "packages/pkg-a/features/action.feature",
+        """
+        Feature: Action A
+          Scenario: A
+            Given shared phrase across monorepo
+        """.trimIndent(),
+      )
+
+    assertEquals(emptyList<String>(), stepWarnings(featureA))
+    openAt(featureA, "shared phrase", shift = 2)
+    assertEquals(listOf("action.ts"), goesTo())
+    val target = GotoDeclarationAction.findAllTargetElements(project, myFixture.editor, myFixture.caretOffset).first()
+    assertTrue(target.containingFile.virtualFile.path.contains("packages/pkg-a"))
+  }
+
   companion object {
     private val KEYS = listOf("common", "storefront", "admin")
   }

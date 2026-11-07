@@ -48,6 +48,7 @@ object YaddaSteps {
 
   /** The Cucumber.js plugin's own definition for [literal], or null if the plugin does not index it. */
   fun definitionOf(literal: JSLiteralExpression): AbstractStepDefinition? {
+    if (!YaddaStepFilter.isValidStepDefinition(literal)) return null
     val module = ModuleUtilCore.findModuleForPsiElement(literal) ?: return null
     val manager = literal.manager
     return CucumberStepHelper.loadStepsFor(module).firstOrNull { definition ->

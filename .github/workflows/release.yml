@@ -130,9 +130,16 @@ jobs:
             const pkgBefore = JSON.parse(fs.readFileSync("package.json", "utf8"));
             const oldVersion = pkgBefore.version;
 
-            // Run changeset version to consume pending changesets and update CHANGELOG.md
-            // Do not swallow errors: fail immediately if changeset version fails
-            execSync("pnpm exec changeset version", { stdio: "inherit" });
+            // Run changeset version if pending changesets exist; otherwise skip to manual bump
+            const changesetFiles = fs.existsSync(".changeset")
+              ? fs.readdirSync(".changeset").filter(f => f.endsWith(".md") && f !== "README.md")
+              : [];
+
+            if (changesetFiles.length > 0) {
+              execSync("pnpm exec changeset version", { stdio: "inherit" });
+            } else {
+              console.log("No unreleased changesets found in .changeset; skipping changeset version.");
+            }
 
             const pkgAfter = JSON.parse(fs.readFileSync("package.json", "utf8"));
             let currentVersion = pkgAfter.version;
@@ -160,11 +167,17 @@ jobs:
             }
 
             const finalVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
-            if (fs.existsSync("CHANGELOG.md") && changesetBump !== "none" && finalVersion !== currentVersion) {
-              console.log(`Syncing CHANGELOG.md top heading to ${finalVersion}`);
+            if (fs.existsSync("CHANGELOG.md")) {
               const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
-              const updated = changelog.replace(/^##\s+\d+\.\d+\.\d+/m, `## ${finalVersion}`);
-              fs.writeFileSync("CHANGELOG.md", updated, "utf8");
+              if (changesetBump !== "none" && finalVersion !== currentVersion) {
+                console.log(`Syncing CHANGELOG.md top heading to ${finalVersion}`);
+                const updated = changelog.replace(/^##\s+\d+\.\d+\.\d+/m, `## ${finalVersion}`);
+                fs.writeFileSync("CHANGELOG.md", updated, "utf8");
+              } else if (changesetBump === "none" && !changelog.includes(`## ${finalVersion}`)) {
+                console.log(`Adding entry for ${finalVersion} to CHANGELOG.md`);
+                const newSection = `## ${finalVersion}\n\n### Patch Changes\n\n- Release v${finalVersion}\n\n`;
+                fs.writeFileSync("CHANGELOG.md", changelog.replace(/^(# [^\n]*\n+)/, "$1" + newSection));
+              }
             }
           '
 

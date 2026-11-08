@@ -1,4 +1,5 @@
 /* oxlint-disable no-empty-pattern -- Playwright needs a destructuring pattern, even an empty one */
+import { createRequire } from "node:module";
 import { test as base } from "@playwright/test";
 import { describe, expect, it, vi } from "vitest";
 import Yadda from "yadda";
@@ -14,6 +15,18 @@ import {
 import { createBdd, createLibraryRegistry, createStepLibrary } from "./registry.js";
 import { runScenarioSteps } from "./runner.js";
 import { REPORTER_FLAG, WARNING_ANNOTATION } from "./warnings.js";
+
+/** The fixture names Playwright itself reads from a test callback, using its own parser */
+const { fixtures: playwrightFixtures } = createRequire(import.meta.url)("playwright/lib/common");
+function playwrightFixtureNames(fn: unknown): string[] {
+  return playwrightFixtures.fixtureParameterNames(
+    fn,
+    { file: "", line: 0, column: 0 },
+    (e: unknown) => {
+      throw e;
+    },
+  );
+}
 
 describe("parseFixtureNames", () => {
   it("reads destructured names from arrow, async and function steps", () => {
@@ -113,8 +126,8 @@ describe("parseFixtureNames", () => {
 describe("createFixtureTestBody", () => {
   it("builds a callback whose destructuring names the fixtures, as Playwright reads it", () => {
     const body = createFixtureTestBody(["page", "context", "account"], async () => {});
-    expect(parseFixtureNames(body)).toEqual(["page", "context", "account"]);
-    expect(Function.prototype.toString.call(body)).toMatch(/^async function \(\{/);
+    expect(playwrightFixtureNames(body)).toEqual(["page", "context", "account"]);
+    expect(body.toString()).toMatch(/^async function \(\{/);
   });
 
   it("passes the destructured fixtures and test info to the runner", async () => {
@@ -478,7 +491,7 @@ describe("defineFeature with fixtures", () => {
       registry: createLibraryRegistry({ steps, other }, { defaultLibraries: [] }),
     });
 
-    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "account"]);
+    expect(playwrightFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "account"]);
   });
 
   it("keeps an ambiguous step's candidates' fixtures out of the test callback", () => {
@@ -493,7 +506,7 @@ describe("defineFeature with fixtures", () => {
       registry: createLibraryRegistry({ one, two }, { defaultLibraries: [] }),
     });
 
-    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
+    expect(playwrightFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
   });
 
   it("does not collect fixtures from libraries the scenario does not use", () => {
@@ -508,7 +521,7 @@ describe("defineFeature with fixtures", () => {
       registry: createLibraryRegistry({ steps, other }, { defaultLibraries: [] }),
     });
 
-    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "b"]);
+    expect(playwrightFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "b"]);
   });
 
   it("hands steps their fixtures and $testInfo, and keeps bound and param modes working", async () => {
@@ -563,7 +576,7 @@ describe("defineFeature with fixtures", () => {
       registry: createLibraryRegistry({ steps }, { defaultLibraries: [] }),
     });
 
-    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "$custom"]);
+    expect(playwrightFixtureNames(declared[0]!.fn)).toEqual(["page", "context", "$custom"]);
     await declared[0]!.fn({ page: "P", context: "C", $custom: "V" }, "INFO");
     expect(seen).toEqual(["V"]);
   });
@@ -601,7 +614,7 @@ describe("defineFeature with fixtures", () => {
     );
     warn.mockRestore();
 
-    expect(parseFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
+    expect(playwrightFixtureNames(declared[0]!.fn)).toEqual(["page", "context"]);
     await expect(declared[0]!.fn({ page: "P", context: "C" }, {})).rejects.toThrow(
       /Unknown step library "missing-in-warning-test"/,
     );
@@ -708,7 +721,7 @@ describe("defineFeatureSuite with fixtures", () => {
 
     expect(declared).toHaveLength(3);
     for (const fn of declared) {
-      expect(parseFixtureNames(fn)).toEqual(["page", "context", "account"]);
+      expect(playwrightFixtureNames(fn)).toEqual(["page", "context", "account"]);
     }
     expect(lookups).toHaveBeenCalledTimes(2);
   });

@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
-const examplesDir = path.join(rootDir, "examples");
 
 function parseCommandLineArgs() {
   const args = process.argv.slice(2);
@@ -15,10 +14,9 @@ function parseCommandLineArgs() {
   // If that version is already published, the script exits with an error instead of bumping.
   const noBump = args.includes("--no-bump");
   const skipBuild = args.includes("--skip-build");
-  const skipExamples = args.includes("--skip-examples");
   const registryFlagIndex = args.indexOf("--registry");
   const customRegistry = registryFlagIndex !== -1 ? args[registryFlagIndex + 1] : undefined;
-  return { isDryRun, noBump, skipBuild, skipExamples, customRegistry };
+  return { isDryRun, noBump, skipBuild, customRegistry };
 }
 
 function loadEnvConfiguration(customRegistry) {
@@ -103,69 +101,8 @@ function writeUpdatedPackageVersion(pkgJsonPath, newVersion) {
   fs.writeFileSync(pkgJsonPath, updatedContent, "utf8");
 }
 
-function getExampleAppDirectories() {
-  if (!fs.existsSync(examplesDir)) return [];
-  const entries = fs.readdirSync(examplesDir, { withFileTypes: true });
-  const appDirs = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const examplePath = path.join(examplesDir, entry.name);
-    const pkgJsonPath = path.join(examplePath, "package.json");
-    if (fs.existsSync(pkgJsonPath)) {
-      appDirs.push({ name: entry.name, path: examplePath });
-    }
-  }
-
-  return appDirs;
-}
-
-function updateExampleApp(app, packageName, packageVersion) {
-  const pkgJsonPath = path.join(app.path, "package.json");
-  const pkg = JSON.parse(fs.readFileSync(pkgJsonPath, "utf8"));
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-
-  if (deps[packageName]) {
-    // Pins the exact version in package.json, the lockfile and the release-age exclusions
-    execSync(`pnpm add "${packageName}@${packageVersion}"`, { cwd: app.path, stdio: "inherit" });
-    const installed = path.join(app.path, "node_modules", packageName, "package.json");
-    const installedVersion = fs.existsSync(installed)
-      ? JSON.parse(fs.readFileSync(installed, "utf8")).version
-      : undefined;
-    if (installedVersion !== packageVersion) {
-      throw new Error(`node_modules has ${installedVersion ?? "nothing"}, not ${packageVersion}`);
-    }
-  } else {
-    execSync("pnpm install", { cwd: app.path, stdio: "inherit" });
-  }
-}
-
-/** @returns the names of the examples that could not be updated */
-function syncExampleApps(packageName, packageVersion, isDryRun) {
-  const exampleApps = getExampleAppDirectories();
-  if (exampleApps.length === 0) return [];
-
-  const failed = [];
-  console.log("\n📥 Updating example applications with new versions from Verdaccio:");
-  for (const app of exampleApps) {
-    console.log(`  • Updating ${app.name} (${app.path})...`);
-    if (isDryRun) {
-      console.log(`    [Dry Run] Would update ${app.name}.`);
-      continue;
-    }
-    try {
-      updateExampleApp(app, packageName, packageVersion);
-      console.log(`    ✅ ${app.name} is on ${packageVersion}.`);
-    } catch (error) {
-      failed.push(app.name);
-      console.error(`    ❌ Failed to update ${app.name}: ${error.message}`);
-    }
-  }
-  return failed;
-}
-
 async function main() {
-  const { isDryRun, noBump, skipBuild, skipExamples, customRegistry } = parseCommandLineArgs();
+  const { isDryRun, noBump, skipBuild, customRegistry } = parseCommandLineArgs();
   console.log("🚀 Starting Verdaccio package sync workflow...");
 
   const { registryUrl, authToken } = loadEnvConfiguration(customRegistry);
@@ -213,9 +150,7 @@ async function main() {
   }
 
   if (isDryRun) {
-    console.log(
-      `\n🔍 [Dry Run] Would build, publish ${packageName}@${packageVersion}, and update examples.`,
-    );
+    console.log(`\n🔍 [Dry Run] Would build and publish ${packageName}@${packageVersion}.`);
     return;
   }
 
@@ -241,13 +176,7 @@ async function main() {
     env: { ...process.env, ...authEnvironment },
   });
 
-  const failed = skipExamples ? [] : syncExampleApps(packageName, packageVersion, isDryRun);
-
   console.log(`\n🎉 Published ${packageName}@${packageVersion}.`);
-  if (failed.length > 0) {
-    console.error(`\n❌ These examples are not on ${packageVersion}: ${failed.join(", ")}`);
-    process.exit(1);
-  }
 }
 
 main().catch((err) => {

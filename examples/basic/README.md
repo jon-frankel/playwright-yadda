@@ -2,8 +2,11 @@
 
 Two small features that share step text across libraries, and a third that shows what Yadda adds to Gherkin: steps whose data is too big for one line. Everything here runs against a few lines of Node, with no browser page.
 
+The example installs `playwright-yadda` from a tarball built from this repository, so install it from the repository root, not with a bare `pnpm install`:
+
 ```bash
-pnpm install
+pnpm run examples:install basic
+cd examples/basic
 pnpm test
 ```
 

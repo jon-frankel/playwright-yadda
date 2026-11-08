@@ -3,7 +3,7 @@ name: Example tests
 # Reusable. Typechecks one project under examples/ and runs its Playwright suite.
 #
 # The examples depend on playwright-yadda from a tarball (file:../../.pack/playwright-yadda.tgz).
-# scripts/examples-install.mjs builds and packs the library from this commit and installs it into the
+# scripts/examples-install.sh builds and packs the library from this commit and installs it into the
 # example, so the example tests the library change it is checked with. It is the same command used locally.
 on:
   workflow_call:
@@ -46,7 +46,7 @@ jobs:
 
       - name: Build the library and install it into the example
         working-directory: .
-        run: node scripts/examples-install.mjs "${{ inputs.example }}"
+        run: scripts/examples-install.sh "${{ inputs.example }}"
 
       - name: Typecheck
         run: pnpm run typecheck

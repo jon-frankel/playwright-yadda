@@ -149,8 +149,8 @@ Releases are published to the JetBrains Marketplace (search for **Playwright Yad
 
 1. **Verify job**: Resolves `pluginVersion` in `gradle.properties` (using it as-is if `jetbrains-v<version>` is not yet tagged, or applying the requested semver bump via `scripts/release-jetbrains.py`), checks that the version is not already published, generates release notes from commits touching `ide/jetbrains/`, and runs `./gradlew test verifyPlugin buildPlugin`.
 2. **Publish job** (`jetbrains-release` environment):
-   - Signs the verified `.zip` (`./gradlew signPlugin`).
-   - Publishes to JetBrains Marketplace (`./gradlew publishPlugin`).
+   - Signs the verified `.zip` (`./gradlew signPlugin`) and publishes to JetBrains Marketplace (`./gradlew publishPlugin`).
+   - Uploads the signed `.zip` artifact (`jetbrains-signed-plugin`).
    - Pushes the `jetbrains-v<version>` tag and any version-bump commit (without `[skip ci]` so `Validate Main` validates the commit for subsequent npm releases).
    - Attests SLSA build provenance and creates the GitHub Release with the signed `.zip`.
 
@@ -177,18 +177,24 @@ Because signing and Marketplace publishing occur before the git tag and commit a
 If the workflow published the plugin to the JetBrains Marketplace but failed during the tag and bump push (for example, if a race condition occurred on `main`):
 
 1. Check the workflow run logs to confirm the published `<version>`.
-2. Check out `main` and ensure `ide/jetbrains/gradle.properties` reflects the published version:
+2. Check out `main`, ensure `ide/jetbrains/gradle.properties` reflects the published version, commit (if bumped), and tag:
    ```bash
    git checkout main
    git pull origin main
+
+   # If the version was bumped:
    # Set pluginVersion=<version> in ide/jetbrains/gradle.properties
    git add ide/jetbrains/gradle.properties
    git commit -m "release(ide): jetbrains plugin v<version>"
-   git tag -a "jetbrains-v<version>" -m "jetbrains-v<version>"
+   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>"
    git push origin main
    git push origin "jetbrains-v<version>"
+
+   # If releasing an existing untagged version (no bump):
+   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>"
+   git push origin "jetbrains-v<version>"
    ```
-3. Create the GitHub Release manually for tag `jetbrains-v<version>` and attach the signed plugin archive downloaded from the `jetbrains-release-artifacts` artifact on the workflow run.
+3. Create the GitHub Release manually for tag `jetbrains-v<version>` and attach the signed plugin archive downloaded from the `jetbrains-signed-plugin` artifact on the workflow run (or downloaded directly from the plugin's JetBrains Marketplace version page).
 
 ##### Cleaning up an aborted release
 

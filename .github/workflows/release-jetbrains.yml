@@ -13,10 +13,10 @@ name: Release JetBrains Plugin
 #      and builds the plugin distribution (./gradlew buildPlugin).
 #    - Generates a git patch if gradle.properties was bumped and uploads verified artifacts.
 # 2. publish job (environment: jetbrains-release, contents: write, id-token: write, attestations: write):
-#    - Cryptographically signs the verified plugin archive (./gradlew signPlugin).
-#    - Publishes to JetBrains Marketplace (./gradlew publishPlugin).
-#    - Applies release.patch (if version was bumped), commits to main without [skip ci] so Validate Main runs,
-#      creates annotated tag jetbrains-v<version>, and pushes to origin.
+#    - Cryptographically signs the verified plugin archive (./gradlew signPlugin) and publishes to
+#      JetBrains Marketplace (./gradlew publishPlugin).
+#    - Uploads the signed archive artifact (jetbrains-signed-plugin).
+#    - Applies release.patch (if bumped), tags the release commit, rebases on latest main, and pushes to origin.
 #    - Attests SLSA build provenance for the signed distribution archive.
 #    - Creates a GitHub Release for jetbrains-v<version> with the signed plugin .zip attached.
 on:
@@ -192,7 +192,17 @@ jobs:
             -PpluginChannel="${{ inputs.channel }}" \
             --console=plain
 
-      # Step 2: Once published, sync with latest main, apply version bump without [skip ci], and push tag
+      # Step 2: Upload signed archive so it is retained even if git push or release fails
+      - name: Upload Signed Plugin Archive
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jetbrains-signed-plugin
+          path: ide/jetbrains/build/distributions/playwright-yadda-*-signed.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Step 3: Once published, commit version bump on trigger commit, tag, rebase on latest main, and push
       - name: Apply Release Patch (if bumped), Tag & Push
         run: |
           VERSION="${{ needs.verify.outputs.version }}"
@@ -201,22 +211,26 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Rebase on latest origin/main in case main moved during the verify job
-          git fetch origin main
-          git rebase origin/main
-
           if [ -f dist-jetbrains/release.patch ] && [ -s dist-jetbrains/release.patch ]; then
             git apply --index dist-jetbrains/release.patch
             # Commit without [skip ci] so Validate Main workflow validates the bump commit for subsequent npm releases
             git commit -m "release(ide): jetbrains plugin v$VERSION"
+            # Tag the commit before rebase so the tag precisely references the exact release source
             git tag -a "$TAG" -m "JetBrains Plugin v$VERSION"
+
+            # Rebase the bump commit onto latest origin/main in case main moved during verify job
+            git fetch origin main
+            git rebase origin/main
+
+            # Push rebased main and tag atomically (tag still points to the exact release commit)
             git push --atomic origin HEAD:main "$TAG"
           else
-            git tag -a "$TAG" -m "JetBrains Plugin v$VERSION"
+            # When not bumping, tag the trigger commit directly and push without rebasing main
+            git tag -a "$TAG" -m "JetBrains Plugin v$VERSION" "${{ github.sha }}"
             git push origin "$TAG"
           fi
 
-      # Step 3: Attest provenance and create GitHub Release
+      # Step 4: Attest provenance and create GitHub Release
       - name: Attest Build Provenance (SLSA)
         uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
         with:

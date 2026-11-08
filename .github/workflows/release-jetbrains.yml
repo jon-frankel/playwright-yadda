@@ -164,45 +164,35 @@ jobs:
           name: jetbrains-release-artifacts
           path: dist-jetbrains/
 
-      # Step 1: Sign plugin before touching git to avoid half-done state on signing failure
-      - name: Sign Plugin Distribution Archive
+      # Step 1: Sign plugin and publish to JetBrains Marketplace before touching git
+      - name: Sign & Publish Plugin to JetBrains Marketplace
         working-directory: ide/jetbrains
         env:
           CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
         run: |
           if [ -z "$CERTIFICATE_CHAIN" ] || [ -z "$PRIVATE_KEY" ] || [ -z "$PRIVATE_KEY_PASSWORD" ]; then
             echo "::error::Missing signing secrets (JETBRAINS_CERTIFICATE_CHAIN, JETBRAINS_PRIVATE_KEY, JETBRAINS_PRIVATE_KEY_PASSWORD) in jetbrains-release environment."
             exit 1
           fi
-
-          VERSION="${{ needs.verify.outputs.version }}"
-          mkdir -p build/distributions
-          cp "../dist-jetbrains/playwright-yadda-jetbrains-${VERSION}.zip" build/distributions/
-          ./gradlew signPlugin \
-            -PprebuiltPluginArchive="build/distributions/playwright-yadda-jetbrains-${VERSION}.zip" \
-            --console=plain
-
-      # Step 2: Publish plugin to JetBrains Marketplace
-      - name: Publish Plugin to JetBrains Marketplace
-        working-directory: ide/jetbrains
-        env:
-          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
-        run: |
           if [ -z "$PUBLISH_TOKEN" ]; then
             echo "::error::Missing JETBRAINS_PUBLISH_TOKEN secret in jetbrains-release environment."
             exit 1
           fi
 
           VERSION="${{ needs.verify.outputs.version }}"
+          mkdir -p build/distributions
+          cp "../dist-jetbrains/playwright-yadda-jetbrains-${VERSION}.zip" build/distributions/
           export PLUGIN_CHANGE_NOTES="$(cat ../dist-jetbrains/change-notes.html)"
-          ./gradlew publishPlugin \
+
+          ./gradlew signPlugin publishPlugin \
             -PprebuiltPluginArchive="build/distributions/playwright-yadda-jetbrains-${VERSION}.zip" \
             -PpluginChannel="${{ inputs.channel }}" \
             --console=plain
 
-      # Step 3: Once published, commit version bump without [skip ci] and push tag
+      # Step 2: Once published, sync with latest main, apply version bump without [skip ci], and push tag
       - name: Apply Release Patch (if bumped), Tag & Push
         run: |
           VERSION="${{ needs.verify.outputs.version }}"
@@ -210,6 +200,10 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Rebase on latest origin/main in case main moved during the verify job
+          git fetch origin main
+          git rebase origin/main
 
           if [ -f dist-jetbrains/release.patch ] && [ -s dist-jetbrains/release.patch ]; then
             git apply --index dist-jetbrains/release.patch
@@ -222,7 +216,7 @@ jobs:
             git push origin "$TAG"
           fi
 
-      # Step 4: Attest provenance and create GitHub Release
+      # Step 3: Attest provenance and create GitHub Release
       - name: Attest Build Provenance (SLSA)
         uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
         with:

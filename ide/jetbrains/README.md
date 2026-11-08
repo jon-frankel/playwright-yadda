@@ -170,13 +170,35 @@ JetBrains Marketplace requires the very first version of a new plugin ID to be u
 
 #### Troubleshooting a Failed Release
 
-Because signing and Marketplace publishing occur before the git tag and commit are pushed, an invalid secret or signing failure leaves the git history clean without half-done tags. If a release ever needs to be cleaned up after a tag has been pushed:
+Because signing and Marketplace publishing occur before the git tag and commit are pushed, an invalid secret or signing failure leaves the git history clean without half-done tags.
+
+##### Recovery if Marketplace publish succeeds but git tag/push fails
+
+If the workflow published the plugin to the JetBrains Marketplace but failed during the tag and bump push (for example, if a race condition occurred on `main`):
+
+1. Check the workflow run logs to confirm the published `<version>`.
+2. Check out `main` and ensure `ide/jetbrains/gradle.properties` reflects the published version:
+   ```bash
+   git checkout main
+   git pull origin main
+   # Set pluginVersion=<version> in ide/jetbrains/gradle.properties
+   git add ide/jetbrains/gradle.properties
+   git commit -m "release(ide): jetbrains plugin v<version>"
+   git tag -a "jetbrains-v<version>" -m "jetbrains-v<version>"
+   git push origin main
+   git push origin "jetbrains-v<version>"
+   ```
+3. Create the GitHub Release manually for tag `jetbrains-v<version>` and attach the signed plugin archive downloaded from the `jetbrains-release-artifacts` artifact on the workflow run.
+
+##### Cleaning up an aborted release
+
+If a release tag or commit was pushed and needs to be undone:
 
 ```bash
 git tag -d jetbrains-v<version>
 git push origin :refs/tags/jetbrains-v<version>
-# Revert the bump commit if one was pushed:
-git revert HEAD && git push origin main
+# Revert the specific bump commit if one was pushed:
+git revert <commit-sha> && git push origin main
 ```
 
 ## How it works

@@ -4,8 +4,7 @@
 //
 // The examples depend on "file:../../.pack/playwright-yadda.tgz", so they run the same files a
 // published install would get (the "files" list, "exports" and publishConfig apply), without a
-// registry. The tarball changes with every build, so the script puts each example's lockfile back
-// after installing; otherwise every library change would show up as a lockfile diff.
+// registry. The examples have no lockfile, so their other dependencies resolve fresh on each install.
 import fs from "node:fs";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -47,30 +46,11 @@ function packLibrary() {
   fs.renameSync(path.join(packDir, packed), path.join(packDir, tarballName));
 }
 
-// The tarball changes with every build, so an integrity hash for it in a lockfile is never right for
-// long, and pnpm fails the install on a mismatch. The lockfile is kept without one.
-function withoutTarballIntegrity(lockfile) {
-  return lockfile
-    .split("\n")
-    .map((line) =>
-      line.includes("tarball: file:") ? line.replace(/integrity: sha512-[^,}]*,?\s*/, "") : line,
-    )
-    .join("\n");
-}
-
 function installExample(name) {
   const exampleDir = path.join(examplesDir, name);
-  const lockfile = path.join(exampleDir, "pnpm-lock.yaml");
-  const savedLockfile = fs.existsSync(lockfile) ? fs.readFileSync(lockfile, "utf8") : undefined;
-  try {
-    if (savedLockfile) {
-      fs.writeFileSync(lockfile, withoutTarballIntegrity(savedLockfile));
-    }
-    run("pnpm", ["install", "--no-frozen-lockfile"], exampleDir);
-  } finally {
-    // Put the lockfile back so a library change doesn't show up as a lockfile diff.
-    if (savedLockfile) fs.writeFileSync(lockfile, withoutTarballIntegrity(savedLockfile));
-  }
+  // No lockfile: the examples don't commit one, and a leftover one would hold the integrity hash of an
+  // earlier build of the tarball, which pnpm rejects.
+  run("pnpm", ["install", "--no-lockfile"], exampleDir);
   const installed = JSON.parse(
     fs.readFileSync(path.join(exampleDir, "node_modules/playwright-yadda/package.json"), "utf8"),
   );

@@ -163,3 +163,6 @@ vite.config.ts.timestamp-*
 .DS_Store
 # Packed library the examples install (scripts/examples-install.mjs)
 .pack
+
+# The examples resolve their dependencies fresh (scripts/examples-install.mjs)
+examples/*/pnpm-lock.yaml

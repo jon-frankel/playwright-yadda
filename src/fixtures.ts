@@ -434,8 +434,9 @@ export function bindFixtureStep(fn: (...args: any[]) => unknown, names: readonly
  * Build a Playwright test callback that destructures exactly `names` from its fixtures, which is
  * what makes Playwright set them up, and hands them to `run` along with the `TestInfo`.
  *
- * Playwright reads the destructuring pattern from the function's source text, so the callback
- * is created with `new Function`.
+ * Playwright reads the destructuring pattern from the callback's `toString()`, so the callback is
+ * a plain closure whose own `toString` returns a signature naming the fixtures. No code is
+ * generated at runtime.
  */
 export function createFixtureTestBody(
   names: readonly string[],
@@ -446,13 +447,10 @@ export function createFixtureTestBody(
       throw new FixtureDeclarationError(`"${name}" is not a valid fixture name.`);
     }
   }
-  // Each name is bound to a local first so a fixture called `run` or `testInfo` cannot shadow them
-  const pattern = names.map((name) => `${name}: __f_${name}`).join(", ");
-  const object = names.map((name) => `${JSON.stringify(name)}: __f_${name}`).join(", ");
-  // oxlint-disable-next-line no-implied-eval -- Playwright reads the fixtures from the source text
-  const factory = new Function(
-    "__run",
-    `return async function ({ ${pattern} }, __testInfo) { return __run({ ${object} }, __testInfo); };`,
-  ) as (run: unknown) => (fixtures: Record<string, unknown>, testInfo: TestInfo) => Promise<void>;
-  return factory(run);
+  const body = async (fixtures: Record<string, unknown>, testInfo: TestInfo) =>
+    run(Object.fromEntries(names.map((name) => [name, fixtures[name]])), testInfo);
+  // Playwright calls `fn.toString()` and parses the first parameter as a destructuring pattern
+  const signature = `async function ({ ${names.join(", ")} }, testInfo) {}`;
+  Object.defineProperty(body, "toString", { value: () => signature });
+  return body;
 }

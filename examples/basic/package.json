@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@playwright/test": "^1.50.0",
+    "@playwright/test": "1.65.0",
     "playwright-yadda": "file:../../.pack/playwright-yadda.tgz",
     "yadda": "^3.2.0"
   },

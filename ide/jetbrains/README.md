@@ -61,6 +61,17 @@ Step navigation works for string steps and regex steps, in `.ts` and `.js` files
 
 ## Install
 
+### From the JetBrains Marketplace
+
+In WebStorm (or another JetBrains IDE with JavaScript support, 2026.2+):
+
+1. Open **Settings → Plugins → Marketplace**.
+2. Search for **Playwright Yadda** (`io.github.jonfrankel.playwright-yadda`) and click **Install**.
+
+### From GitHub Releases or Disk
+
+Download `playwright-yadda-jetbrains-<version>-signed.zip` from [GitHub Releases](https://github.com/jon-frankel/playwright-yadda/releases), or build it from source:
+
 ```bash
 pnpm ide:jetbrains:build
 ```
@@ -131,6 +142,69 @@ cd ide/jetbrains
 The first run downloads WebStorm (about 1 GB). To use an installed IDE instead, add `-PlocalIdePath=/path/to/WebStorm.app` to any of the commands above. `platformVersion` and `sinceBuild` live in `gradle.properties`.
 
 The tests drive the same platform code paths the editor uses, including the exact decision Cmd+B makes (`GotoDeclarationOrUsageHandler2`), against a real WebStorm 2026.2 test sandbox. They also run against the real `examples/basic` and `examples/wordpress` files. They are not a substitute for clicking through it once in the real IDE.
+
+### Releasing
+
+Releases are published to the JetBrains Marketplace (search for **Playwright Yadda**) and [GitHub Releases](https://github.com/jon-frankel/playwright-yadda/releases) by the [**Release JetBrains Plugin**](../../.github/workflows/release-jetbrains.yml) GitHub Actions workflow (`workflow_dispatch` on `main`):
+
+1. **Verify job**: Resolves `pluginVersion` in `gradle.properties` (using it as-is if `jetbrains-v<version>` is not yet tagged, or applying the requested semver bump via `scripts/release-jetbrains.py`), checks that the version is not already published, generates release notes from commits touching `ide/jetbrains/`, and runs `./gradlew test verifyPlugin buildPlugin`.
+2. **Publish job** (`jetbrains-release` environment):
+   - Signs the verified `.zip` (`./gradlew signPlugin`) and publishes to JetBrains Marketplace (`./gradlew publishPlugin`).
+   - Uploads the signed `.zip` artifact (`jetbrains-signed-plugin`).
+   - Pushes the `jetbrains-v<version>` tag and any version-bump commit (without `[skip ci]` so `Validate Main` validates the commit for subsequent npm releases).
+   - Attests SLSA build provenance and creates the GitHub Release with the signed `.zip`.
+
+The `jetbrains-release` GitHub Environment requires four secrets:
+
+- `JETBRAINS_PUBLISH_TOKEN`: Permanent token from [JetBrains Marketplace](https://plugins.jetbrains.com/author/me/tokens).
+- `JETBRAINS_CERTIFICATE_CHAIN`: PEM-encoded X.509 certificate chain (`chain.crt`).
+- `JETBRAINS_PRIVATE_KEY`: PEM-encoded encrypted RSA private key (`private.pem`).
+- `JETBRAINS_PRIVATE_KEY_PASSWORD`: Passphrase for `private.pem`.
+
+#### Initial Marketplace Upload
+
+JetBrains Marketplace requires the very first version of a new plugin ID to be uploaded once through the web UI at [https://plugins.jetbrains.com/plugin/add](https://plugins.jetbrains.com/plugin/add). To obtain the initial `.zip`:
+
+- Trigger the workflow with `dry_run: true` and download the `.zip` from the `jetbrains-release-artifacts` artifact on the workflow run (retained for 1 day).
+- Alternatively, run `./gradlew buildPlugin` (or `./gradlew signPlugin` with a local keypair) to produce the `.zip` locally.
+
+#### Troubleshooting a Failed Release
+
+Because signing and Marketplace publishing occur before the git tag and commit are pushed, an invalid secret or signing failure leaves the git history clean without half-done tags.
+
+##### Recovery if Marketplace publish succeeds but git tag/push fails
+
+If the workflow published the plugin to the JetBrains Marketplace but failed during the tag and bump push (for example, if a race condition occurred on `main`):
+
+1. Check the workflow run logs to confirm the published `<version>` and the trigger commit `<run-sha>`.
+2. Tag `<run-sha>` directly (no bump) or commit the bump on `<run-sha>`, tag, and rebase onto `main`:
+   ```bash
+   git fetch origin main
+
+   # If releasing an existing untagged version (no bump):
+   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>" <run-sha>
+   git push origin "jetbrains-v<version>"
+
+   # If the version was bumped:
+   git checkout <run-sha>
+   # Set pluginVersion=<version> in ide/jetbrains/gradle.properties
+   git commit -am "release(ide): jetbrains plugin v<version>"
+   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>"
+   git rebase origin/main
+   git push --atomic origin HEAD:main "jetbrains-v<version>"
+   ```
+3. Create the GitHub Release manually for tag `jetbrains-v<version>` and attach the signed plugin archive downloaded from the `jetbrains-signed-plugin` artifact on the workflow run (or downloaded directly from the plugin's JetBrains Marketplace version page).
+
+##### Cleaning up an aborted release
+
+If a release tag or commit was pushed and needs to be undone:
+
+```bash
+git tag -d jetbrains-v<version>
+git push origin :refs/tags/jetbrains-v<version>
+# Revert the specific bump commit if one was pushed:
+git revert <commit-sha> && git push origin main
+```
 
 ## How it works
 

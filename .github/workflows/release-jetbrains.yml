@@ -1,0 +1,249 @@
+name: Release JetBrains Plugin
+
+# Manually triggered workflow to verify, sign, and publish the JetBrains IDE plugin
+# (ide/jetbrains) to the JetBrains Marketplace and GitHub Releases.
+#
+# Release Process:
+# 1. verify job (contents: read, no write/publishing secrets):
+#    - Verifies trigger is on main.
+#    - Determines candidate version from ide/jetbrains/gradle.properties (or applies requested bump).
+#    - Checks that git tag jetbrains-v<version> and Marketplace version do not already exist.
+#    - Generates HTML change notes (for Marketplace) and Markdown release notes (for GitHub Release).
+#    - Executes headless platform tests (./gradlew test), JetBrains Plugin Verifier (./gradlew verifyPlugin),
+#      and builds the plugin distribution (./gradlew buildPlugin).
+#    - Generates a git patch if gradle.properties was bumped and uploads verified artifacts.
+# 2. publish job (environment: jetbrains-release, contents: write, id-token: write, attestations: write):
+#    - Cryptographically signs the verified plugin archive (./gradlew signPlugin) and publishes to
+#      JetBrains Marketplace (./gradlew publishPlugin).
+#    - Uploads the signed archive artifact (jetbrains-signed-plugin).
+#    - Applies release.patch (if bumped), tags the release commit, rebases on latest main, and pushes to origin.
+#    - Attests SLSA build provenance for the signed distribution archive.
+#    - Creates a GitHub Release for jetbrains-v<version> with the signed plugin .zip attached.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type (auto uses gradle.properties version if untagged, else bumps patch)"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+      channel:
+        description: "JetBrains Marketplace release channel"
+        required: true
+        default: "default"
+        type: choice
+        options:
+          - default
+          - eap
+          - alpha
+      dry_run:
+        description: "Dry run (runs tests, verifyPlugin, and builds .zip without pushing tags or publishing)"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: jetbrains-release-pipeline
+  cancel-in-progress: false
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Job 1: Verification & Pre-Flight Testing (Read-only permissions)
+  # -------------------------------------------------------------------------
+  verify:
+    name: Verify & Build JetBrains Plugin
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.bump_step.outputs.version }}
+      previous_tag: ${{ steps.bump_step.outputs.previous_tag }}
+      bumped: ${{ steps.bump_step.outputs.bumped }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Determine Candidate Version & Generate Change Notes
+        id: bump_step
+        run: |
+          PREV_TAG=$(git tag --list 'jetbrains-v*' --sort=-v:refname | head -n 1 || true)
+          echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+          python3 scripts/release-jetbrains.py --bump "${{ inputs.bump }}" --previous-tag "$PREV_TAG"
+
+      - name: Run Tests, Plugin Verifier & Build Distribution
+        working-directory: ide/jetbrains
+        run: |
+          export PLUGIN_CHANGE_NOTES="$(cat ../dist-jetbrains/change-notes.html)"
+          ./gradlew test verifyPlugin buildPlugin --console=plain
+
+      - name: Upload Test & Verifier Reports on Failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jetbrains-release-failure-reports
+          path: |
+            ide/jetbrains/build/reports/tests
+            ide/jetbrains/build/reports/pluginVerifier
+            ide/jetbrains/build/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Stage Verified Plugin Distribution & Patch
+        run: |
+          VERSION="${{ steps.bump_step.outputs.version }}"
+          cp "ide/jetbrains/build/distributions/playwright-yadda-jetbrains-${VERSION}.zip" dist-jetbrains/
+
+          if [ "${{ steps.bump_step.outputs.bumped }}" = "true" ]; then
+            git diff --binary ide/jetbrains/gradle.properties > dist-jetbrains/release.patch
+            if [ ! -s dist-jetbrains/release.patch ]; then
+              echo "::error::Expected non-empty release.patch after version bump."
+              exit 1
+            fi
+          fi
+
+      - name: Upload Verified JetBrains Release Artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jetbrains-release-artifacts
+          path: dist-jetbrains/
+          retention-days: 1
+
+  # -------------------------------------------------------------------------
+  # Job 2: Sign, Publish to Marketplace & Create GitHub Release
+  # -------------------------------------------------------------------------
+  publish:
+    name: Sign & Publish to Marketplace & GitHub Release
+    needs: verify
+    if: inputs.dry_run != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: jetbrains-release
+      url: https://plugins.jetbrains.com/
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Download Verified Release Artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jetbrains-release-artifacts
+          path: dist-jetbrains/
+
+      # Step 1: Sign plugin and publish to JetBrains Marketplace before touching git
+      - name: Sign & Publish Plugin to JetBrains Marketplace
+        working-directory: ide/jetbrains
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.JETBRAINS_CERTIFICATE_CHAIN }}
+          PRIVATE_KEY: ${{ secrets.JETBRAINS_PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.JETBRAINS_PRIVATE_KEY_PASSWORD }}
+          PUBLISH_TOKEN: ${{ secrets.JETBRAINS_PUBLISH_TOKEN }}
+        run: |
+          if [ -z "$CERTIFICATE_CHAIN" ] || [ -z "$PRIVATE_KEY" ] || [ -z "$PRIVATE_KEY_PASSWORD" ]; then
+            echo "::error::Missing signing secrets (JETBRAINS_CERTIFICATE_CHAIN, JETBRAINS_PRIVATE_KEY, JETBRAINS_PRIVATE_KEY_PASSWORD) in jetbrains-release environment."
+            exit 1
+          fi
+          if [ -z "$PUBLISH_TOKEN" ]; then
+            echo "::error::Missing JETBRAINS_PUBLISH_TOKEN secret in jetbrains-release environment."
+            exit 1
+          fi
+
+          VERSION="${{ needs.verify.outputs.version }}"
+          mkdir -p build/distributions
+          cp "../dist-jetbrains/playwright-yadda-jetbrains-${VERSION}.zip" build/distributions/
+          export PLUGIN_CHANGE_NOTES="$(cat ../dist-jetbrains/change-notes.html)"
+
+          ./gradlew signPlugin publishPlugin \
+            -PprebuiltPluginArchive="build/distributions/playwright-yadda-jetbrains-${VERSION}.zip" \
+            -PpluginChannel="${{ inputs.channel }}" \
+            --console=plain
+
+      # Step 2: Upload signed archive so it is retained even if git push or release fails
+      - name: Upload Signed Plugin Archive
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jetbrains-signed-plugin
+          path: ide/jetbrains/build/distributions/playwright-yadda-*-signed.zip
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Step 3: Once published, commit version bump on trigger commit, tag, rebase on latest main, and push
+      - name: Apply Release Patch (if bumped), Tag & Push
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          TAG="jetbrains-v$VERSION"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -f dist-jetbrains/release.patch ] && [ -s dist-jetbrains/release.patch ]; then
+            git apply --index dist-jetbrains/release.patch
+            # Commit without [skip ci] so Validate Main workflow validates the bump commit for subsequent npm releases
+            git commit -m "release(ide): jetbrains plugin v$VERSION"
+            # Tag the commit before rebase so the tag precisely references the exact release source
+            git tag -a "$TAG" -m "JetBrains Plugin v$VERSION"
+
+            # Rebase the bump commit onto latest origin/main in case main moved during verify job
+            git fetch origin main
+            git rebase origin/main
+
+            # Push rebased main and tag atomically (tag still points to the exact release commit)
+            git push --atomic origin HEAD:main "$TAG"
+          else
+            # When not bumping, tag the trigger commit directly and push without rebasing main
+            git tag -a "$TAG" -m "JetBrains Plugin v$VERSION" "${{ github.sha }}"
+            git push origin "$TAG"
+          fi
+
+      # Step 4: Attest provenance and create GitHub Release
+      - name: Attest Build Provenance (SLSA)
+        uses: actions/attest-build-provenance@c074443f1a5fb4aee83904b712414300e19063ef # v2.2.3
+        with:
+          subject-path: "ide/jetbrains/build/distributions/playwright-yadda-jetbrains-*-signed.zip"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ needs.verify.outputs.version }}"
+          TAG="jetbrains-v$VERSION"
+
+          gh release create "$TAG" \
+            "ide/jetbrains/build/distributions/playwright-yadda-jetbrains-${VERSION}-signed.zip" \
+            --title "JetBrains Plugin v$VERSION" \
+            --notes-file dist-jetbrains/release-notes.md

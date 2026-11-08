@@ -47,15 +47,29 @@ function packLibrary() {
   fs.renameSync(path.join(packDir, packed), path.join(packDir, tarballName));
 }
 
+// The tarball changes with every build, so an integrity hash for it in a lockfile is never right for
+// long, and pnpm fails the install on a mismatch. The lockfile is kept without one.
+function withoutTarballIntegrity(lockfile) {
+  return lockfile
+    .split("\n")
+    .map((line) =>
+      line.includes("tarball: file:") ? line.replace(/integrity: sha512-[^,}]*,?\s*/, "") : line,
+    )
+    .join("\n");
+}
+
 function installExample(name) {
   const exampleDir = path.join(examplesDir, name);
   const lockfile = path.join(exampleDir, "pnpm-lock.yaml");
-  const savedLockfile = fs.existsSync(lockfile) ? fs.readFileSync(lockfile) : undefined;
+  const savedLockfile = fs.existsSync(lockfile) ? fs.readFileSync(lockfile, "utf8") : undefined;
   try {
-    // The lockfile holds the tarball's integrity hash, which no longer matches after a rebuild.
+    if (savedLockfile) {
+      fs.writeFileSync(lockfile, withoutTarballIntegrity(savedLockfile));
+    }
     run("pnpm", ["install", "--no-frozen-lockfile"], exampleDir);
   } finally {
-    if (savedLockfile) fs.writeFileSync(lockfile, savedLockfile);
+    // Put the lockfile back so a library change doesn't show up as a lockfile diff.
+    if (savedLockfile) fs.writeFileSync(lockfile, withoutTarballIntegrity(savedLockfile));
   }
   const installed = JSON.parse(
     fs.readFileSync(path.join(exampleDir, "node_modules/playwright-yadda/package.json"), "utf8"),

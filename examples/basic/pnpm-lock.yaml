@@ -170,7 +170,7 @@ packages:
     hasBin: true
 
   playwright-yadda@file:../../.pack/playwright-yadda.tgz:
-    resolution: {integrity: sha512-UEz7P1zR7QT4gk9hL6+nfNxHfqgAouBhrVn02vcdBi+iEpaFtypjvc0aUd6MjmZnDV5jb7Fk65bV6fMJTvaaYA==, tarball: file:../../.pack/playwright-yadda.tgz}
+    resolution: {tarball: file:../../.pack/playwright-yadda.tgz}
     version: 0.1.2
     engines: {node: '>=22.0.0', pnpm: '>=10.0.0'}
     peerDependencies:

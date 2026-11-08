@@ -176,23 +176,22 @@ Because signing and Marketplace publishing occur before the git tag and commit a
 
 If the workflow published the plugin to the JetBrains Marketplace but failed during the tag and bump push (for example, if a race condition occurred on `main`):
 
-1. Check the workflow run logs to confirm the published `<version>`.
-2. Check out `main`, ensure `ide/jetbrains/gradle.properties` reflects the published version, commit (if bumped), and tag:
+1. Check the workflow run logs to confirm the published `<version>` and the trigger commit `<run-sha>`.
+2. Tag `<run-sha>` directly (no bump) or commit the bump on `<run-sha>`, tag, and rebase onto `main`:
    ```bash
-   git checkout main
-   git pull origin main
-
-   # If the version was bumped:
-   # Set pluginVersion=<version> in ide/jetbrains/gradle.properties
-   git add ide/jetbrains/gradle.properties
-   git commit -m "release(ide): jetbrains plugin v<version>"
-   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>"
-   git push origin main
-   git push origin "jetbrains-v<version>"
+   git fetch origin main
 
    # If releasing an existing untagged version (no bump):
-   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>"
+   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>" <run-sha>
    git push origin "jetbrains-v<version>"
+
+   # If the version was bumped:
+   git checkout <run-sha>
+   # Set pluginVersion=<version> in ide/jetbrains/gradle.properties
+   git commit -am "release(ide): jetbrains plugin v<version>"
+   git tag -a "jetbrains-v<version>" -m "JetBrains Plugin v<version>"
+   git rebase origin/main
+   git push --atomic origin HEAD:main "jetbrains-v<version>"
    ```
 3. Create the GitHub Release manually for tag `jetbrains-v<version>` and attach the signed plugin archive downloaded from the `jetbrains-signed-plugin` artifact on the workflow run (or downloaded directly from the plugin's JetBrains Marketplace version page).
 

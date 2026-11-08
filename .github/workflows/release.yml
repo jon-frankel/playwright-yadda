@@ -122,51 +122,7 @@ jobs:
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           echo "previous_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
 
-          node -e '
-            const fs = require("node:fs");
-            const { execSync } = require("node:child_process");
-
-            const requested = "${{ inputs.bump }}";
-            const pkgBefore = JSON.parse(fs.readFileSync("package.json", "utf8"));
-            const oldVersion = pkgBefore.version;
-
-            // Run changeset version to consume pending changesets and update CHANGELOG.md
-            // Do not swallow errors: fail immediately if changeset version fails
-            execSync("pnpm exec changeset version", { stdio: "inherit" });
-
-            const pkgAfter = JSON.parse(fs.readFileSync("package.json", "utf8"));
-            let currentVersion = pkgAfter.version;
-
-            const [oldMaj, oldMin, oldPatch] = oldVersion.split(".").map(Number);
-            const [newMaj, newMin, newPatch] = currentVersion.split(".").map(Number);
-
-            let changesetBump = "none";
-            if (newMaj > oldMaj) changesetBump = "major";
-            else if (newMin > oldMin) changesetBump = "minor";
-            else if (newPatch > oldPatch) changesetBump = "patch";
-
-            const semverOrder = { patch: 1, minor: 2, major: 3 };
-
-            if (requested === "auto") {
-              if (changesetBump === "none") {
-                console.log("No changesets consumed; bumping patch version.");
-                execSync("npm version patch --no-git-tag-version", { stdio: "inherit" });
-              }
-            } else if ((semverOrder[requested] || 0) > (semverOrder[changesetBump] || 0)) {
-              console.log(`Requested bump "${requested}" requires upgrading beyond changeset bump "${changesetBump}".`);
-              // Reset version to oldVersion so npm version increments from baseline
-              fs.writeFileSync("package.json", JSON.stringify({ ...pkgAfter, version: oldVersion }, null, 2) + "\n");
-              execSync(`npm version ${requested} --no-git-tag-version`, { stdio: "inherit" });
-            }
-
-            const finalVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
-            if (fs.existsSync("CHANGELOG.md") && changesetBump !== "none" && finalVersion !== currentVersion) {
-              console.log(`Syncing CHANGELOG.md top heading to ${finalVersion}`);
-              const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
-              const updated = changelog.replace(/^##\s+\d+\.\d+\.\d+/m, `## ${finalVersion}`);
-              fs.writeFileSync("CHANGELOG.md", updated, "utf8");
-            }
-          '
+          node scripts/bump-release-version.mjs "${{ inputs.bump }}"
 
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "version=$NEW_VERSION" >> "$GITHUB_OUTPUT"

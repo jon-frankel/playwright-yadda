@@ -1,19 +1,54 @@
 # playwright-yadda
 
-> Dynamic step library loading for Playwright and Yadda BDD test suites.
+> Run human-readable BDD specifications directly in Playwright Test—with modular step libraries and zero codegen.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-`playwright-yadda` bridges [Yadda](https://github.com/acuminous/yadda) and [@playwright/test](https://playwright.dev/) with **dynamic step library loading**. Instead of compiling all step definitions into a single global regex dictionary, features and scenarios declare their dependencies via annotations (e.g. `@Libraries=auth, catalog, checkout`).
+`playwright-yadda` brings Behavior-Driven Development to [@playwright/test](https://playwright.dev/) using [Yadda](https://github.com/acuminous/yadda). Write specifications in Gherkin (`.feature`) or Markdown (`.md`), organize your step implementations into domain-specific libraries, and run them directly with `playwright test`.
+
+## What It Does For You
+
+- **Runs directly in Playwright Test**: No intermediate code-generation step or custom CLI wrapper. Point `defineFeatureSuite()` at your `features/` folder and run `playwright test`.
+- **Full Playwright tooling out of the box**: Every scenario is a native Playwright test and every step runs inside `test.step()`, giving you full Trace Viewer timelines, screenshots, video recording, HTML reports, parallelism, and retries—with steps linked directly to their lines in the `.feature` file.
+- **Modular, domain-scoped step libraries**: Group step definitions by domain (`storefront`, `admin`, `checkout`) and activate only the libraries a feature or scenario needs via `@Libraries` tags or `@folder/` directory conventions. Two domains can use identical step phrasing without colliding.
+- **First-class Playwright fixtures, tags, and hooks**: Destructure typed fixtures from `test.extend()` directly in your steps, control execution from feature files with tags like `@only`, `@skip`, `@fixme`, `@slow`, `@timeout:N`, `@retries:N`, and `@mode:serial`, and register tag-filtered `BeforeScenario` / `AfterScenario` / `BeforeStep` / `AfterStep` hooks.
+- **Dedicated reporter & IDE integration**: Includes `playwright-yadda/reporter` for step-by-step terminal output and a companion [JetBrains IDE plugin](ide/jetbrains) that understands `@Libraries` scoping and Yadda's dialect.
 
 ---
 
-## Key Benefits
+## Why BDD?
 
-- **Zero Global Regex Collisions**: Domain step definitions remain strictly isolated. Two domains can use identical step text without conflict.
-- **Trace Viewer & HTML Report Fidelity**: Every Gherkin step is executed inside Playwright's `test.step()`, giving you granular execution timelines, screenshots, and traces.
-- **Negligible Overhead**: An isolated Yadda runner is instantiated per scenario with only the relevant pre-compiled libraries.
-- **Native Async & State Persistence**: Supports modern `async/await` steps and automatically persists scenario context state across steps.
+As end-to-end test suites grow, raw browser scripts often turn into walls of selectors, waits, and assertions that obscure the actual product requirements being tested.
+
+BDD separates **what** the application should do from **how** the test drives the browser:
+
+- **Shared, readable specifications**: Features written in plain language (`Given` / `When` / `Then`) can be read and reviewed by engineers, QA, and product stakeholders alike.
+- **A reusable domain vocabulary**: Once you define steps for your core workflows, writing new test scenarios means composing existing sentences rather than duplicating boilerplate setup and DOM queries.
+- **Living documentation**: Because the specifications are the tests themselves, your documentation never drifts from what is actually verified in CI.
+
+## Why Yadda?
+
+Most JavaScript BDD tools are built on Cucumber, which puts every step definition in your repository into a **single global namespace**. In a small project that works fine, but as your test suite grows across multiple teams or product areas, global steps become a bottleneck:
+
+- A step like `When they remove the item` or `Given the user is logged in` can only have one definition across the entire project.
+- Teams are forced to invent awkward, overly specific phrasing (`When the admin removes the catalog item on the inventory page`) just to avoid regex collisions with other features.
+
+[Yadda](https://github.com/acuminous/yadda) takes a fundamentally different approach:
+
+- **Step libraries instead of a global pool**: Steps are organized into independent libraries. With `playwright-yadda`, each feature or scenario loads only the libraries it needs (plus any shared defaults like `common`), keeping domain vocabularies clean and isolated.
+- **Markdown specifications**: Prefer documentation that renders natively on GitHub? Write features in standard Markdown (`# Feature: …`, `## Scenario: …`, and bulleted steps) alongside or instead of `.feature` files.
+- **Flexible multiline data blocks**: Pass JSON payloads, CSV data, tables, or free-form text directly below any step between `---` fences—without awkward Gherkin pipe-table escaping.
+- **Ergonomic Scenario Outlines & dictionaries**: Use `[placeholder]` syntax with pipe-optional `Examples:` / `Where:` tables, and build reusable parameter converters with Yadda dictionaries.
+
+## Why Not `playwright-bdd`?
+
+[`playwright-bdd`](https://github.com/vitalets/playwright-bdd) is a popular way to run Gherkin features in Playwright, and `playwright-yadda` shares several of its best ergonomic ideas (such as `createBdd(test)` for typed fixtures, `@timeout:N` / `@retries:N` / `@mode:serial` control tags, and tag-filtered hooks).
+
+Choose `playwright-yadda` when you want:
+
+1. **No `bddgen` code generation step**: `playwright-bdd` compiles `.feature` files into generated `.spec.js` files on disk before Playwright runs, requiring a separate build step in CI and a file watcher during local development. `playwright-yadda` parses features and registers tests dynamically at runtime—you just run `playwright test`.
+2. **Scoped step libraries instead of global step matching**: `playwright-bdd` uses Cucumber-style global step definitions, where overlapping patterns across domains collide. `playwright-yadda` scopes step resolution per feature or scenario via `@Libraries` and `@folder/` path tags.
+3. **Yadda's flexible syntax & Markdown features**: Instead of being locked into strict `@cucumber/gherkin` syntax, you can write specs in Gherkin or Markdown, attach `---` fenced blocks (JSON, CSV, tables, text) to steps, and use Yadda dictionaries.
 
 ---
 
@@ -84,7 +119,9 @@ Feature: Storefront Shopping
     Then the cart count is 0
 ```
 
-### 4. Run with Playwright Test
+### 4. Configure and Run with Playwright Test
+
+Create a spec file that points `defineFeatureSuite` at your `features/` directory:
 
 ```typescript
 // e2e/features.spec.ts
@@ -103,28 +140,25 @@ defineFeatureSuite({
 });
 ```
 
+Configure Playwright and enable [`playwright-yadda/reporter`](#reporter) for step-by-step terminal output and feature-grouped `--list` output:
+
+```typescript
+// playwright.config.ts
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  reporter: [["playwright-yadda/reporter"]],
+});
+```
+
 Run tests with standard Playwright CLI:
 
 ```bash
 pnpm playwright test
 ```
 
-A scenario is a test named `Scenario: <title>` in a describe named `Feature: <title>`, so one scenario or feature can be run with `--grep`. The package builds the pattern for you (it escapes the title, keeps "Clears cart" from also running "Clears cart twice", and allows for the tags Playwright adds to a title):
-
-```ts
-import { grepForFeature, grepForScenario, grepForScenarioOutline } from "playwright-yadda";
-
-grepForScenario("Storefront Shopping", "Customer clears cart");
-// Feature: Storefront Shopping Scenario: Customer clears cart(?: @\S+)*$
-grepForFeature("Storefront Shopping"); // every scenario of the feature
-grepForScenarioOutline("Order checkout", "A cart with [n] keyboards"); // every example of an outline
-```
-
-```bash
-pnpm playwright test e2e/features.spec.ts -g "<pattern>"
-```
-
-With Playwright 1.48 or later each step is reported at the line of the feature file it is written on (a step of a `Background:` at the line in the background, and the examples of an outline at the outline's lines), and Playwright shows a step at the location it is given in its reports and trace viewer. The scenario itself is still located at the spec file, as Playwright has no way to set a test's location, though `playwright test --list` with [`playwright-yadda/reporter`](#reporter) lists scenarios grouped by feature file.
+Each step is reported at its line in the `.feature` or `.md` file in Playwright's reports and trace viewer (Playwright 1.48+).
 
 #### Feature file syntax (Gherkin & Markdown)
 
@@ -138,16 +172,16 @@ With Playwright 1.48 or later each step is reported at the line of the feature f
 
 Tags on a feature or a scenario can also control how Playwright runs it. A scenario's tag overrides the feature's tag of the same name, and adds to the rest, so `@skip=false` on a scenario runs it although its feature is `@skip`; `@skip`, `@pending` and `@fixme` count as one tag for this. `@timeout`, `@retries` and `@mode` take no `=false`: use `@retries:0`, or `@timeout:0` (no timeout at all), to override a feature's value. Yadda reads one tag per line, as `@name`, `@name=value` or, as playwright-bdd writes it, `@name:value`. For the tags in this table, the last two mean the same.
 
-| Tag                                               | What it does                                                                                                                                                                                                                                        |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@only`                                           | `test.only`                                                                                                                                                                                                                                         |
-| `@skip`, `@pending`                               | `test.skip`. The two are aliases. They win over `@fixme` and `@only`.                                                                                                                                                                               |
-| `@fixme`                                          | `test.fixme`: skipped, and reported as a fixme. Wins over `@only`.                                                                                                                                                                                  |
-| `@fail`                                           | `test.fail()`: the scenario is expected to fail                                                                                                                                                                                                     |
-| `@slow`                                           | `test.slow()`: triples the timeout, including the scenario's `@timeout`                                                                                                                                                                             |
-| `@timeout:N`                                      | `N` milliseconds for the scenario and its fixtures and hooks, the same as `test.setTimeout(N)`: `test.describe.configure({ timeout: N })`, on the scenario's own describe or on the feature's.                                                      |
-| `@retries:N`                                      | `test.describe.configure({ retries: N })`, on the feature or on the scenario. On a scenario of a `@mode:serial` feature it is ignored with a warning, because Playwright would not run again what follows a failed scenario: put it on the feature. |
-| `@mode:parallel`, `@mode:serial`, `@mode:default` | `test.describe.configure({ mode })`. On a feature only: a mode is a setting of a group of tests, and a scenario's `@mode` is ignored with a warning.                                                                                                |
+| Tag                                               | What it does                                                                                                                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@only`                                           | `test.only`                                                                                                                                                           |
+| `@skip`, `@pending`                               | `test.skip`. The two are aliases. They win over `@fixme` and `@only`.                                                                                                 |
+| `@fixme`                                          | `test.fixme`: skipped, and reported as a fixme. Wins over `@only`.                                                                                                    |
+| `@fail`                                           | `test.fail()`: the scenario is expected to fail                                                                                                                       |
+| `@slow`                                           | `test.slow()`: triples the timeout, including the scenario's `@timeout`                                                                                               |
+| `@timeout:N`                                      | Sets a timeout of `N` milliseconds for the scenario, its fixtures, and its hooks.                                                                                     |
+| `@retries:N`                                      | Retries a failing scenario up to `N` times (on the feature or the scenario; in a `@mode:serial` feature, place it on the feature rather than an individual scenario). |
+| `@mode:parallel`, `@mode:serial`, `@mode:default` | Configures the execution mode for a feature (`test.describe.configure({ mode })`). Must be placed on a feature, not an individual scenario.                           |
 
 ```gherkin
 @retries:2
@@ -164,11 +198,9 @@ Feature: Checkout
     ...
 ```
 
-A scenario with `@fail`, `@slow`, `@timeout` or `@retries` is declared in a describe of its own, which has no title, so Playwright's settings for it cover its fixtures and `beforeEach` hooks too ([microsoft/playwright#10825](https://github.com/microsoft/playwright/issues/10825)). Test titles, test ids and output paths do not change; reporters that walk the suite tree, such as the JSON one, see an untitled group around each such scenario.
-
 Every tag is also passed to Playwright as the test's `tag` (Playwright 1.42 or later), so `--grep` and `--grep-invert` select by them: `playwright test --grep @smoke`, `playwright test --grep-invert @slow`. A tag with a value is passed as `@name:value` (`@timeout=5000` becomes `@timeout:5000`); one whose value has spaces, such as `@Libraries=auth, catalog`, is passed as `@name`. A tag switched off with `=false` is not passed. Where a scenario overrides a feature's tag, the scenario's value is the one passed. Yadda lowercases the names of tags, and for the `@name:value` spelling the value too, so `@Smoke` is `@smoke` to `--grep` and `@Area:Cart` is `@area:cart`. Only the tags in the table treat the two spellings alike: `@Libraries:auth` does not load a library.
 
-A value that is not valid (`@timeout:soon`, `@retries:1.5`, `@mode:fast`) is ignored with a warning. Each warning is printed once per run, not once per worker. With `playwright-yadda/reporter` it is printed before the first scenario, and only when a scenario it is about is in the run, so `--grep` and the IDE's run icon do not bring up warnings about scenarios that are not running; with another reporter, it is printed by the main Playwright process whichever scenarios are selected. The warning is also on its scenarios as a test annotation, `_playwright-yadda-warning`, which Playwright's HTML report hides and its JSON report lists. Any other tag does nothing but get passed to Playwright. `@lock` is not handled yet.
+Invalid tag values (`@timeout:soon`, `@retries:1.5`, `@mode:fast`) are ignored with a warning. Any other tag is simply passed through to Playwright.
 
 ---
 
@@ -255,25 +287,22 @@ Binds step libraries to your extended `test`, returning `{ createStepLibrary(dic
 
 ### Lower-Level Exports
 
-For custom runners, tooling, or advanced workflows, `playwright-yadda` also exports:
+For custom runners or advanced workflows, `playwright-yadda` also exports:
 
 - **Feature registration & parsing**:
-  - `defineFeature(feature, options)`: Registers a single `ParsedFeature` with Playwright's `test` (accepts an optional shared `fixtureCollector` from `createFixtureCollector()`).
-  - `parseFeature(content, parserType?, filepath?, language?)`: Parses Gherkin or Markdown feature content into a `ParsedFeature` (recording 1-based `line` numbers for the feature and scenarios, and `stepLines` for each step).
+  - `defineFeature(feature, options)`: Registers a single `ParsedFeature` with Playwright's `test`.
+  - `parseFeature(content, parserType?, filepath?, language?)`: Parses Gherkin or Markdown feature content into a `ParsedFeature`.
   - `loadFeatureFile(filepath, parserType?, language?, root?)`: Loads and parses a feature file from disk and applies `@`-prefixed path tags.
   - `findFeatureFiles(targetPath)`: Recursively finds `.feature`, `.md`, and `.markdown` files in a directory (or returns `[path.resolve(targetPath)]` for a file).
   - `pathTagsOf(filepath, root?)`: Returns the `@`-prefixed directory and file tags (without `@`, outermost first) between `root` and `filepath`.
 - **Step & scenario runners**:
   - `createScenarioYadda(libraries)`: Creates an isolated Yadda instance for `StepLibrary[]`.
   - `runStep(yadda, stepText, context)`: Promisified wrapper around `yadda.run()` that syncs properties mutated on `this` back to `context`.
-  - `runScenarioSteps(yadda, steps, context, testStep?, stepHooks?, stopped?, locations?)`: Runs an array of steps in sequence, optionally wrapping each in `test.step` (with feature-file `location`) and running `stepHooks`.
-- **Annotations, tags & `--grep` helpers**:
+  - `runScenarioSteps(yadda, steps, context, testStep?, stepHooks?, stopped?, locations?)`: Runs an array of steps in sequence, optionally wrapping each in `test.step` and running `stepHooks`.
+- **Annotation & tag helpers**:
   - `getAnnotationValue(annotations, targetKey)`, `extractLibraryNames(annotations, annotationKey?)`, `resolveLibraryNames(featureAnnotations?, scenarioAnnotations?, options?)`.
   - `isScenarioPending(featureAnnotations?, scenarioAnnotations?)`, `isScenarioOnly(featureAnnotations?, scenarioAnnotations?)`.
   - `parseTagExpression(source)`: Compiles a boolean tag expression (`@mobile and not (@slow or @wip)`) into a predicate `(tags: readonly string[]) => boolean`.
-  - `featureTestTitle(featureTitle)`, `scenarioTestTitle(scenarioTitle)`, `grepForFeature(featureTitle)`, `grepForScenario(featureTitle, scenarioTitle)`, `grepForScenarioOutline(featureTitle, scenarioTitle)`.
-- **Fixtures introspection**:
-  - `parseFixtureNames(fn)`, `createFixtureCollector()`, `FixtureDeclarationError`.
 
 ---
 
@@ -350,35 +379,16 @@ defineFeatureSuite({ test, registry, features });
 - Pass the same extended `test` to `defineFeatureSuite`. `createBdd(test)` only reads its type.
 - `'bound'`, `'param'` and `'fixtures'` libraries can be mixed in one registry, and `createContext` keeps working.
 
-### Which fixtures a scenario sets up
+### Fixture rules & lifecycle
 
-Playwright decides what to set up from the destructuring pattern of the test function's first argument. There is no generated spec file here, so for each scenario the test function is built when the suite is declared, with a pattern naming:
+Only the fixtures destructured by the steps a scenario actually runs (plus `page` and `context`) are initialized for that scenario, before its first step runs, and torn down after its last step completes.
 
-1. `page` and `context`, always. The default scenario context (`{ page, context, testInfo }`) is made of them, so `'bound'` and `'param'` steps keep working.
-2. the fixtures destructured by the step definition Yadda would run for each of the scenario's steps, from the libraries the scenario enables (`@Libraries`, on the feature or the scenario, plus the defaults).
+When writing `'fixtures'` steps:
 
-A fixture none of those steps destructures is not set up, so an expensive fixture costs only the scenarios whose steps use it.
-
-### When fixtures are set up
-
-Playwright sets up a test's fixtures before its first step runs and tears them down after its last, as for any test. So every fixture the scenario's steps use, including those of `Background:` steps, exists for the whole scenario, even if only the final step uses it. A fixture that throws while being set up fails the scenario before any step runs, and the failure is not tied to a step. They are set up in the order the scenario's steps first use them (after `page` and `context`), with a fixture's own dependencies first. `page` and `context` are always set up, so a scenario that only needs `request` still launches a browser.
-
-Limits of reading the pattern from the step definition:
-
-- **Destructure in the first parameter.** `async ({ page }) => ...` works. `async (fixtures) => ...` and a rest property (`{ page, ...rest }`) throw when the step is defined, as they would in a Playwright test. Use `({})` for a step that needs none.
-- **Yadda's choice between definitions is repeated.** When a step text matches several definitions (a regex and a more specific one, or the same text in two libraries), the closest pattern wins, and a tie goes to the library of the previous step, as Yadda does when it runs the steps. Only the winner's fixtures are set up. A step Yadda cannot choose a definition for (ambiguous, or defined nowhere) sets up nothing, since the scenario fails when it runs, before any definition could use its fixtures.
-- **Pass the function you wrote.** The names are read from `fn.toString()`. A wrapped or `.bind()`-ed function hides its parameters, and so would a bundler that rewrites destructuring (a minifier keeps the property names, which is all that is read).
-- **Plain identifiers.** Fixture names like `"my-fixture"` cannot be destructured this way; Playwright reads them the same way.
-- **Step styles are Yadda's own.** A step may be sync, return a promise, or take a trailing `next` callback; the first argument is just replaced by the fixtures.
-- **A fixture the `test` does not have stops the whole run.** Playwright rejects a test that names an unknown fixture when it loads the spec file, so one typo in one step means no tests run. The message is `Test has unknown parameter "pgae"`, shown at a line inside playwright-yadda (`src/feature.ts`), not at your step, scenario or feature file, so search your step libraries for the name. `testInfo` is the common one: the `TestInfo` is `$testInfo` here, and `testInfo` throws when the step is defined.
-- **Define every step library before the suite is declared.** The fixtures are collected when `defineFeatureSuite` runs. A step defined later fails when it runs with an error naming the fixture it did not get, instead of receiving `undefined`.
-- **Names starting with `$`** are fixtures too, except `$testInfo`.
-- **Declaring the suite does the matching up front.** Each distinct step line is matched against the patterns of the libraries its scenario enables, once per suite; repeated lines and repeated sequences cost nothing more. A scenario that enables no `'fixtures'`-mode library costs nothing; once it enables one, all of its enabled libraries are matched, because Yadda ranks across them, so keep fixtures libraries out of `defaultLibraries` unless every scenario needs them. With every line distinct, 16,000 lines against 500 patterns in one library takes about 5 seconds, and Playwright loads the spec in the runner and in each worker, so split large libraries by `@Libraries` to keep what each scenario matches small.
-- **Unknown libraries** fail the scenario with `UnknownLibraryError` when it runs. If the registry has a `'fixtures'`-mode library, a warning is also logged when the suite is declared (once per run, like the warnings about special tags), saying that only `page` and `context` are set up for those scenarios.
-
-### The scenario context in `'fixtures'` steps
-
-The first argument is the fixtures, not the scenario context built by `createContext` or set by `'bound'` and `'param'` steps. An arrow function cannot reach that context. A `function` step can: `this` is the scenario context there, as in `'bound'` mode, and what it sets is carried to later steps. The third argument of `define` (`macroContext`) is reachable the same way, and not as a fixture.
+- **Destructure in the first parameter**: Write `async ({ page, account }) => ...` (or `({})` if a step needs no fixtures). Do not use a plain identifier (`async (fixtures) => ...`) or rest spread (`{ page, ...rest }`), which will throw when the step is defined.
+- **Use `$testInfo` for `TestInfo`**: Destructure `{ $testInfo }` to access Playwright's `TestInfo` (destructured `testInfo` is rejected at definition time).
+- **Define all step libraries before calling `defineFeatureSuite`**: Fixtures are inspected when `defineFeatureSuite` registers the suite. Pass the step function directly rather than wrapping it in `.bind()` or a higher-order wrapper.
+- **Accessing scenario context (`this`)**: In `'fixtures'` mode, the first argument is the fixtures object. If you also need the shared scenario context, use a regular `function` (not an arrow function) and access it via `this`.
 
 ---
 

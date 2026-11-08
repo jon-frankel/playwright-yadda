@@ -17,13 +17,13 @@ This example demonstrates running and testing a **complete WordPress instance ru
 
 ## Running Tests
 
-From this directory:
+The example installs `playwright-yadda` from a tarball built from this repository. From the repository root:
 
 ```bash
-# 1. Install dependencies
-pnpm install
+# 1. Build the library and install dependencies
+pnpm run examples:install wordpress
 
-# 2. Run the Playwright test suite (the first run also builds the cached snapshot)
+# 2. From examples/wordpress, run the Playwright test suite (the first run also builds the cached snapshot)
 pnpm test
 ```
 

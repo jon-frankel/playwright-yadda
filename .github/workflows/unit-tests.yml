@@ -15,3 +15,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup
       - run: pnpm run test
+      # The shape of the published package: the files list, exports map and types, installed the way a consumer would.
+      - name: Smoke test the packed package
+        run: |
+          pnpm run build
+          pnpm pack --pack-destination "$RUNNER_TEMP/pack"
+          node scripts/smoke-test-package.mjs "$RUNNER_TEMP"/pack/playwright-yadda-*.tgz

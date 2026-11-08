@@ -6,10 +6,15 @@ It is a comparison, so each test is ported from its original and the differences
 
 ## Running it
 
+The example installs `playwright-yadda` from a tarball built from this repository, so install it from the repository root, not with a bare `pnpm install`:
+
 ```bash
-pnpm install
-pnpm test     # the first run fetches and installs Actual: a few minutes, ~2 GB
+pnpm run examples:install actual
+cd examples/actual
+pnpm test
 ```
+
+The first run fetches and installs Actual: a few minutes, ~2 GB.
 
 `scripts/serve.mjs` fetches one pinned commit of Actual into `.cache/` (gitignored), installs its dependencies there with the Yarn version Actual pins (through corepack, nothing global), and runs its `yarn start` on port 3001. Delete `.cache/` to start over. Needs Node 22.18+ and git.
 

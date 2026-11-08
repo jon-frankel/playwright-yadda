@@ -6,11 +6,8 @@ name: Release Package
 # 1. verify job (contents: read, no OIDC write access):
 #    - Verifies trigger is on main.
 #    - Determines candidate version (consumes changesets or applies semver bump).
-#    - Boots Verdaccio in CI and publishes candidate package locally.
-#    - Upgrades all example projects to candidate version from Verdaccio.
-#    - Executes full validation suite (unit tests, static analysis, all example tests, IDE plugin).
+#    - Builds and packs the candidate, then smoke tests that exact tarball in an empty project.
 #    - Runs security audit on production dependencies.
-#    - Downloads the exact verified tarball from Verdaccio for tarball parity.
 #    - Generates CycloneDX and SPDX SBOMs via native pnpm sbom.
 #    - Generates a git release patch capturing package.json, CHANGELOG.md, examples, and changeset deletions.
 #    - Uploads artifacts.
@@ -149,6 +146,9 @@ jobs:
           pnpm pack --pack-destination dist-pack
           pnpm sbom --sbom-format cyclonedx --prod > dist-pack/sbom.cyclonedx.json
           pnpm sbom --sbom-format spdx --prod > dist-pack/sbom.spdx.json
+
+      - name: Smoke Test the Packed Tarball
+        run: node scripts/smoke-test-package.mjs dist-pack/playwright-yadda-*.tgz
 
       - name: Dry-Run npm Publish (Tarball & Registry Validation)
         run: |

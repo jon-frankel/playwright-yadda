@@ -2,9 +2,9 @@ name: Example tests
 
 # Reusable. Typechecks one project under examples/ and runs its Playwright suite.
 #
-# The examples depend on playwright-yadda from a local registry (their .npmrc points at Verdaccio), which
-# CI doesn't have. So the library is built and packed from this commit and installed into the example in
-# its place. That also makes the example test the library change it is checked with.
+# The examples depend on playwright-yadda from a tarball (file:../../.pack/playwright-yadda.tgz).
+# scripts/examples-install.mjs builds and packs the library from this commit and installs it into the
+# example, so the example tests the library change it is checked with. It is the same command used locally.
 on:
   workflow_call:
     inputs:
@@ -48,16 +48,9 @@ jobs:
             pnpm-lock.yaml
             examples/${{ inputs.example }}/pnpm-lock.yaml
 
-      - name: Build and pack the library
+      - name: Build the library and install it into the example
         working-directory: .
-        run: |
-          pnpm run build
-          pnpm pack --pack-destination "$RUNNER_TEMP/pack"
-
-      - name: Install the example against the packed library
-        run: |
-          tarball=$(ls "$RUNNER_TEMP"/pack/playwright-yadda-*.tgz)
-          pnpm add --registry https://registry.npmjs.org/ "playwright-yadda@file:$tarball"
+        run: node scripts/examples-install.mjs "${{ inputs.example }}"
 
       - name: Typecheck
         run: pnpm run typecheck

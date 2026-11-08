@@ -58,7 +58,7 @@ jobs:
             echo "$1=$value" | tee -a "$GITHUB_OUTPUT"
           }
 
-          library='^(src/|test/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.npmrc$|tsconfig\.json$|tsdown\.config\.ts$|vitest\.config\.ts$|scripts/(examples-install|smoke-test-package)\.mjs$)'
+          library='^(src/|test/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.npmrc$|tsconfig\.json$|tsdown\.config\.ts$|vitest\.config\.ts$|scripts/examples-install\.mjs$)'
 
           output unit-tests "$library"
           output example-basic "$library|^examples/basic/"

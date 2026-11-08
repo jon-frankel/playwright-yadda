@@ -6,7 +6,7 @@ name: Release Package
 # 1. verify job (contents: read, no OIDC write access):
 #    - Verifies trigger is on main.
 #    - Determines candidate version (consumes changesets or applies semver bump).
-#    - Builds and packs the candidate, then smoke tests that exact tarball in an empty project.
+#    - Builds and packs the candidate, then checks that exact tarball with publint and Are the Types Wrong?.
 #    - Runs security audit on production dependencies.
 #    - Generates CycloneDX and SPDX SBOMs via native pnpm sbom.
 #    - Generates a git release patch capturing package.json, CHANGELOG.md, examples, and changeset deletions.
@@ -147,8 +147,10 @@ jobs:
           pnpm sbom --sbom-format cyclonedx --prod > dist-pack/sbom.cyclonedx.json
           pnpm sbom --sbom-format spdx --prod > dist-pack/sbom.spdx.json
 
-      - name: Smoke Test the Packed Tarball
-        run: node scripts/smoke-test-package.mjs dist-pack/playwright-yadda-*.tgz
+      - name: Check the Packed Tarball (publint, Are the Types Wrong?)
+        run: |
+          pnpm exec publint run --level warning dist-pack/playwright-yadda-*.tgz
+          pnpm exec attw --profile node16 dist-pack/playwright-yadda-*.tgz
 
       - name: Dry-Run npm Publish (Tarball & Registry Validation)
         run: |

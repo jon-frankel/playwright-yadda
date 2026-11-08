@@ -85,6 +85,7 @@
     "ide:jetbrains:test": "scripts/ide-jetbrains-test.sh",
     "ide:jetbrains:build": "cd ide/jetbrains && ./gradlew buildPlugin",
     "ide:jetbrains:verify": "cd ide/jetbrains && ./gradlew verifyPlugin",
+    "check:package": "pnpm run build && rm -rf .pack/check && pnpm pack --pack-destination .pack/check && publint run --level warning .pack/check/*.tgz && attw --profile node16 .pack/check/*.tgz",
     "examples:install": "node scripts/examples-install.mjs",
     "examples:test:basic": "node scripts/examples-install.mjs basic && pnpm --dir examples/basic test",
     "examples:test": "pnpm --dir examples/basic test && pnpm --dir examples/wordpress test && pnpm --dir examples/actual test",
@@ -96,6 +97,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^3.0.3",
     "@playwright/test": ">=1.30.0",
     "@types/node": "^24.15.0",
@@ -106,6 +108,7 @@
     "oxfmt": "^0.74.0",
     "oxlint": "^1.89.0",
     "oxlint-tsgolint": "^7.0.2004",
+    "publint": "^0.3.25",
     "rolldown": "^1.2.14",
     "tsdown": "^0.23.1",
     "typescript": "7.0.2",

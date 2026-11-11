@@ -1,6 +1,6 @@
 {
   "name": "playwright-yadda",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Dynamic step library loading for Playwright and Yadda BDD",
   "homepage": "https://github.com/jon-frankel/playwright-yadda#readme",
   "bugs": {
